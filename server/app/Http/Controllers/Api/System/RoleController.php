@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers\Api\System;
 
-use App\Enums\DataScope;
+use App\Actions\System\CreateRole;
+use App\Actions\System\UpdateRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\System\RoleIndexRequest;
 use App\Http\Requests\System\RoleRequest;
@@ -10,8 +11,6 @@ use App\Http\Resources\RoleResource;
 use App\Models\Role;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class RoleController extends Controller
@@ -23,14 +22,9 @@ class RoleController extends Controller
         return RoleResource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
     }
 
-    public function store(RoleRequest $request): RoleResource
+    public function store(RoleRequest $request, CreateRole $createRole): RoleResource
     {
-        $role = DB::transaction(function () use ($request): Role {
-            $role = Role::query()->create(Arr::except($request->validated(), ['permission_ids', 'department_ids']));
-            $this->syncRelations($role, $request->validated());
-
-            return $role;
-        });
+        $role = $createRole->handle($request->validated());
 
         return new RoleResource($role->load(['permissions', 'departments']));
     }
@@ -40,12 +34,9 @@ class RoleController extends Controller
         return new RoleResource($role->load(['permissions', 'departments'])->loadCount('users'));
     }
 
-    public function update(RoleRequest $request, Role $role): RoleResource
+    public function update(RoleRequest $request, Role $role, UpdateRole $updateRole): RoleResource
     {
-        DB::transaction(function () use ($request, $role): void {
-            $role->update(Arr::except($request->validated(), ['permission_ids', 'department_ids']));
-            $this->syncRelations($role, $request->validated());
-        });
+        $updateRole->handle($role, $request->validated());
 
         return new RoleResource($role->load(['permissions', 'departments']));
     }
@@ -57,16 +48,5 @@ class RoleController extends Controller
         $role->delete();
 
         return response()->noContent();
-    }
-
-    /**
-     * 同步权限与自定义数据权限部门（仅 data_scope = custom 时保留部门）。
-     *
-     * @param  array<string, mixed>  $data
-     */
-    protected function syncRelations(Role $role, array $data): void
-    {
-        $role->permissions()->sync($data['permission_ids'] ?? []);
-        $role->departments()->sync($role->data_scope === DataScope::Custom ? ($data['department_ids'] ?? []) : []);
     }
 }

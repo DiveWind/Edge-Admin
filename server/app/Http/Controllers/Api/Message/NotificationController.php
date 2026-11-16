@@ -7,7 +7,6 @@ use App\Http\Requests\Message\NotificationIndexRequest;
 use App\Http\Resources\NotificationResource;
 use App\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 
@@ -24,25 +23,6 @@ class NotificationController extends Controller
                 : $query->whereNull('read_at'));
 
         return NotificationResource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
-    }
-
-    public function unreadCount(#[CurrentUser] User $user): JsonResponse
-    {
-        return response()->json(['data' => ['count' => $user->unreadNotifications()->count()]]);
-    }
-
-    public function markAsRead(string $id, #[CurrentUser] User $user): Response
-    {
-        $user->notifications()->findOrFail($id)->markAsRead();
-
-        return response()->noContent();
-    }
-
-    public function markAllAsRead(#[CurrentUser] User $user): Response
-    {
-        $user->unreadNotifications()->update(['read_at' => now()]);
-
-        return response()->noContent();
     }
 
     public function destroy(string $id, #[CurrentUser] User $user): Response

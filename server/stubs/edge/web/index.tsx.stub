@@ -1,0 +1,37 @@
+import type { ProColumns } from '@ant-design/pro-components';
+import { PageContainer, ProTable } from '@ant-design/pro-components';
+import type React from 'react';
+import { useT } from '@/utils/i18n';
+import { tableRequest } from '@/utils/table';
+import type { {{ class }} } from './data';
+import { query{{ class_plural }} } from './service';
+
+/** {{ title_plural }}（edge:make-module 生成的占位页面） */
+const {{ web.component }}: React.FC = () => {
+  const t = useT();
+
+  const columns: ProColumns<{{ class }}>[] = [
+    { title: 'ID', dataIndex: 'id', search: false, width: 80 },
+{{ fields.web.column }}
+    {
+      title: t('common.createdAt'),
+      dataIndex: 'created_at',
+      valueType: 'dateTime',
+      search: false,
+      sorter: true,
+    },
+  ];
+
+  return (
+    <PageContainer>
+      <ProTable<{{ class }}>
+        rowKey="id"
+        headerTitle={t('{{ web.locale_prefix }}.title')}
+        columns={columns}
+        request={tableRequest(query{{ class_plural }})}
+      />
+    </PageContainer>
+  );
+};
+
+export default {{ web.component }};

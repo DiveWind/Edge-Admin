@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Settings;
 use Database\Factories\OperationLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -40,13 +41,13 @@ class OperationLog extends Model
     }
 
     /**
-     * 超过保留天数的记录由 `model:prune` 清理。
+     * 超过保留天数（系统参数 log.retention_days，默认 config('edge.logs.retention_days')）的记录由 `model:prune` 清理。
      *
      * @return Builder<static>
      */
     public function prunable(): Builder
     {
-        return static::query()->where('created_at', '<', now()->subDays(config()->integer('edge.logs.retention_days')));
+        return static::query()->where('created_at', '<', now()->subDays(app(Settings::class)->integer('log.retention_days', config()->integer('edge.logs.retention_days'))));
     }
 
     /**

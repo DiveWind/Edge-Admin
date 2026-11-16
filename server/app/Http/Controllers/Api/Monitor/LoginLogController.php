@@ -24,14 +24,4 @@ class LoginLogController extends Controller
 
         return response()->noContent();
     }
-
-    /**
-     * 清空登录日志。
-     */
-    public function clear(): Response
-    {
-        LoginLog::query()->delete();
-
-        return response()->noContent();
-    }
 }

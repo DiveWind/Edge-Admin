@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (Pint · Larastan · Pest)
+    name: Backend (Pint · Larastan · Pest + Arch)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -50,7 +50,7 @@ jobs:
       - name: Larastan
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
-      - name: Pest
+      - name: Pest (architecture + feature + unit)
         run: php artisan test
 
   frontend:

@@ -16,6 +16,7 @@ class ArticleIndexRequest extends ListRequest
             'title' => ['nullable', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer'],
             'status' => ['nullable', Rule::enum(PublishStatus::class)],
+            'source' => ['nullable', 'string', 'max:64'],
         ];
     }
 }

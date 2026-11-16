@@ -1,0 +1,1 @@
+'{{ web.menu_key }}': '{{ title_plural }}',

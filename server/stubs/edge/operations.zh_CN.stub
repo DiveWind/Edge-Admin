@@ -1,0 +1,3 @@
+'{{ route }}.store' => '新增{{ title }}',
+'{{ route }}.update' => '编辑{{ title }}',
+'{{ route }}.destroy' => '删除{{ title }}',

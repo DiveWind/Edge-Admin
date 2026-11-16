@@ -1,0 +1,8 @@
+
+    /**
+     * @return BelongsTo<{{ field.related }}, $this>
+     */
+    public function {{ field.relation }}(): BelongsTo
+    {
+        return $this->belongsTo({{ field.related }}::class, '{{ field.name }}');
+    }

@@ -1,0 +1,8 @@
+[
+    'code' => '{{ module }}',
+    'name' => '{{ module_title }}',
+    'children' => [
+{{ permission_node }}
+        // edge:permissions:{{ module }}
+    ],
+],

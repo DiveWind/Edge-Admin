@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Enums\LoginStatus;
 use App\Models\Article;
 use App\Models\ArticleCategory;
+use App\Models\Attachment;
 use App\Models\Department;
 use App\Models\LoginLog;
 use App\Models\OperationLog;
+use App\Models\PersonalAccessToken;
 use App\Models\Role;
 use App\Models\User;
 use Carbon\CarbonPeriod;
@@ -47,6 +49,8 @@ class DashboardStatistics
             'articles' => Article::query()->count(),
             'today_logins' => LoginLog::query()->where('status', LoginStatus::Success)->whereDate('created_at', today())->count(),
             'today_operations' => OperationLog::query()->whereDate('created_at', today())->count(),
+            'online_sessions' => PersonalAccessToken::query()->online()->count(),
+            'attachments' => Attachment::query()->count(),
         ];
     }
 

@@ -14,9 +14,11 @@ return [
     'enum' => '所选 :attribute 无效。',
     'exists' => '所选 :attribute 不存在。',
     'file' => ':attribute 必须是文件。',
+    'mimes' => ':attribute 必须是以下类型的文件：:values。',
     'image' => ':attribute 必须是图片。',
     'in' => '所选 :attribute 无效。',
     'integer' => ':attribute 必须是整数。',
+    'json' => ':attribute 必须是有效的 JSON。',
     'max' => [
         'array' => ':attribute 最多 :max 项。',
         'file' => ':attribute 不能大于 :max KB。',
@@ -38,6 +40,7 @@ return [
         'uncompromised' => ':attribute 已出现在数据泄露中，请更换。',
     ],
     'present' => ':attribute 必须存在。',
+    'regex' => ':attribute 格式不正确。',
     'required' => ':attribute 不能为空。',
     'string' => ':attribute 必须是字符串。',
     'unique' => ':attribute 已存在。',
@@ -53,6 +56,10 @@ return [
         ],
         'parent_id' => [
             'cycle' => '上级部门不能是自己或自己的下级部门。',
+        ],
+        'setting' => [
+            'system_key' => '内置参数不可修改键名。',
+            'system_type' => '内置参数不可修改类型。',
         ],
     ],
 
@@ -91,5 +98,17 @@ return [
         'page' => '页码',
         'created_from' => '开始日期',
         'created_to' => '结束日期',
+        'source' => '来源',
+        'dict_type_id' => '字典类型',
+        'label' => '标签',
+        'value' => '值',
+        'color' => '颜色',
+        'group' => '分组',
+        'key' => '键名',
+        'is_public' => '是否公开',
+        'codes' => '字典编码',
+        'mime' => '文件类型',
+        'uploaded_by' => '上传人',
+        'ip' => 'IP',
     ],
 ];

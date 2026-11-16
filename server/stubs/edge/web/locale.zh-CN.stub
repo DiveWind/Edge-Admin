@@ -1,0 +1,5 @@
+/** {{ title_plural }}页面文案（edge:make-module 生成，请改为中文） */
+export default {
+  '{{ web.locale_prefix }}.title': '{{ title_plural }}',
+{{ fields.web.locale }}
+};

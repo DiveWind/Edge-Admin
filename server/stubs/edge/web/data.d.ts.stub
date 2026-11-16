@@ -1,0 +1,11 @@
+/** {{ title_plural }}（`/api/{{ route }}`） */
+export interface {{ class }} {
+  id: API.Id;
+{{ fields.web.type }}
+  created_at: string;
+  updated_at: string;
+}
+
+export interface {{ class }}FormValues {
+{{ fields.web.type }}
+}

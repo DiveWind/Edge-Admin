@@ -2,30 +2,23 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\System\StoreAttachment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UploadRequest;
+use App\Http\Resources\AttachmentResource;
+use App\Models\User;
+use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Storage;
 
 class UploadController extends Controller
 {
     /**
-     * 上传图片到 public 磁盘（需执行 `php artisan storage:link`）。
+     * 上传文件到配置的磁盘并登记为附件（类型 / 大小见 config('edge.uploads')）。
      */
-    public function __invoke(UploadRequest $request): JsonResponse
+    public function __invoke(UploadRequest $request, #[CurrentUser] User $user, StoreAttachment $storeAttachment): JsonResponse
     {
-        $disk = config()->string('edge.uploads.disk');
-        $path = $request->file('file')->store('uploads/'.now()->format('Y/m'), $disk);
+        $attachment = $storeAttachment->handle($request->file('file'), $user);
 
-        if ($path === false) {
-            abort(500, __('messages.upload_failed'));
-        }
-
-        return response()->json([
-            'data' => [
-                'url' => Storage::disk($disk)->url($path),
-                'path' => $path,
-            ],
-        ], 201);
+        return (new AttachmentResource($attachment))->response()->setStatusCode(201);
     }
 }

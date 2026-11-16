@@ -1,7 +1,8 @@
 <?php
 
 /*
-| 操作日志摘要：键为路由名，由 RecordOperationLog 中间件读取。
+| 操作日志摘要：键为路由名，由 RecordOperationLog 中间件按当前语言读取（英文见 lang/en/operations.php）。
+| `// edge:operations` 为 `php artisan edge:make-module` 的插入锚点，请保留。
 */
 
 return [
@@ -22,10 +23,21 @@ return [
     'positions.store' => '新增岗位',
     'positions.update' => '编辑岗位',
     'positions.destroy' => '删除岗位',
+    'dict-types.store' => '新增字典类型',
+    'dict-types.update' => '编辑字典类型',
+    'dict-types.destroy' => '删除字典类型',
+    'dict-items.store' => '新增字典项',
+    'dict-items.update' => '编辑字典项',
+    'dict-items.destroy' => '删除字典项',
+    'settings.store' => '新增系统参数',
+    'settings.update' => '编辑系统参数',
+    'settings.destroy' => '删除系统参数',
+    'attachments.destroy' => '删除附件',
     'login-logs.destroy' => '删除登录日志',
     'login-logs.clear' => '清空登录日志',
     'operation-logs.destroy' => '删除操作日志',
     'operation-logs.clear' => '清空操作日志',
+    'online-sessions.destroy' => '强制下线',
     'scheduled-tasks.run' => '执行定时任务',
     'failed-jobs.retry' => '重试失败任务',
     'failed-jobs.destroy' => '删除失败任务',
@@ -43,4 +55,5 @@ return [
     'articles.update' => '编辑文章',
     'articles.destroy' => '删除文章',
     'uploads.store' => '上传文件',
+    // edge:operations
 ];

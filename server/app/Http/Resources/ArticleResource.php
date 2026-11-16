@@ -30,6 +30,7 @@ class ArticleResource extends JsonResource
             'cover' => $this->cover,
             'content' => $this->content,
             'status' => $this->status,
+            'source' => $this->source,
             'published_at' => $this->published_at?->toIso8601String(),
             'department_id' => $this->department_id,
             'department' => $this->whenLoaded('department', fn (Department $department): array => $department->only('id', 'name')),

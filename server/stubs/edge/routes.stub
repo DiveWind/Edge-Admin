@@ -1,0 +1,6 @@
+Route::apiResource('{{ route }}', {{ class }}Controller::class)
+    ->middlewareFor(['index', 'show'], 'can:{{ permission }}.view')
+    ->middlewareFor('store', 'can:{{ permission }}.create')
+    ->middlewareFor('update', 'can:{{ permission }}.update')
+    ->middlewareFor('destroy', 'can:{{ permission }}.delete');
+

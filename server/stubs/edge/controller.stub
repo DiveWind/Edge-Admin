@@ -1,0 +1,52 @@
+<?php
+
+namespace {{ controller_namespace }};
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\{{ class }}Resource;
+use App\Models\{{ class }};
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
+use {{ request_namespace }}\{{ class }}IndexRequest;
+use {{ request_namespace }}\Store{{ class }}Request;
+use {{ request_namespace }}\Update{{ class }}Request;
+
+/**
+ * 单表 CRUD 直接使用 Eloquent；多步写入 / 带副作用的用例请放到 app/Actions。
+ */
+class {{ class }}Controller extends Controller
+{
+    public function index({{ class }}IndexRequest $request): AnonymousResourceCollection
+    {
+        $query = {{ class }}::query()->filter($request->filters());
+
+        return {{ class }}Resource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
+    }
+
+    public function store(Store{{ class }}Request $request): {{ class }}Resource
+    {
+        return new {{ class }}Resource({{ class }}::query()->create($request->validated()));
+    }
+
+    public function show({{ class }} ${{ variable }}): {{ class }}Resource
+    {
+        return new {{ class }}Resource(${{ variable }});
+    }
+
+    public function update(Update{{ class }}Request $request, {{ class }} ${{ variable }}): {{ class }}Resource
+    {
+        ${{ variable }}->update($request->validated());
+
+        return new {{ class }}Resource(${{ variable }});
+    }
+
+    public function destroy({{ class }} ${{ variable }}): Response
+    {
+        Gate::authorize('delete', ${{ variable }});
+
+        ${{ variable }}->delete();
+
+        return response()->noContent();
+    }
+}

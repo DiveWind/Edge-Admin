@@ -1,0 +1,24 @@
+import { request } from '@umijs/max';
+import type { {{ class }}, {{ class }}FormValues } from './data';
+
+export function query{{ class_plural }}(params: API.ListQuery) {
+  return request<API.Paginated<{{ class }}>>('/api/{{ route }}', { params });
+}
+
+export function create{{ class }}(data: {{ class }}FormValues) {
+  return request<API.Resource<{{ class }}>>('/api/{{ route }}', {
+    method: 'POST',
+    data,
+  });
+}
+
+export function update{{ class }}(id: API.Id, data: {{ class }}FormValues) {
+  return request<API.Resource<{{ class }}>>(`/api/{{ route }}/${id}`, {
+    method: 'PUT',
+    data,
+  });
+}
+
+export function delete{{ class }}(id: API.Id) {
+  return request<void>(`/api/{{ route }}/${id}`, { method: 'DELETE' });
+}

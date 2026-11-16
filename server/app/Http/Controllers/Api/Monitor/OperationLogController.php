@@ -29,14 +29,4 @@ class OperationLogController extends Controller
 
         return response()->noContent();
     }
-
-    /**
-     * 清空操作日志。
-     */
-    public function clear(): Response
-    {
-        OperationLog::query()->delete();
-
-        return response()->noContent();
-    }
 }

@@ -16,11 +16,18 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * 业务对接示例：接入数据权限（HasDataScope），作者 / 部门在创建时自动填充。
  */
-#[Fillable(['category_id', 'title', 'summary', 'cover', 'content', 'status'])]
+#[Fillable(['category_id', 'title', 'summary', 'cover', 'content', 'status', 'source'])]
 class Article extends Model
 {
     /** @use HasFactory<ArticleFactory> */
     use HasDataScope, HasFactory, SoftDeletes;
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'source' => 'original',
+    ];
 
     /**
      * @return array<string, string>
@@ -79,6 +86,7 @@ class Article extends Model
         $query
             ->when($filters['title'] ?? null, fn (Builder $q, string $value) => $q->whereLike('title', "%{$value}%"))
             ->when($filters['category_id'] ?? null, fn (Builder $q, int|string $value) => $q->where('category_id', $value))
-            ->when($filters['status'] ?? null, fn (Builder $q, string $value) => $q->where('status', $value));
+            ->when($filters['status'] ?? null, fn (Builder $q, string $value) => $q->where('status', $value))
+            ->when($filters['source'] ?? null, fn (Builder $q, string $value) => $q->where('source', $value));
     }
 }

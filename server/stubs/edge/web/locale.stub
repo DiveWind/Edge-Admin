@@ -1,0 +1,8 @@
+import type zh from '../../zh-CN/pages/{{ web.locale_file }}';
+
+const messages: Record<keyof typeof zh, string> = {
+  '{{ web.locale_prefix }}.title': '{{ title_plural }}',
+{{ fields.web.locale }}
+};
+
+export default messages;

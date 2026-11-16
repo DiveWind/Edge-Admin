@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Content;
 
 use App\Enums\PublishStatus;
+use App\Rules\InDict;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -22,6 +23,8 @@ class ArticleRequest extends FormRequest
     }
 
     /**
+     * source 取自数据字典 article_source，不传时为默认值 original。
+     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
@@ -33,6 +36,7 @@ class ArticleRequest extends FormRequest
             'cover' => ['nullable', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'status' => ['required', Rule::enum(PublishStatus::class)],
+            'source' => ['sometimes', 'required', 'string', new InDict('article_source')],
         ];
     }
 }

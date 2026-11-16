@@ -54,7 +54,8 @@ test('images can be uploaded to the public disk', function () {
 
     Storage::disk('public')->assertExists($response->json('data.path'));
 
-    $this->postJson('/api/uploads', ['file' => UploadedFile::fake()->create('doc.pdf', 10)])->assertUnprocessable();
+    $this->postJson('/api/uploads', ['file' => UploadedFile::fake()->create('script.php', 10, 'application/x-php')])->assertUnprocessable();
+    $this->postJson('/api/uploads', ['file' => UploadedFile::fake()->create('vector.svg', 10, 'image/svg+xml')])->assertUnprocessable();
 });
 
 test('dashboard returns statistics', function () {
@@ -64,7 +65,7 @@ test('dashboard returns statistics', function () {
     $this->getJson('/api/dashboard')
         ->assertOk()
         ->assertJsonStructure(['data' => [
-            'totals' => ['users', 'roles', 'departments', 'articles', 'today_logins', 'today_operations'],
+            'totals' => ['users', 'roles', 'departments', 'articles', 'today_logins', 'today_operations', 'online_sessions', 'attachments'],
             'login_trend' => [['date', 'success', 'failed']],
             'articles_by_category',
             'users_by_department',

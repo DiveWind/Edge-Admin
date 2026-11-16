@@ -23,4 +23,13 @@ return [
     'announcement' => [
         'published' => 'Published announcements cannot be edited.',
     ],
+    'dict_type' => [
+        'has_items' => 'This dictionary has items and cannot be deleted.',
+    ],
+    'setting' => [
+        'system' => 'Built-in settings cannot be deleted.',
+    ],
+    'online_session' => [
+        'current' => 'You cannot force the current session offline; sign out instead.',
+    ],
 ];

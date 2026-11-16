@@ -61,6 +61,18 @@ class Role extends Model
         return $this->belongsToMany(Department::class);
     }
 
+    /**
+     * 同步权限与自定义数据权限部门（仅 data_scope = custom 时保留部门）。
+     *
+     * @param  array<int, int|string>  $permissionIds
+     * @param  array<int, int|string>  $departmentIds
+     */
+    public function syncAuthorizations(array $permissionIds, array $departmentIds): void
+    {
+        $this->permissions()->sync($permissionIds);
+        $this->departments()->sync($this->data_scope === DataScope::Custom ? $departmentIds : []);
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->code === self::SUPER_ADMIN;

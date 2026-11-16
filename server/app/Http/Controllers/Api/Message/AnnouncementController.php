@@ -6,13 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Message\AnnouncementIndexRequest;
 use App\Http\Requests\Message\AnnouncementRequest;
 use App\Http\Resources\AnnouncementResource;
-use App\Jobs\SendAnnouncementNotifications;
 use App\Models\Announcement;
 use App\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
 
 class AnnouncementController extends Controller
 {
@@ -49,19 +47,5 @@ class AnnouncementController extends Controller
         $announcement->delete();
 
         return response()->noContent();
-    }
-
-    /**
-     * 发布公告，并通过队列给所有启用用户发送站内通知。
-     */
-    public function publish(Announcement $announcement): AnnouncementResource
-    {
-        Gate::authorize('publish', $announcement);
-
-        $announcement->markAsPublished();
-
-        SendAnnouncementNotifications::dispatch($announcement);
-
-        return new AnnouncementResource($announcement->load('creator'));
     }
 }

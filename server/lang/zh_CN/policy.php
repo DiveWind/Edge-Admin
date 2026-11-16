@@ -23,4 +23,13 @@ return [
     'announcement' => [
         'published' => '已发布的公告不可编辑。',
     ],
+    'dict_type' => [
+        'has_items' => '该字典下存在字典项，不能删除。',
+    ],
+    'setting' => [
+        'system' => '内置参数不可删除。',
+    ],
+    'online_session' => [
+        'current' => '不能强制下线当前会话，请使用退出登录。',
+    ],
 ];

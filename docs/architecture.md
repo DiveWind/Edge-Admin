@@ -10,7 +10,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 ├── server/           # Laravel 应用（纯 API，不含 Blade / Vite 前端资源；独立 composer.json / lockfile）
 │   └── app/ bootstrap/ config/ database/ lang/ routes/ tests/ ...
 ├── web/              # Ant Design Pro 前端工程（独立 package.json / lockfile）
-├── docs/             # 项目文档（本文件）
+├── docs/             # 项目文档（本文件为契约；其余见 docs/README.md）
 └── .github/workflows # CI：后端 pint + phpstan + pest（working-directory: server），前端 lint + tsc + build
 ```
 
@@ -30,8 +30,9 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
   - 非分页列表（树、options）：`{ "data": [ ... ] }`
   - 无内容的写操作：`204 No Content`；创建：`201`
 - 失败响应遵循 Laravel 标准：`{ "message": "...", "errors"?: { "field": ["..."] } }`
-  - `401` 未登录 / token 失效，`403` 无权限，`404`，`422` 校验失败，`429` 限流
-  - `message` 为已本地化的提示（默认 `zh_CN`），前端可直接展示
+  - `401` 未登录 / token 失效，`403` 无权限，`404`（含记录不存在，不暴露模型名），`405`，`422` 校验失败，
+    `429` 限流（带 `Retry-After` 响应头）
+  - `message` 为已本地化的提示，前端可直接展示
   - 违反**记录级业务规则**（不能删除自己、受保护对象、有子部门 / 用户 / 文章时不可删、已发布公告不可编辑、
     数据权限之外的记录）返回 `403` + `message`；**字段级约束**（如上级部门不能是自己或下级、超级管理员角色不可改码 / 禁用、
     id=1 用户不可禁用）返回 `422` + `errors`
@@ -40,6 +41,11 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
   其余为过滤字段（下表 "过滤" 列）。字符串过滤为模糊匹配，`status`/`*_id` 为精确匹配，
   时间范围用 `created_from` / `created_to`（日期）。
 - 状态字段 `status` 统一为字符串枚举，通用启停为 `active` / `disabled`。
+- **多语言**：请求头 `Accept-Language` 决定接口文案语言（`message`、`errors`、操作日志摘要），支持 `zh-CN` / `zh_CN` / `zh`
+  → 中文，`en-US` / `en` → 英文；未携带或不支持时使用后端 `APP_LOCALE`（默认 `zh_CN`）。响应头 `Content-Language`
+  返回实际语言（`zh-CN` / `en`）。**前端应按当前界面语言显式发送该请求头**（浏览器默认的 Accept-Language 可能与界面语言不一致）。
+  字典项 `label`、系统参数、权限点 / 菜单的 `name` 等**数据**不做多语言，菜单与权限点名称由前端按 `code` 做 i18n 展示（`name` 为中文兜底）。
+- **限流**：全部 `/api/*` 每分钟 120 次（`EDGE_API_RATE_LIMIT`，已登录按用户、未登录按 IP），登录接口另有独立限流（见 5.1）。
 - 时间字段为带时区偏移的 ISO 8601（如 `2026-01-01T08:00:00+08:00`，时区由 `APP_TIMEZONE` 决定，默认 `Asia/Shanghai`）。
 - 资源对象除本文列出的字段外，通常还带 `*_id` 外键、`created_at`、`updated_at` 等字段（只增不减，前端可忽略）。
 
@@ -92,8 +98,14 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | 公告 | `message.announcement.view` `.create` `.update` `.delete` `.publish` |
 | 文章分类 | `content.category.view` `.create` `.update` `.delete` |
 | 文章 | `content.article.view` `.create` `.update` `.delete` |
+| 数据字典（类型与字典项共用） | `system.dict.view` `.create` `.update` `.delete` |
+| 系统参数 | `system.setting.view` `.create` `.update` `.delete` |
+| 附件 | `system.attachment.view` `.delete` |
+| 在线会话 | `monitor.online-session.view` `.delete`（强制下线） |
+| 系统信息 | `monitor.system-info.view` |
 
-个人中心、我的通知、`/api/options/*`、文件上传只要求登录。
+个人中心、我的通知、`/api/options/*`、文件上传只要求登录；`GET /api/options/settings` 无需登录。
+对应的菜单级权限码：`system.dict`、`system.setting`、`system.attachment`、`monitor.online-session`、`monitor.system-info`（`type=menu`）。
 
 ## 4. 数据表
 
@@ -110,9 +122,14 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | `announcements` | title content type(`notice`/`announcement`) status(`draft`/`published`) published_at? created_by |
 | `notifications` | Laravel 标准通知表 |
 | `scheduled_task_logs` | task status(`running`/`success`/`failed`) output? duration_ms? started_at finished_at? |
-| `jobs` `failed_jobs` `job_batches` `cache` `personal_access_tokens` | Laravel 标准表 |
+| `jobs` `failed_jobs` `job_batches` `cache` | Laravel 标准表 |
+| `personal_access_tokens` | Sanctum 标准表 + ip? user_agent?（登录签发时写入；未过期的 token 即"在线会话"） |
 | `article_categories` | name sort status |
-| `articles` | category_id title summary? cover? content status(`draft`/`published`) published_at? department_id? created_by + 软删除 |
+| `articles` | category_id title summary? cover? content status(`draft`/`published`) source(字典 `article_source`，默认 `original`) published_at? department_id? created_by + 软删除 |
+| `dict_types` | name code(唯一) status remark? |
+| `dict_items` | dict_type_id label value(同一类型下唯一) color? sort status remark? |
+| `settings` | group key(唯一) name value(文本存储，按 type 转换) type(`string`/`number`/`boolean`/`json`) is_public is_system remark? |
+| `attachments` | disk path name(原始文件名) mime size(字节) uploaded_by? |
 
 ## 5. 接口清单
 
@@ -122,7 +139,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/auth/login` | `{username, password}` → `{data:{token, token_type:"Bearer", expires_at}}`；限流（每分钟每 用户名+IP 5 次，超出 429）；写登录日志。账号或密码错误、账号被禁用均返回 `422`，错误在 `errors.username` |
+| POST | `/api/auth/login` | `{username, password}` → `{data:{token, token_type:"Bearer", expires_at}}`；限流（每分钟每 用户名+IP 次数取系统参数 `security.login_max_attempts`，默认 5，超出 429）；写登录日志，token 记录 ip / user_agent。账号或密码错误、账号被禁用均返回 `422`，错误在 `errors.username` |
 | POST | `/api/auth/logout` | 吊销当前 token，204 |
 | GET | `/api/auth/me` | 见下方 CurrentUser |
 | PUT | `/api/auth/profile` | `{name, email?, phone?, avatar?}` → CurrentUser |
@@ -166,6 +183,36 @@ CurrentUser：
 | GET | `/api/departments` | `system.department.view` | 树（不分页），过滤 name status；节点含 leader{id,name} |
 | POST/PUT/DELETE | `/api/departments[/{id}]` | 对应权限 | parent_id? name leader_id? sort status；有子部门或用户时不可删；不可把自己设为自己的下级 |
 | GET/POST/PUT/DELETE | `/api/positions[/{id}]` | `system.position.*` | name code status；有用户时不可删 |
+| GET | `/api/dict-types` | `system.dict.view` | 过滤 name code status；项含 `items_count` |
+| POST/PUT | `/api/dict-types[/{id}]` | `system.dict.create`/`.update` | name code(字母数字 `-` `_`，唯一) status remark? |
+| GET/DELETE | `/api/dict-types/{id}` | `.view`/`.delete` | **存在字典项时不可删（403），需先删除字典项**（不级联） |
+| GET | `/api/dict-items` | `system.dict.view` | **`dict_type_id` 必填**（缺失 422），过滤 label status；默认按 `sort` 升序 |
+| POST/PUT | `/api/dict-items[/{id}]` | `system.dict.create`/`.update` | dict_type_id label value color? sort? status remark?；同一类型下 value 唯一（422 `errors.value`） |
+| GET/DELETE | `/api/dict-items/{id}` | `.view`/`.delete` | 204 |
+| GET | `/api/settings` | `system.setting.view` | 过滤 group(精确) key name；项见下方 Setting |
+| POST/PUT | `/api/settings[/{id}]` | `system.setting.create`/`.update` | group key(小写字母数字下划线，以 `.` 分段，唯一) name type value? is_public? remark?；value 按 type 校验：number 数字、boolean 布尔、json 为对象 / 数组或合法 JSON 字符串、string 字符串；**内置参数（`is_system`）不可改 key / type（422）** |
+| GET/DELETE | `/api/settings/{id}` | `.view`/`.delete` | 内置参数不可删（403） |
+| GET | `/api/attachments` | `system.attachment.view` | 过滤 name mime(模糊，如 `image/`、`pdf`) uploaded_by created_from/to；项见下方 Attachment，含 `uploader{id,name}` |
+| DELETE | `/api/attachments/{id}` | `system.attachment.delete` | 同时删除物理文件，204（引用该 URL 的头像 / 封面等不会自动清空） |
+
+Setting：
+
+```json
+{ "id": 1, "group": "site", "key": "site.name", "name": "站点名称", "type": "string",
+  "value": "Edge Admin", "is_public": true, "is_system": true, "remark": null, "created_at": "", "updated_at": "" }
+```
+
+`value` 按 type 输出为 JSON 字符串 / 数字 / 布尔 / 对象或数组（可为 `null`）。
+
+Attachment：
+
+```json
+{ "id": 1, "name": "报告.pdf", "url": "http://.../storage/uploads/2026/01/xxx.pdf", "path": "uploads/2026/01/xxx.pdf",
+  "disk": "public", "mime": "application/pdf", "size": 20480, "uploaded_by": 1,
+  "uploader": { "id": 1, "name": "超级管理员" }, "created_at": "" }
+```
+
+`uploader` 仅在附件列表中返回（上传人被删除时为软删除前的信息，无上传人时为 `null`）。
 
 ### 5.3 监控
 
@@ -181,6 +228,23 @@ CurrentUser：
 | GET | `/api/failed-jobs` | `monitor.failed-job.view` | `[{id, uuid, connection, queue, name, exception(摘要), failed_at}]`（不分页；`id` 与 `uuid` 相同，均为 uuid） |
 | POST | `/api/failed-jobs/{uuid}/retry` | `.retry` | 重新入队，204；不存在 404 |
 | DELETE | `/api/failed-jobs/{uuid}` | `.delete` | 204；不存在 404 |
+| GET | `/api/online-sessions` | `monitor.online-session.view` | 未过期的登录 token，分页；过滤 username ip；项：`{id, user{id,name,username}, ip, user_agent, last_used_at, created_at, expires_at, is_current}`，`is_current` 表示发起本次请求的会话 |
+| DELETE | `/api/online-sessions/{id}` | `.delete` | 强制下线（吊销 token），204；不能下线当前会话（403） |
+| GET | `/api/system-info` | `monitor.system-info.view` | 见下方 SystemInfo |
+
+SystemInfo（不含主机、账号、密钥等敏感配置；无法获取的指标为 `null`）：
+
+```json
+{ "data": {
+  "app": { "name": "Edge Admin", "env": "production", "debug": false, "version": "1.0.0", "locale": "zh_CN", "timezone": "Asia/Shanghai" },
+  "runtime": { "php_version": "8.3.6", "laravel_version": "13.x", "os": "Linux 6.x", "sapi": "fpm-fcgi",
+               "memory_limit": "256M", "upload_max_filesize": "2M", "post_max_size": "8M", "server_time": "2026-01-01T08:00:00+08:00" },
+  "drivers": { "database": { "connection": "mysql", "driver": "mysql", "version": "8.4.0" },
+               "cache": "redis", "queue": "redis", "session": "array", "filesystem": "local", "upload_disk": "public" },
+  "storage": { "disk_total_bytes": 0, "disk_free_bytes": 0, "database_bytes": 0, "attachments_bytes": 0 },
+  "metrics": { "users": 0, "online_sessions": 0, "attachments": 0, "failed_jobs": 0 }
+} }
+```
 
 操作日志由中间件自动记录所有已登录的非 GET 请求；`password*`、`token` 等字段脱敏。
 定时任务执行日志由 Schedule 事件监听器写入。
@@ -201,8 +265,8 @@ CurrentUser：
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
 | GET/POST/PUT/DELETE | `/api/article-categories[/{id}]` | `content.category.*` | name sort status；有文章时不可删 |
-| GET | `/api/articles` | `content.article.view` | 过滤 title category_id status；受数据权限约束；项含 category{id,name} author{id,name} department{id,name} |
-| POST/PUT | `/api/articles[/{id}]` | `.create`/`.update` | category_id title summary? cover? content status；status 变为 published 时写 published_at |
+| GET | `/api/articles` | `content.article.view` | 过滤 title category_id status source；受数据权限约束；项含 source category{id,name} author{id,name} department{id,name} |
+| POST/PUT | `/api/articles[/{id}]` | `.create`/`.update` | category_id title summary? cover? content status source?；status 变为 published 时写 published_at；`source` 必须是字典 `article_source` 的启用项（`original` 原创 / `reprint` 转载 / `translation` 翻译），新增时不传为 `original`，编辑时不传保持不变 |
 | GET/DELETE | `/api/articles/{id}` | `.view`/`.delete` | 单条同样受数据权限约束（越权 403） |
 
 ### 5.6 公共
@@ -212,14 +276,17 @@ CurrentUser：
 | GET | `/api/options/departments` | 启用部门树 `[{id, name, parent_id, children}]` |
 | GET | `/api/options/permissions` | 权限树，形状同 `GET /api/permissions`；供角色授权表单使用（无需 `system.permission.view`） |
 | GET | `/api/options/roles` `/positions` `/article-categories` `/users` | 启用项 `[{id, name}]`（roles/positions 额外带 code） |
-| POST | `/api/uploads` | multipart `file`（图片，≤2MB，不含 svg）→ `201 {data:{url, path}}`，存 public 磁盘 |
+| GET | `/api/options/dicts?codes=a,b` | `{data: {"a": [{label, value, color}], "b": [...]}}`：仅启用字典的启用项，按 sort；不存在 / 已禁用的 code 返回 `[]`；`codes` 必填（422）；后端缓存，字典变更即失效 |
+| GET | `/api/options/settings` | **无需登录**。所有 `is_public` 参数 `{data: {"site.name": "Edge Admin", ...}}`（值已按 type 转换）；登录页用于站点名称、登录页公告、备案号 |
+| POST | `/api/uploads` | multipart `file` → `201 {data: Attachment}`（含原有 `url`、`path`，新增 `id` `name` `mime` `size` 等），同时登记为附件。默认允许 jpg jpeg png gif webp pdf doc docx xls xlsx ppt pptx txt csv zip，≤2MB（`EDGE_UPLOAD_EXTENSIONS` / `EDGE_UPLOAD_MAX_SIZE` 可配，不允许 svg / html），超出 422 |
 | GET | `/api/dashboard` | `dashboard.view`；见下 |
 
 Dashboard：
 
 ```json
 { "data": {
-  "totals": { "users": 0, "roles": 0, "departments": 0, "articles": 0, "today_logins": 0, "today_operations": 0 },
+  "totals": { "users": 0, "roles": 0, "departments": 0, "articles": 0, "today_logins": 0, "today_operations": 0,
+              "online_sessions": 0, "attachments": 0 },
   "login_trend": [{ "date": "2026-01-01", "success": 0, "failed": 0 }],
   "articles_by_category": [{ "category": "技术", "count": 0 }],
   "users_by_department": [{ "department": "研发部", "count": 0 }],
@@ -242,9 +309,18 @@ Dashboard：
 | scheduled-task-logs | id started_at duration_ms | `-id` |
 | announcements / articles | id created_at published_at | `-id` |
 | notifications | created_at | `-created_at` |
+| dict-types | id created_at | `-id` |
+| dict-items | id sort created_at | `sort` |
+| settings | id key created_at | `id` |
+| attachments | id size created_at | `-id` |
+| online-sessions | id last_used_at created_at | `-id` |
 
 ## 6. 初始数据（`cd server && php artisan migrate --seed`）
 
 - 账号：`admin` / `password`（超级管理员）；`editor` / `password`（内容编辑，data_scope=`department_and_children`）；`viewer` / `password`（只读访客，data_scope=`self`）；
   另有 `marketing` / `password`（市场主管，data_scope=`custom`，示例自定义部门）与已禁用账号 `disabled`
 - 示例部门树、岗位、文章分类与文章、公告。
+- 数据字典：`article_source`（原创 / 转载 / 翻译）、`common_yes_no`（是 / 否）、`user_gender`（男 / 女 / 未知）。
+- 内置系统参数（`is_system`）：`site.name` 站点名称（公开）、`site.login_notice` 登录页公告（公开）、`site.icp` 备案号（公开，默认空）、
+  `security.login_max_attempts` 登录尝试次数（接入登录限流）、`log.retention_days` 日志保留天数（接入 `model:prune`）。
+- 角色权限：只读访客自动拥有全部 `*.view` 与菜单权限码；内容编辑额外拥有 `system.attachment.view`。

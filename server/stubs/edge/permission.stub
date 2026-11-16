@@ -1,0 +1,5 @@
+[
+    'code' => '{{ permission }}',
+    'name' => '{{ title }}',
+    'actions' => ['view' => '查看', 'create' => '新增', 'update' => '编辑', 'delete' => '删除'],
+],

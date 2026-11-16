@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\NewAccessToken;
 
 /**
- * 校验账号密码并签发 Sanctum Token，同时写登录日志。
+ * 校验账号密码并签发 Sanctum Token（记录 ip / user_agent），同时写登录日志。
  */
 class AttemptLogin
 {
@@ -34,7 +34,15 @@ class AttemptLogin
 
         $this->log($username, $user, $ip, $userAgent, LoginStatus::Success, __('auth.success'));
 
-        return $user->createToken('api', ['*'], now()->addMinutes(config()->integer('edge.auth.token_ttl')));
+        $token = $user->createToken('api', ['*'], now()->addMinutes(config()->integer('edge.auth.token_ttl')));
+
+        // 记录签发时的客户端信息，用于"在线会话"。
+        $token->accessToken->forceFill([
+            'ip' => $ip,
+            'user_agent' => Str::limit((string) $userAgent, 500, ''),
+        ])->save();
+
+        return $token;
     }
 
     /**

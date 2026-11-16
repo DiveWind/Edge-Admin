@@ -1,0 +1,7 @@
+{
+  path: '{{ web.path }}',
+  name: '{{ route }}',
+  component: './{{ web.page_dir }}',
+  access: 'routeFilter',
+  permission: '{{ permission }}.view',
+},

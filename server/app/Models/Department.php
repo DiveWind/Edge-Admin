@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Collections\TreeCollection;
 use App\Enums\Status;
-use App\Models\Collections\TreeCollection;
 use Database\Factories\DepartmentFactory;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Fillable;

@@ -169,23 +169,40 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## 代码约定
 
+完整规范见 `../docs/backend-guide.md`；可机械检查的部分由 `tests/Arch/ArchTest.php`（Pest php / security / laravel 预设 + 分层规则）强制执行。
+
 - 不使用 `declare(strict_types=1)`（与 Laravel / Pint `laravel` 预设保持一致）；完整的参数与返回类型、PHPDoc 泛型 / 数组形状。
-- 文件一律用 `php artisan make:*` 生成；目录保持 Laravel 默认结构，控制器按模块分子命名空间 `App\Http\Controllers\Api\{Auth,System,Monitor,Message,Content}`。
-- 模型：`#[Fillable]` / `#[Hidden]` 属性、`casts()` 中用 `app/Enums` 的枚举、`#[Scope]` 局部作用域（列表过滤统一叫 `filter(array $filters)`）。开发环境开启 `Model::shouldBeStrict()`，Factory 需给出全部字段。
-- 树形数据（部门、权限）用 `#[CollectedBy(TreeCollection::class)]` + `->toTree()` 在 PHP 侧组装，不写递归 SQL。
-- 列表请求继承 `App\Http\Requests\ListRequest`：声明 `filterRules()`、`$sortable`、`$defaultSort`；控制器 `->filter($request->filters())`、`$request->applySort($query)->paginate($request->perPage())->withQueryString()`。
+- 文件一律用 `php artisan make:*` 生成（Action / Service 用 `make:class`，枚举用 `make:enum <Name>`，不要带 `Enums/` 前缀）；
+  目录保持 Laravel 默认结构，控制器按模块分子命名空间 `App\Http\Controllers\Api\{Auth,System,Monitor,Message,Content,Options}`。
+- 控制器只保留资源方法（index / show / store / update / destroy）或 `__invoke`，非资源动作拆为单动作控制器；
+  只做"授权 → 调 Action 或单表 Eloquent → 返回 Resource"，不得依赖 `DB` / `Storage` / `Cache` / `Artisan` 等 facade 与 Jobs / Notifications。
+- **多步写入或带副作用**（同步关联、吊销 token、派发 Job、读写文件）的用例放 `app/Actions/<模块>/`：单一 `handle()`、构造器注入、
+  事务在 Action 内、入参为 `$request->validated()`（`array<string, mixed>`，PHPDoc 注明来源 Request）或明确的模型 / 标量；Actions 不依赖 HTTP 层。
+- 模型：`#[Fillable]` / `#[Hidden]` 属性、`casts()` 中用 `app/Enums` 的枚举、`#[Scope]` 局部作用域（列表过滤统一叫 `filter(array $filters)`）。
+  开发环境开启 `Model::shouldBeStrict()`，Factory 需给出全部字段；日期为 `CarbonImmutable`。
+- 树形数据（部门、权限）用 `#[CollectedBy(App\Collections\TreeCollection::class)]` + `->toTree()` 在 PHP 侧组装，不写递归 SQL。
+- 列表请求继承 `App\Http\Requests\ListRequest`：声明 `filterRules()`、`$sortable`、`$defaultSort`；控制器 `->filter($request->filters())`、
+  `$request->applySort($query)->paginate($request->perPage())->withQueryString()`。
 - 功能权限：`config/permissions.php` 声明 → `php artisan permission:sync` → 路由 `can:<code>`（`Route::apiResource()->middlewareFor()`）。权限码必须含 `.`。
-- 记录级规则写在 Policy（数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()` → 403）；编辑接口的 Policy 检查放在 Form Request 的 `authorize()`，保证先授权再校验。字段级约束写在 Form Request（422）。
+- 记录级规则写在 Policy（数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()` → 403）；编辑接口的 Policy 检查放在
+  Form Request 的 `authorize()`，保证先授权再校验。字段级约束写在 Form Request（422）。
 - 数据权限：模型 `use HasDataScope`，列表 `->visibleTo($user)`，单条在 Policy 中 `$model->isVisibleTo($user)`。
-- 输出统一用 API Resource，时间字段 `?->toIso8601String()`；控制器保持薄，复杂业务放 `app/Actions`（`handle()`）或 `app/Services`。
-- 用户可见文案放 `lang/zh_CN/*.php`（同时补 `lang/en`），操作日志摘要以路由名为键写在 `lang/zh_CN/operations.php`。
+- 输出统一用 API Resource，时间字段 `?->toIso8601String()`。
+- 数据字典用 `App\Services\Dictionary` / `new App\Rules\InDict('code')`；系统参数用 `setting('key', $default)`（`App\Services\Settings`），
+  两者带缓存，由模型事件自动失效。
+- 用户可见文案放 `lang/zh_CN/*.php` 并同步 `lang/en`，接口语言由 `SetLocale` 按 `Accept-Language` 切换；操作日志摘要以路由名为键写在 `lang/*/operations.php`。
 - 可配置项放 `config/edge.php` 并在 `.env.example` 中给出 `EDGE_*` 变量；代码中用 `config()->integer()` 等类型化读取。
 - 保持数据库无关：不写方言 SQL，模糊匹配用 `whereLike()`，按日期用 `whereDate()`，分组统计可在 PHP 侧完成。
+- `routes/api.php`、`config/permissions.php`、`lang/*/operations.php` 中的 `// edge:*` 注释是代码生成器的锚点，请保留。
 
 ## 新增业务模块
 
-参照文章模块（`Article*`）：`make:model -mfs --policy` → 迁移 / 模型 / Factory / Seeder → `config/permissions.php` 加权限点并 `permission:sync` → `make:request`（`*IndexRequest` 继承 `ListRequest`）→ `make:resource` → Policy → `make:controller Api/<模块>/<Name>Controller --api` → `routes/api.php` 注册并挂 `can:` → `lang/zh_CN/operations.php` 摘要 → `make:test --pest` → 更新 `../docs/architecture.md`。
+优先用生成器：`php artisan edge:make-module <Name> --module=<模块> --fields="..." [--data-scope] [--soft-deletes]`（见 `../docs/generator.md`），
+再按规范补充 Action / Policy 规则 / Seeder / 中文文案。手工方式参照文章模块（`Article*`）：`make:model -mfs --policy` → 迁移 / 模型 / Factory / Seeder →
+`config/permissions.php` 加权限点并 `permission:sync` → `make:request`（`*IndexRequest` 继承 `ListRequest`）→ `make:resource` → Policy →
+`make:controller Api/<模块>/<Name>Controller --api` → `routes/api.php` 注册并挂 `can:` → `lang/*/operations.php` 摘要 → `make:test --pest` →
+更新 `../docs/architecture.md`。
 
 ## 验证
 
-提交前在本目录执行：`composer lint`（Pint）、`composer analyse`（Larastan level 8）、`composer test`（Pest，sqlite 内存库）。
+提交前在本目录执行：`composer lint`（Pint）、`composer analyse`（Larastan level 8）、`composer test`（Pest：架构测试 + Feature + Unit，sqlite 内存库）。

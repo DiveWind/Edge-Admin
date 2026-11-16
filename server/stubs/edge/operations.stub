@@ -1,0 +1,3 @@
+'{{ route }}.store' => 'Create {{ title }}',
+'{{ route }}.update' => 'Update {{ title }}',
+'{{ route }}.destroy' => 'Delete {{ title }}',

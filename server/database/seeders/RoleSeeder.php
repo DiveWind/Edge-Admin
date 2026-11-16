@@ -32,6 +32,7 @@ class RoleSeeder extends Seeder
             'content', 'content.category', 'content.category.view',
             'content.article', 'content.article.view', 'content.article.create', 'content.article.update', 'content.article.delete',
             'message', 'message.announcement', 'message.announcement.view',
+            'system', 'system.attachment', 'system.attachment.view',
         ])->pluck('id'));
 
         $viewer = Role::factory()->create([

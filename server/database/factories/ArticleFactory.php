@@ -68,6 +68,7 @@ class ArticleFactory extends Factory
             'cover' => null,
             'content' => implode("\n\n", $paragraphs),
             'status' => $status,
+            'source' => fake()->randomElement(['original', 'original', 'reprint', 'translation']),
             'published_at' => $status === PublishStatus::Published ? fake()->dateTimeBetween('-30 days') : null,
             'department_id' => null,
             'created_by' => null,

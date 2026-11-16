@@ -1,0 +1,4 @@
+| '{{ permission }}.view'
+| '{{ permission }}.create'
+| '{{ permission }}.update'
+| '{{ permission }}.delete'

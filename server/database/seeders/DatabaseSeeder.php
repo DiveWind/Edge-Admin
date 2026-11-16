@@ -15,6 +15,8 @@ class DatabaseSeeder extends Seeder
         Artisan::call('permission:sync');
 
         $this->call([
+            SettingSeeder::class,
+            DictTypeSeeder::class,
             DepartmentSeeder::class,
             PositionSeeder::class,
             RoleSeeder::class,

@@ -1,0 +1,24 @@
+<?php
+
+namespace App\Policies;
+
+use App\Models\{{ class }};
+use App\Models\User;
+use Illuminate\Auth\Access\Response;
+
+/**
+ * 记录级规则（功能权限由路由上的 can:{{ permission }}.* 判定）。
+ * 例如"被引用时不可删除"：return $model->xxx()->exists() ? Response::deny(__('...')) : Response::allow();
+ */
+class {{ class }}Policy
+{
+    public function update(User $actor, {{ class }} ${{ variable }}): Response
+    {
+        return Response::allow();
+    }
+
+    public function delete(User $actor, {{ class }} ${{ variable }}): Response
+    {
+        return Response::allow();
+    }
+}

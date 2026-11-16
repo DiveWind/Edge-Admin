@@ -1,0 +1,1 @@
+  '{{ web.locale_prefix }}.{{ field.camel }}': '{{ field.label }}',

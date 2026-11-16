@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Collections\TreeCollection;
+use App\Collections\TreeCollection;
 use App\Models\Department;
 
 function node(int $id, ?int $parentId): Department

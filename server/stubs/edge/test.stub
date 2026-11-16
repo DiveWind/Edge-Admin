@@ -1,0 +1,57 @@
+<?php
+
+use App\Models\{{ class }};
+use App\Models\User;
+{{ uses }}
+
+/**
+ * 合法的提交数据（含所需的关联 / 字典数据）。
+ *
+ * @return array<string, mixed>
+ */
+function {{ variable }}Payload(): array
+{
+{{ fields.test_setup }}
+
+    return [
+{{ fields.test_payload }}
+    ];
+}
+
+test('{{ variable_plural }} can be listed', function () {
+    actingAsUser(userWithPermissions(['{{ permission }}.view']));
+    {{ class }}::factory(2)->create();
+
+    $this->getJson('/api/{{ route }}')
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonStructure(['data', 'links', 'meta' => ['current_page', 'per_page', 'total']]);
+});
+
+test('{{ variable_plural }} can be created, shown, updated and deleted', function () {
+    actingAsUser(userWithPermissions(['{{ permission }}.view', '{{ permission }}.create', '{{ permission }}.update', '{{ permission }}.delete']));
+
+    $id = $this->postJson('/api/{{ route }}', {{ variable }}Payload())->assertCreated()->json('data.id');
+
+    $this->getJson("/api/{{ route }}/{$id}")->assertOk()->assertJsonPath('data.id', $id);
+    $this->putJson("/api/{{ route }}/{$id}", {{ variable }}Payload())->assertOk();
+    $this->deleteJson("/api/{{ route }}/{$id}")->assertNoContent();
+
+    expect({{ class }}::query()->find($id))->toBeNull();
+});
+
+test('{{ variable }} input is validated', function () {
+    actingAsUser(userWithPermissions(['{{ permission }}.create']));
+
+    $this->postJson('/api/{{ route }}', [])->assertUnprocessable();
+});
+
+test('{{ variable_plural }} require permissions', function () {
+    actingAsUser(User::factory()->create());
+    ${{ variable }} = {{ class }}::factory()->create();
+
+    $this->getJson('/api/{{ route }}')->assertForbidden();
+    $this->postJson('/api/{{ route }}', {{ variable }}Payload())->assertForbidden();
+    $this->putJson("/api/{{ route }}/{${{ variable }}->id}", {{ variable }}Payload())->assertForbidden();
+    $this->deleteJson("/api/{{ route }}/{${{ variable }}->id}")->assertForbidden();
+});

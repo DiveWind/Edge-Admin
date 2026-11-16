@@ -1,0 +1,20 @@
+<?php
+
+namespace {{ request_namespace }};
+
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+{{ uses }}
+
+class Store{{ class }}Request extends FormRequest
+{
+    /**
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+{{ fields.rules }}
+        ];
+    }
+}
