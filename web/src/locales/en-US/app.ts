@@ -31,6 +31,8 @@ const messages: Record<keyof typeof zh, string> = {
   'app.notice.markRead': 'Read',
   'app.notice.markAllRead': 'Mark all as read',
   'app.notice.viewAll': 'View all',
+  'app.header.theme.toDark': 'Switch to dark theme',
+  'app.header.theme.toLight': 'Switch to light theme',
 };
 
 export default messages;

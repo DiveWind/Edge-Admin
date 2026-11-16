@@ -1,0 +1,4 @@
+    {
+      title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
+      dataIndex: '{{ field.name }}',
+    },

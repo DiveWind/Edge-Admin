@@ -12,7 +12,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { App } from 'antd';
 import type React from 'react';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
+import { usePermissionTranslator } from '@/hooks/usePermissionName';
 import { useDataScopeEnum, useStatusEnum } from '@/hooks/useValueEnums';
 import { getDepartmentOptions, getPermissionOptions } from '@/services/options';
 import { submitForm } from '@/utils/form';
@@ -54,11 +55,17 @@ const RoleForm: React.FC<RoleFormProps> = ({
   /** 超级管理员角色：拥有全部权限，不可改码 / 禁用 / 改授权 */
   const isSuperAdmin = Boolean(record?.is_super_admin);
 
-  const { data: permissions = [] } = useQuery({
+  const translatePermissions = usePermissionTranslator();
+  const { data: rawPermissions } = useQuery({
     queryKey: ['options', 'permissions'],
     queryFn: async () => (await getPermissionOptions()).data,
     enabled: open,
   });
+  // 权限名称按 code 翻译（permission.<code>），缺失时回退后端 name
+  const permissions = useMemo(
+    () => translatePermissions(rawPermissions ?? []),
+    [rawPermissions, translatePermissions],
+  );
   const { data: departments = [] } = useQuery({
     queryKey: ['options', 'departments'],
     queryFn: async () => (await getDepartmentOptions()).data,

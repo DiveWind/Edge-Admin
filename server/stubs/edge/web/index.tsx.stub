@@ -1,24 +1,158 @@
-import type { ProColumns } from '@ant-design/pro-components';
-import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { PlusOutlined } from '@ant-design/icons';
+import type {
+  ActionType,
+  ProColumns,
+  ProFormInstance,
+} from '@ant-design/pro-components';
+import {
+  ModalForm,
+  PageContainer,
+  ProFormDatePicker,
+  ProFormDateTimePicker,
+  ProFormDigit,
+  ProFormRadio,
+  ProFormSelect,
+  ProFormSwitch,
+  ProFormText,
+  ProFormTextArea,
+  ProTable,
+} from '@ant-design/pro-components';
+import { useAccess } from '@umijs/max';
+import { App, Button, Typography } from 'antd';
 import type React from 'react';
+import { useRef, useState } from 'react';
+import { DeleteAction, DictTag } from '@/components';
+import { useDict } from '@/hooks/useDict';
+import { useBooleanEnum, useStatusEnum } from '@/hooks/useValueEnums';
+import {
+  clearFieldErrors,
+  jsonRule,
+  parseJson,
+  stringifyJson,
+  submitForm,
+} from '@/utils/form';
 import { useT } from '@/utils/i18n';
-import { tableRequest } from '@/utils/table';
-import type { {{ class }} } from './data';
-import { query{{ class_plural }} } from './service';
+import { booleanTransform, tableRequest } from '@/utils/table';
+import type { {{ class }}, {{ class }}FormValues } from './data';
+import {
+  create{{ class }},
+  delete{{ class }},
+  get{{ class }},
+  query{{ class_plural }},
+  update{{ class }},
+} from './service';
 
-/** {{ title_plural }}（edge:make-module 生成的占位页面） */
+/*
+ * {{ title_plural }}：由 edge:make-module 生成，生成后请按 docs/generator.md 第 6 节检查：
+ * - 执行 `npx biome check --write --unsafe <本目录> src/locales`（去掉未用到的导入并格式化）；
+ * - 补充前端校验（必填、长度等，后端 422 已会回填到字段）、外键下拉的选项接口、中文文案。
+ */
+
+interface {{ class }}FormProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  record?: {{ class }};
+  onSuccess: () => void;
+}
+
+/** 新建 / 编辑弹窗：传 formRef 不传 form，弹窗销毁后表单是干净的；编辑时拉详情回填 */
+const {{ class }}Form: React.FC<{{ class }}FormProps> = ({
+  open,
+  onOpenChange,
+  record,
+  onSuccess,
+}) => {
+  const t = useT();
+  const { message } = App.useApp();
+{{ fields.web.form_hook }}
+  const formRef = useRef<ProFormInstance<{{ class }}FormValues>>(undefined);
+
+  const handleFinish = (values: {{ class }}FormValues) =>
+    submitForm(formRef.current, async () => {
+      if (record) {
+        await update{{ class }}(record.id, values);
+      } else {
+        await create{{ class }}(values);
+      }
+      message.success(t(record ? 'common.updated' : 'common.created'));
+      onSuccess();
+    });
+
+  return (
+    <ModalForm<{{ class }}FormValues>
+      title={t(record ? '{{ web.locale_prefix }}.edit' : '{{ web.locale_prefix }}.create')}
+      width={560}
+      formRef={formRef}
+      omitNil={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      modalProps={{ destroyOnHidden: true }}
+      initialValues={{
+{{ fields.web.initial_value }}
+      }}
+      request={
+        record ? async () => (await get{{ class }}(record.id)).data : undefined
+      }
+      // 没有前端 rules 的字段输入时不会重新校验，手动清掉 422 回填的错误
+      onValuesChange={(changed) => clearFieldErrors(formRef.current, changed)}
+      onFinish={handleFinish}
+    >
+{{ fields.web.form_item }}
+    </ModalForm>
+  );
+};
+
 const {{ web.component }}: React.FC = () => {
   const t = useT();
+  const access = useAccess();
+{{ fields.web.hook }}
+  const actionRef = useRef<ActionType>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<{{ class }}>();
+
+  const reload = () => actionRef.current?.reload();
+
+  const openForm = (record?: {{ class }}) => {
+    setEditing(record);
+    setFormOpen(true);
+  };
 
   const columns: ProColumns<{{ class }}>[] = [
-    { title: 'ID', dataIndex: 'id', search: false, width: 80 },
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      search: false,
+      sorter: true,
+      width: 80,
+    },
 {{ fields.web.column }}
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
+      key: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
+    },
+    {
+      title: t('common.actions'),
+      valueType: 'option',
+      width: 120,
+      render: (_, record) => [
+        access.can('{{ permission }}.update') && (
+          <Typography.Link key="edit" onClick={() => openForm(record)}>
+            {t('common.edit')}
+          </Typography.Link>
+        ),
+        access.can('{{ permission }}.delete') && (
+          <DeleteAction
+            key="delete"
+            onConfirm={() => delete{{ class }}(record.id)}
+            onSuccess={reload}
+          />
+        ),
+      ],
     },
   ];
 
@@ -26,9 +160,33 @@ const {{ web.component }}: React.FC = () => {
     <PageContainer>
       <ProTable<{{ class }}>
         rowKey="id"
-        headerTitle={t('{{ web.locale_prefix }}.title')}
+        actionRef={actionRef}
         columns={columns}
         request={tableRequest(query{{ class_plural }})}
+        // 长文本 / JSON 列默认隐藏（列设置中可打开），保证常用列在常见宽度下完整显示
+        columnsState={{
+          defaultValue: {
+{{ fields.web.column_state }}
+          },
+        }}
+        toolBarRender={() => [
+          access.can('{{ permission }}.create') && (
+            <Button
+              key="create"
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openForm()}
+            >
+              {t('common.create')}
+            </Button>
+          ),
+        ]}
+      />
+      <{{ class }}Form
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        record={editing}
+        onSuccess={reload}
       />
     </PageContainer>
   );

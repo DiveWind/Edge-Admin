@@ -3,7 +3,7 @@ import type { UploadFile, UploadProps } from 'antd';
 import { App, Flex, Upload } from 'antd';
 import type React from 'react';
 import { useState } from 'react';
-import { uploadImage } from '@/services/upload';
+import { uploadFile } from '@/services/upload';
 import { useT } from '@/utils/i18n';
 
 const MAX_SIZE_MB = 2;
@@ -54,7 +54,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     onError,
   }) => {
     try {
-      const { data } = await uploadImage(file as Blob);
+      const { data } = await uploadFile(file as Blob);
       onSuccess?.(data);
       onChange?.(data.url);
     } catch (error) {

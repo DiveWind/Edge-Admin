@@ -34,3 +34,17 @@ export function getUserOptions() {
 /** options 接口 → Select / ProFormSelect 的 `{label, value}` */
 export const toSelectOptions = ({ data }: API.Collection<API.Option>) =>
   data.map(({ id, name }) => ({ label: name, value: id }));
+
+/** 字典项（仅启用字典的启用项，按 sort）。页面里请用 `useDict` / `useDicts`，不要直接调用 */
+export function getDictOptions(codes: string[]) {
+  return request<API.Resource<API.DictMap>>('/api/options/dicts', {
+    params: { codes: codes.join(',') },
+  });
+}
+
+/** 公开系统参数，无需登录（getInitialState 中调用） */
+export function getPublicSettings(options?: { skipErrorHandler?: boolean }) {
+  return request<API.Resource<API.PublicSettings>>('/api/options/settings', {
+    ...options,
+  });
+}

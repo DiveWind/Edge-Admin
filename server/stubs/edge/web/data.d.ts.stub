@@ -1,4 +1,4 @@
-/** {{ title_plural }}（`/api/{{ route }}`） */
+/** {{ title_plural }}（`/api/{{ route }}`），字段与后端 {{ class }}Resource 一致 */
 export interface {{ class }} {
   id: API.Id;
 {{ fields.web.type }}
@@ -6,6 +6,7 @@ export interface {{ class }} {
   updated_at: string;
 }
 
+/** 新建 / 编辑提交的字段（与 Store{{ class }}Request 一致） */
 export interface {{ class }}FormValues {
 {{ fields.web.type }}
 }

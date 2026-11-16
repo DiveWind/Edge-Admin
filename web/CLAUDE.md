@@ -10,7 +10,8 @@ Edge Admin 前端：RBAC 中后台脚手架，基于 Ant Design Pro v6（Umi Max
 
 `npm run dev` / `npm start`（localhost:8001，`/api`、`/storage` 代理到 127.0.0.1:8000），`npm run build`，`npm run preview`，
 `npm run lint`（Biome lint + tsc），`npm run biome`（Biome 自动修复 + 格式化），`npm run tsc`，`npm test`（Vitest，node 环境），
-`npx antd lint ./src`（antd 专项检查）。端口写在 `.env`（`PORT=8001`，已提交；个人覆盖写 `.env.local`）。
+`npx antd lint ./src`（antd 专项检查），`npm run e2e`（Playwright，需要后端已启动并 seed + `queue:work`，不在 `npm test` / CI 中）。
+完整规范见 `../docs/frontend-guide.md`。端口写在 `.env`（`PORT=8001`，已提交；个人覆盖写 `.env.local`）。
 
 ## Critical Rules
 
@@ -33,15 +34,16 @@ config/
   defaultSettings.ts    # ProLayout 设置（标题、logo、布局），在 src/app.tsx 的 layout 中展开
   proxy.ts              # 开发代理
 src/
-  app.tsx               # 运行时配置：getInitialState（GET /api/auth/me）、layout、request、innerProvider
+  app.tsx               # 运行时配置：getInitialState（当前用户 + 公开系统参数 + 主题）、layout、antd、request、innerProvider
   access.ts             # 权限（见下）
-  requestErrorConfig.ts # 请求拦截（Bearer Token）+ Laravel 错误处理
-  components/           # 跨页面公共组件（DeleteAction、ImageUpload、FeedbackBridge、RightContent/*、ErrorBoundary...）
-  hooks/useValueEnums.ts# 共用 valueEnum（启停状态、发布状态、数据权限）
-  services/             # 跨页面接口：auth、options、upload、notification、permission；typings.d.ts 为全局 API 类型
-  utils/                # auth（token / 登录跳转）、table（ProTable ↔ 契约参数）、form（422 回填）、error、i18n、tree
-  locales/<lang>.ts + <lang>/{app,common,component,menu}.ts + <lang>/pages/*.ts
+  requestErrorConfig.ts # 请求拦截（Bearer Token、Accept-Language）+ Laravel 错误处理
+  components/           # 跨页面公共组件（DeleteAction、DictTag、ImageUpload、GlobalStyle、FeedbackBridge、RightContent/*、ErrorBoundary...）
+  hooks/                # useValueEnums（状态 / 发布 / 数据权限 / 布尔）、useDict、usePermissionName、useThemeMode
+  services/             # 跨页面接口：auth、options、dict、upload、notification、permission；typings.d.ts 为全局 API 类型
+  utils/                # 纯函数：auth、table、form（422 回填 / JSON）、dict、permission、settings、theme、format、error、i18n、tree
+  locales/<lang>.ts + <lang>/{app,common,component,menu,permission}.ts + <lang>/pages/*.ts
   pages/<模块>/<页面>/   # index.tsx + service.ts + data.d.ts (+ components/)
+e2e/                    # Playwright 用例（global-setup 为各角色生成登录态）
 ```
 
 **State**：`useModel('@@initialState')` 取 `currentUser`；ProTable `request` 负责列表加载；其他服务端状态用 `@tanstack/react-query`
@@ -62,6 +64,7 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
   记录级业务规则拒绝（不能删自己、有子部门不可删……）也是 403 + message，只提示，不跳 403 页。
   单个请求需要自行处理时传 `skipErrorHandler: true`。
 - 表单提交用 `submitForm(formRef.current, () => save(values))`：成功返回 `true`（关闭弹窗），422 时把 `errors` 回填到字段并返回 `false`。
+- 请求头 `Accept-Language` 跟随界面语言（`getLocale()`），后端提示文案随之切换。
 - 组件外需要提示时用 `getMessageApi()`（`App.useApp()` 的实例，由 `FeedbackBridge` 注入），不要用 antd 静态 `message.xxx`。
 
 ### 列表页
@@ -71,7 +74,8 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
   直接在 `request` 里返回 `{ data, success: true }` 并设 `pagination={false}`。
 - **只对契约 5.7 白名单内的字段开 `sorter: true`**（非白名单后端返回 422）。
 - 日期区间搜索：隐藏列 `valueType: 'dateRange'` + `search: { transform: createdRangeTransform }`。
-- 删除用 `<DeleteAction onConfirm={() => deleteXxx(id)} onSuccess={reload} />`；状态用 `valueEnum`。
+- 删除用 `<DeleteAction onConfirm={() => deleteXxx(id)} onSuccess={reload} />`；状态用 `valueEnum`；
+  布尔列用 `useBooleanEnum()` + `search: { transform: booleanTransform('field') }`（契约要 1 / 0）。
 - 列宽：`dateTime` 列 `width: 170`、人名列 `width: 120`，`ellipsis` 列必须给 `width`（否则会被挤没）。列多时用
   `columnsState={{ defaultValue: { key: { show: false } } }}` 默认隐藏次要列（列需写 `key`），保证 1440 宽下常用列完整显示；
   `scroll={{ x: 'max-content' }}` 只用在没有 `ellipsis` 列的表格上（它会让 ellipsis 列撑开）。
@@ -82,6 +86,20 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
 - `ModalForm` / `DrawerForm` + `modalProps={{ destroyOnHidden: true }}`（或 `drawerProps`），**传 `formRef` 不传 `form`**——
   表单 store 随弹层销毁，每次打开都是干净的（传外部 `form` 会把上一次的值带进下一次）；编辑时用 `request` 拉详情回填。
 - `omitNil={false}`，可清空的下拉字段在提交时把 `undefined` 转成 `null`，否则"清空"不会提交到后端。
+- 有不带 `rules` 的字段时加 `onValuesChange={(changed) => clearFieldErrors(formRef.current, changed)}`：没有 rules 的字段输入时不校验，
+  422 回填的错误会一直留着。JSON 字段用 `jsonRule` + `convertValue={stringifyJson}` + `transform`（`parseJson`）。
+
+### 字典与系统参数
+
+- 字典：`useDict(code)` / `useDicts([...])`（react-query，按 code 缓存去重，同一时刻合并请求）→ `{ options, valueEnum, find }`；
+  列表列 `valueEnum` + `render: <DictTag code value />`，表单 `ProFormSelect options={dict.options}`（示例：文章 `source`）。
+  本端改了字典后 `invalidateQueries({ queryKey: dictKeys.all })`。
+- 公开系统参数在 `initialState.site`（`name` / `loginNotice` / `icp`，失败回退默认值，见 `utils/settings.ts`）；改参数后调 `fetchSiteSettings()`。
+
+### 主题
+
+明 / 暗切换（`ThemeSwitch`）：全局用 Umi antd 插件（`app.tsx` 的 `antd` 运行时配置 + `useAntdConfigSetter`），布局用 ProLayout
+`navTheme`（来自 `initialState.theme`），偏好存 localStorage。**不写死颜色**，用 token；图表放 `ChartBox` 会自动带 G2 暗色主题。
 
 ### 落地页
 
@@ -103,6 +121,8 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
   更不容易漏，也不需要维护"权限码 → 布尔值"的映射。
 - **按钮级**：`const access = useAccess(); access.can('system.user.create') && <Button />`，或 `<Access accessible={...}>`。
   前端隐藏只是体验，真正的校验在后端。
+- **权限名称**按 code 翻译：`permission.<code>` → 操作类 `permission.action.<动作>` → 后端 `name`（`locales/<lang>/permission.ts`，
+  `usePermissionTranslator()`）。新增模块补菜单级 `permission.<code>`。
 
 ### i18n
 
@@ -113,13 +133,16 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
 ### 新增一个业务页面（清单）
 
 1. 契约：在 `../docs/architecture.md` 补接口、权限码与排序白名单（后端同步实现）。
-2. `src/access.ts`：`PermissionCode` 追加新权限码。
+2. `src/access.ts`：`PermissionCode` 追加新权限码（`// edge:permission-codes` 锚点之前）。
 3. `src/pages/<模块>/<页面>/`：`data.d.ts`（资源类型 + 表单值类型）、`service.ts`（`request` 调用）、`index.tsx`
    （`PageContainer` + `ProTable`）、`components/XxxForm.tsx`（`ModalForm`，参考 `content/categories`）。
    带数据权限 / 详情回填 / 上传的完整示例看 `content/articles`。
 4. `config/routes.ts`：加路由，`access: 'routeFilter'` + `permission`。
-5. `src/locales/{zh-CN,en-US}/menu.ts` 加菜单名，`pages/<模块>.ts` 加页面文案。
-6. 跑 `npm run lint && npx antd lint ./src && npm test && npm run build`。
+5. `src/locales/{zh-CN,en-US}/menu.ts` 加菜单名，`pages/<模块>.ts` 加页面文案，`permission.ts` 加菜单级权限名称。
+6. 跑 `npm run lint && npx antd lint ./src && npm test && npm run build`，在 `e2e/smoke.spec.ts` 加冒烟。
+
+单表 CRUD 可以用后端生成器 `php artisan edge:make-module` 一次生成前后端骨架，生成后的收尾见 `../docs/generator.md` 第 6 节。
+`config/routes.ts`、`src/access.ts`、`src/locales/<lang>.ts`、`src/locales/<lang>/menu.ts` 中的 `// edge:*` 注释是生成器锚点，不要删除或移动。
 
 ## AI Skills
 

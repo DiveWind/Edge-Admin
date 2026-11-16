@@ -76,3 +76,8 @@ export const createdRangeTransform = (value: [string, string]) => ({
   created_from: value[0],
   created_to: value[1],
 });
+
+/** 布尔搜索列的 transform：`'true'` / `'false'` → 契约的 `1` / `0`（Laravel boolean 规则不接受字符串 true） */
+export const booleanTransform = (field: string) => (value: string) => ({
+  [field]: value === 'true' ? 1 : 0,
+});

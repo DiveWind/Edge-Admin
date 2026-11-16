@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { tableRequest, toListQuery, toTableResult } from './table';
+import {
+  booleanTransform,
+  tableRequest,
+  toListQuery,
+  toTableResult,
+} from './table';
 
 describe('toListQuery', () => {
   it('maps pagination to page / per_page', () => {
@@ -86,6 +91,15 @@ describe('tableRequest', () => {
       per_page: 10,
       name: 'a',
       sort: 'created_at',
+    });
+  });
+});
+
+describe('booleanTransform', () => {
+  it("maps 'true' / 'false' search values to 1 / 0", () => {
+    expect(booleanTransform('is_featured')('true')).toEqual({ is_featured: 1 });
+    expect(booleanTransform('is_featured')('false')).toEqual({
+      is_featured: 0,
     });
   });
 });

@@ -6,6 +6,7 @@ import type { PermissionCode } from '../src/access';
  * - `name` 对应 `menu.<父级 name>.<name>` 国际化 key（见 src/locales/<lang>/menu.ts）
  * - 需要权限的页面写 `access: 'routeFilter'` + `permission`（权限码或权限码数组，满足其一即可）。
  *   无权限时菜单自动隐藏，直接访问 URL 渲染 403。只要求登录的页面不写 access。
+ * - `// edge:routes`、`// edge:routes:<模块>` 是代码生成器（edge:make-module）的锚点，新路由插在它们之前，请勿删除。
  * - 分组路由（只有 routes 没有 component）不要写 access，也不要放无权限要求的 redirect 子路由，
  *   否则"所有子路由都不可访问时隐藏分组"的判定会失效。
  *
@@ -78,6 +79,28 @@ const routes: AppRoute[] = [
         access: 'routeFilter',
         permission: 'system.position.view',
       },
+      {
+        path: '/system/dicts',
+        name: 'dicts',
+        component: './system/dicts',
+        access: 'routeFilter',
+        permission: 'system.dict.view',
+      },
+      {
+        path: '/system/settings',
+        name: 'settings',
+        component: './system/settings',
+        access: 'routeFilter',
+        permission: 'system.setting.view',
+      },
+      {
+        path: '/system/attachments',
+        name: 'attachments',
+        component: './system/attachments',
+        access: 'routeFilter',
+        permission: 'system.attachment.view',
+      },
+      // edge:routes:system
     ],
   },
   {
@@ -106,6 +129,21 @@ const routes: AppRoute[] = [
         access: 'routeFilter',
         permission: ['monitor.scheduled-task.view', 'monitor.failed-job.view'],
       },
+      {
+        path: '/monitor/online-sessions',
+        name: 'online-sessions',
+        component: './monitor/online-sessions',
+        access: 'routeFilter',
+        permission: 'monitor.online-session.view',
+      },
+      {
+        path: '/monitor/system-info',
+        name: 'system-info',
+        component: './monitor/system-info',
+        access: 'routeFilter',
+        permission: 'monitor.system-info.view',
+      },
+      // edge:routes:monitor
     ],
   },
   {
@@ -125,6 +163,7 @@ const routes: AppRoute[] = [
         name: 'notifications',
         component: './message/notifications',
       },
+      // edge:routes:message
     ],
   },
   {
@@ -146,8 +185,10 @@ const routes: AppRoute[] = [
         access: 'routeFilter',
         permission: 'content.category.view',
       },
+      // edge:routes:content
     ],
   },
+  // edge:routes
   {
     path: '/account/settings',
     name: 'account-settings',

@@ -4,6 +4,7 @@ export default {
   'pages.content.articles.edit': '编辑文章',
   'pages.content.articles.title': '标题',
   'pages.content.articles.category': '分类',
+  'pages.content.articles.source': '来源',
   'pages.content.articles.summary': '摘要',
   'pages.content.articles.cover': '封面',
   'pages.content.articles.content': '正文',

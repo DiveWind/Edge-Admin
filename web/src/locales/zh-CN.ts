@@ -10,6 +10,8 @@ import login from './zh-CN/pages/login';
 import message from './zh-CN/pages/message';
 import monitor from './zh-CN/pages/monitor';
 import system from './zh-CN/pages/system';
+import permission from './zh-CN/permission';
+// edge:locale-imports
 
 /** 默认语言，也是文案 key 的类型来源（见 src/utils/i18n.ts） */
 export default {
@@ -17,6 +19,7 @@ export default {
   ...common,
   ...component,
   ...menu,
+  ...permission,
   ...login,
   ...exception,
   ...dashboard,
@@ -25,4 +28,5 @@ export default {
   ...message,
   ...content,
   ...account,
+  // edge:locale-spread
 };

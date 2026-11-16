@@ -2,6 +2,7 @@ import { Bar, Line, Pie } from '@ant-design/plots';
 import { Empty } from 'antd';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useThemeMode } from '@/hooks/useThemeMode';
 import { useT } from '@/utils/i18n';
 import type { DashboardData } from '../data';
 
@@ -14,13 +15,22 @@ const EmptyChart: React.FC = () => (
   />
 );
 
+/** ChartBox 传给图表的尺寸与主题，直接展开到图表组件上 */
+interface ChartSizeProps {
+  width: number;
+  autoFit: false;
+  theme: 'classic' | 'classicDark';
+}
+
 /**
  * 图表容器：用 ResizeObserver 跟踪自身宽度，把宽度显式传给图表。
  * G2 的 autoFit 只监听 window resize，布局（菜单、栅格）在挂载后才稳定时会按旧宽度绘制并溢出卡片。
+ * 同时按当前明 / 暗模式传入 G2 主题。
  */
-const ChartBox: React.FC<{ children: (width: number) => React.ReactNode }> = ({
-  children,
-}) => {
+const ChartBox: React.FC<{
+  children: (props: ChartSizeProps) => React.ReactNode;
+}> = ({ children }) => {
+  const mode = useThemeMode();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -34,7 +44,13 @@ const ChartBox: React.FC<{ children: (width: number) => React.ReactNode }> = ({
   }, []);
   return (
     <div ref={ref} style={{ height: CHART_HEIGHT }}>
-      {width > 0 && children(width)}
+      {width > 0 &&
+        children({
+          width,
+          autoFit: false,
+          // G2 主题跟随明 / 暗模式（坐标轴、图例文字颜色）
+          theme: mode === 'dark' ? 'classicDark' : 'classic',
+        })}
     </div>
   );
 };
@@ -51,7 +67,7 @@ export const LoginTrendChart: React.FC<{
   if (!data.length) return <EmptyChart />;
   return (
     <ChartBox>
-      {(width) => (
+      {(chart) => (
         <Line
           data={series}
           xField="date"
@@ -60,8 +76,7 @@ export const LoginTrendChart: React.FC<{
           height={CHART_HEIGHT}
           point={{ shapeField: 'circle', sizeField: 3 }}
           axis={{ x: { labelAutoRotate: false } }}
-          width={width}
-          autoFit={false}
+          {...chart}
         />
       )}
     </ChartBox>
@@ -74,7 +89,7 @@ export const ArticleCategoryChart: React.FC<{
   if (!data.length) return <EmptyChart />;
   return (
     <ChartBox>
-      {(width) => (
+      {(chart) => (
         <Pie
           data={data}
           angleField="count"
@@ -85,8 +100,7 @@ export const ArticleCategoryChart: React.FC<{
           legend={{
             color: { position: 'bottom', layout: { justifyContent: 'center' } },
           }}
-          width={width}
-          autoFit={false}
+          {...chart}
         />
       )}
     </ChartBox>
@@ -105,7 +119,7 @@ export const DepartmentUserChart: React.FC<{
     .slice(0, TOP_DEPARTMENTS);
   return (
     <ChartBox>
-      {(width) => (
+      {(chart) => (
         <Bar
           data={top}
           xField="department"
@@ -113,8 +127,7 @@ export const DepartmentUserChart: React.FC<{
           height={CHART_HEIGHT}
           label={{ text: 'count', position: 'inside' }}
           axis={{ y: { tickCount: 4 } }}
-          width={width}
-          autoFit={false}
+          {...chart}
         />
       )}
     </ChartBox>

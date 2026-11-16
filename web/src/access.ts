@@ -11,7 +11,11 @@
  * 权限码以后端 `/api/auth/me` 返回的 `permissions` 为唯一来源，前端只维护类型用于防止拼写错误。
  */
 
-/** 契约 §3.3 权限点清单。新增后端权限点时同步追加 */
+/**
+ * 契约 §3.3 权限点清单（只用于类型检查，防止拼写错误）。新增后端权限点时同步追加。
+ * `edge:permission-codes` 是代码生成器的锚点，新模块的权限码插在它之前；末尾的 `| never` 不影响类型，
+ * 只是让锚点留在联合类型内部（否则格式化器会把 `;` 移到锚点之前）。两者都请勿删除。
+ */
 export type PermissionCode =
   | 'dashboard.view'
   | 'system.user.view'
@@ -32,6 +36,16 @@ export type PermissionCode =
   | 'system.position.create'
   | 'system.position.update'
   | 'system.position.delete'
+  | 'system.dict.view'
+  | 'system.dict.create'
+  | 'system.dict.update'
+  | 'system.dict.delete'
+  | 'system.setting.view'
+  | 'system.setting.create'
+  | 'system.setting.update'
+  | 'system.setting.delete'
+  | 'system.attachment.view'
+  | 'system.attachment.delete'
   | 'monitor.login-log.view'
   | 'monitor.login-log.delete'
   | 'monitor.operation-log.view'
@@ -41,6 +55,9 @@ export type PermissionCode =
   | 'monitor.failed-job.view'
   | 'monitor.failed-job.retry'
   | 'monitor.failed-job.delete'
+  | 'monitor.online-session.view'
+  | 'monitor.online-session.delete'
+  | 'monitor.system-info.view'
   | 'message.announcement.view'
   | 'message.announcement.create'
   | 'message.announcement.update'
@@ -53,7 +70,9 @@ export type PermissionCode =
   | 'content.article.view'
   | 'content.article.create'
   | 'content.article.update'
-  | 'content.article.delete';
+  | 'content.article.delete'
+  // edge:permission-codes
+  | never;
 
 /** 路由上的权限声明：单个权限码，或权限码数组（满足其一即可） */
 export interface PermissionRoute {

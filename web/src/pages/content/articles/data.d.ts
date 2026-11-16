@@ -9,6 +9,8 @@ export interface Article {
   /** 列表接口可能不返回正文，编辑时以详情为准 */
   content?: string;
   status: API.PublishStatus;
+  /** 来源，字典 `article_source` 的 value */
+  source: string;
   published_at: string | null;
   department_id: API.Id | null;
   department: API.Brief | null;
@@ -25,4 +27,5 @@ export interface ArticleFormValues {
   cover?: string | null;
   content: string;
   status: API.PublishStatus;
+  source: string;
 }

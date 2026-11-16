@@ -7,6 +7,8 @@ export interface DashboardData {
     articles: number;
     today_logins: number;
     today_operations: number;
+    online_sessions: number;
+    attachments: number;
   };
   /** 最近 14 天（含今天，缺失补 0） */
   login_trend: { date: string; success: number; failed: number }[];

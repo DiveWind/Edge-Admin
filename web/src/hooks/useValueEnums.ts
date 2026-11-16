@@ -50,3 +50,21 @@ export function useDataScopeEnum(): Record<
     [t],
   );
 }
+
+/**
+ * 布尔值 → valueEnum（键为 `'true'` / `'false'`，与 ProTable 对布尔值的取值一致）。
+ * 用作搜索条件时配合 `search: { transform: booleanTransform('field') }` 转为契约的 1 / 0。
+ */
+export function useBooleanEnum(): Record<
+  'true' | 'false',
+  ProSchemaValueEnumType
+> {
+  const t = useT();
+  return useMemo(
+    () => ({
+      true: { text: t('common.yes'), status: 'Success' },
+      false: { text: t('common.no'), status: 'Default' },
+    }),
+    [t],
+  );
+}

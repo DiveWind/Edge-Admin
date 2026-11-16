@@ -6,6 +6,8 @@ export default {
   'pages.dashboard.totals.articles': '文章数',
   'pages.dashboard.totals.todayLogins': '今日登录',
   'pages.dashboard.totals.todayOperations': '今日操作',
+  'pages.dashboard.totals.onlineSessions': '在线会话',
+  'pages.dashboard.totals.attachments': '附件数',
   'pages.dashboard.loginTrend': '近 14 天登录趋势',
   'pages.dashboard.login.success': '成功',
   'pages.dashboard.login.failed': '失败',

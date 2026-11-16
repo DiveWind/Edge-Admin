@@ -32,6 +32,9 @@ const messages: Record<keyof typeof zh, string> = {
   'common.updatedAt': 'Updated At',
   'common.publishedAt': 'Published At',
   'common.passwordMismatch': 'The two passwords do not match',
+  'common.yes': 'Yes',
+  'common.no': 'No',
+  'common.jsonInvalid': 'Please enter valid JSON',
 };
 
 export default messages;

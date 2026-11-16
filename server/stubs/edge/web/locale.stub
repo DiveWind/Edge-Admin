@@ -1,8 +1,10 @@
 import type zh from '../../zh-CN/pages/{{ web.locale_file }}';
 
 const messages: Record<keyof typeof zh, string> = {
-  '{{ web.locale_prefix }}.title': '{{ title_plural }}',
+  '{{ web.locale_prefix }}.create': 'New {{ title }}',
+  '{{ web.locale_prefix }}.edit': 'Edit {{ title }}',
 {{ fields.web.locale }}
+  'permission.{{ permission }}': '{{ title_plural }}',
 };
 
 export default messages;

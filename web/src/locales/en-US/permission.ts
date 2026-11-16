@@ -1,0 +1,37 @@
+import type zh from '../zh-CN/permission';
+
+const messages: Record<keyof typeof zh, string> = {
+  'permission.action.view': 'View',
+  'permission.action.create': 'Create',
+  'permission.action.update': 'Edit',
+  'permission.action.delete': 'Delete',
+  'permission.action.reset-password': 'Reset password',
+  'permission.action.run': 'Run now',
+  'permission.action.retry': 'Retry',
+  'permission.action.publish': 'Publish',
+  'permission.dashboard': 'Dashboard',
+  'permission.system': 'System',
+  'permission.system.user': 'Users',
+  'permission.system.role': 'Roles',
+  'permission.system.permission': 'Permissions',
+  'permission.system.department': 'Departments',
+  'permission.system.position': 'Positions',
+  'permission.system.dict': 'Dictionaries',
+  'permission.system.setting': 'Settings',
+  'permission.system.attachment': 'Attachments',
+  'permission.monitor': 'Monitor',
+  'permission.monitor.login-log': 'Login Logs',
+  'permission.monitor.operation-log': 'Operation Logs',
+  'permission.monitor.scheduled-task': 'Scheduled Tasks',
+  'permission.monitor.failed-job': 'Failed Jobs',
+  'permission.monitor.online-session': 'Online Sessions',
+  'permission.monitor.online-session.delete': 'Force logout',
+  'permission.monitor.system-info': 'System Info',
+  'permission.message': 'Messages',
+  'permission.message.announcement': 'Announcements',
+  'permission.content': 'Content',
+  'permission.content.category': 'Categories',
+  'permission.content.article': 'Articles',
+};
+
+export default messages;

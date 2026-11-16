@@ -8,6 +8,8 @@ export interface DeleteActionProps {
   /** 删除成功后回调，通常是刷新表格 */
   onSuccess?: () => void;
   title?: React.ReactNode;
+  /** 成功提示，默认"删除成功" */
+  successMessage?: string;
   disabled?: boolean;
   children?: React.ReactNode;
 }
@@ -17,6 +19,7 @@ const DeleteAction: React.FC<DeleteActionProps> = ({
   onConfirm,
   onSuccess,
   title,
+  successMessage,
   disabled,
   children,
 }) => {
@@ -25,7 +28,7 @@ const DeleteAction: React.FC<DeleteActionProps> = ({
 
   const handleConfirm = async () => {
     await onConfirm();
-    message.success(t('common.deleted'));
+    message.success(successMessage ?? t('common.deleted'));
     onSuccess?.();
   };
 

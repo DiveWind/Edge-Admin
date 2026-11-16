@@ -5,7 +5,8 @@ import { useAccess } from '@umijs/max';
 import { Button, Typography } from 'antd';
 import type React from 'react';
 import { useRef, useState } from 'react';
-import { DeleteAction } from '@/components';
+import { DeleteAction, DictTag } from '@/components';
+import { useDict } from '@/hooks/useDict';
 import { usePublishStatusEnum } from '@/hooks/useValueEnums';
 import { getArticleCategoryOptions, toSelectOptions } from '@/services/options';
 import { useT } from '@/utils/i18n';
@@ -21,6 +22,8 @@ const ArticleList: React.FC = () => {
   const t = useT();
   const access = useAccess();
   const statusEnum = usePublishStatusEnum();
+  // 字典驱动的列：valueEnum 用于搜索下拉，DictTag 按字典颜色渲染
+  const sourceDict = useDict('article_source');
   const actionRef = useRef<ActionType>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Article>();
@@ -60,9 +63,20 @@ const ArticleList: React.FC = () => {
       valueEnum: statusEnum,
     },
     {
+      title: t('pages.content.articles.source'),
+      dataIndex: 'source',
+      valueType: 'select',
+      valueEnum: sourceDict.valueEnum,
+      width: 100,
+      render: (_, record) => (
+        <DictTag code="article_source" value={record.source} />
+      ),
+    },
+    {
       title: t('pages.content.articles.author'),
       dataIndex: ['author', 'name'],
       search: false,
+      width: 120,
     },
     {
       title: t('pages.content.articles.department'),

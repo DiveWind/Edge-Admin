@@ -154,8 +154,34 @@ declare namespace API {
     created_at: string;
   }
 
-  interface UploadResult {
+  /** 附件（`POST /api/uploads` 的返回值，也是附件列表的项） */
+  interface Attachment {
+    id: Id;
+    /** 原始文件名 */
+    name: string;
     url: string;
     path: string;
+    disk: string;
+    mime: string;
+    /** 字节 */
+    size: number;
+    uploaded_by: Id | null;
+    /** 仅附件列表返回 */
+    uploader?: Brief | null;
+    created_at: string;
   }
+
+  /** `/api/options/dicts` 中的字典项 */
+  interface DictOption {
+    label: string;
+    value: string;
+    /** antd 预设色（green、blue、success…）或十六进制色值 */
+    color: string | null;
+  }
+
+  /** `/api/options/dicts?codes=a,b` → `{a: [...], b: [...]}` */
+  type DictMap = Record<string, DictOption[]>;
+
+  /** `/api/options/settings`：公开系统参数（值已按 type 转换） */
+  type PublicSettings = Record<string, unknown>;
 }

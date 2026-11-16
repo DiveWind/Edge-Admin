@@ -1,5 +1,8 @@
-/** {{ title_plural }}页面文案（edge:make-module 生成，请改为中文） */
+/** {{ title_plural }}页面文案（edge:make-module 生成，字段名默认为英文，请改为中文） */
 export default {
-  '{{ web.locale_prefix }}.title': '{{ title_plural }}',
+  '{{ web.locale_prefix }}.create': '新建{{ title }}',
+  '{{ web.locale_prefix }}.edit': '编辑{{ title }}',
 {{ fields.web.locale }}
+  // 角色授权树 / 权限管理页中的菜单名称（操作名称使用通用文案 permission.action.*）
+  'permission.{{ permission }}': '{{ title_plural }}',
 };

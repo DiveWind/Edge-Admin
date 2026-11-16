@@ -1,0 +1,9 @@
+    {
+      title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
+      dataIndex: '{{ field.name }}',
+      valueType: 'select',
+      valueEnum: {{ field.camel }}Dict.valueEnum,
+      render: (_, record) => (
+        <DictTag code="{{ field.dict }}" value={record.{{ field.name }}} />
+      ),
+    },

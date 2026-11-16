@@ -27,4 +27,6 @@ export default {
   'app.notice.markRead': '已读',
   'app.notice.markAllRead': '全部已读',
   'app.notice.viewAll': '查看全部',
+  'app.header.theme.toDark': '切换到暗色主题',
+  'app.header.theme.toLight': '切换到亮色主题',
 };

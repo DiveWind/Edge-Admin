@@ -5,6 +5,10 @@ export function query{{ class_plural }}(params: API.ListQuery) {
   return request<API.Paginated<{{ class }}>>('/api/{{ route }}', { params });
 }
 
+export function get{{ class }}(id: API.Id) {
+  return request<API.Resource<{{ class }}>>(`/api/{{ route }}/${id}`);
+}
+
 export function create{{ class }}(data: {{ class }}FormValues) {
   return request<API.Resource<{{ class }}>>('/api/{{ route }}', {
     method: 'POST',

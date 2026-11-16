@@ -11,6 +11,7 @@ import { App } from 'antd';
 import type React from 'react';
 import { useRef } from 'react';
 import { ImageUpload } from '@/components';
+import { useDict } from '@/hooks/useDict';
 import { usePublishStatusEnum } from '@/hooks/useValueEnums';
 import { getArticleCategoryOptions, toSelectOptions } from '@/services/options';
 import { submitForm } from '@/utils/form';
@@ -32,6 +33,7 @@ const toFormValues = (article: Article): ArticleFormValues => ({
   cover: article.cover,
   content: article.content ?? '',
   status: article.status,
+  source: article.source,
 });
 
 const ArticleForm: React.FC<ArticleFormProps> = ({
@@ -43,6 +45,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = usePublishStatusEnum();
+  const sourceDict = useDict('article_source');
   // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
   const formRef = useRef<ProFormInstance<ArticleFormValues>>(undefined);
 
@@ -70,7 +73,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
       open={open}
       onOpenChange={onOpenChange}
       drawerProps={{ destroyOnHidden: true }}
-      initialValues={{ status: 'draft' }}
+      initialValues={{ status: 'draft', source: 'original' }}
       request={
         record
           ? async () => toFormValues((await getArticle(record.id)).data)
@@ -89,6 +92,15 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
           label={t('pages.content.articles.category')}
           width="md"
           request={() => getArticleCategoryOptions().then(toSelectOptions)}
+          rules={[{ required: true }]}
+        />
+        <ProFormSelect
+          name="source"
+          label={t('pages.content.articles.source')}
+          width="sm"
+          allowClear={false}
+          options={sourceDict.options}
+          fieldProps={{ loading: sourceDict.loading }}
           rules={[{ required: true }]}
         />
         <ProFormRadio.Group

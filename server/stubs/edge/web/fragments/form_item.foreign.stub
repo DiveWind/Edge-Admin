@@ -1,0 +1,7 @@
+      <ProFormSelect
+        name="{{ field.name }}"
+        label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
+        showSearch
+        // TODO 接 {{ field.related }} 的选项接口（参考 src/services/options.ts：getXxxOptions().then(toSelectOptions)）
+        request={async () => []}
+      />

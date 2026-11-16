@@ -8,6 +8,8 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.dashboard.totals.articles': 'Articles',
   'pages.dashboard.totals.todayLogins': 'Logins Today',
   'pages.dashboard.totals.todayOperations': 'Operations Today',
+  'pages.dashboard.totals.onlineSessions': 'Online Sessions',
+  'pages.dashboard.totals.attachments': 'Attachments',
   'pages.dashboard.loginTrend': 'Logins in the Last 14 Days',
   'pages.dashboard.login.success': 'Success',
   'pages.dashboard.login.failed': 'Failed',

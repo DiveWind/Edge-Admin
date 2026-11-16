@@ -1,0 +1,4 @@
+      <ProFormText
+        name="{{ field.name }}"
+        label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
+      />

@@ -17,6 +17,9 @@
 # test
 /coverage
 .vitest
+/e2e/.auth
+/test-results
+/playwright-report
 
 # misc
 .DS_Store

@@ -1,11 +1,12 @@
 import type { RequestConfig, RequestOptions } from '@umijs/max';
+import { getLocale } from '@umijs/max';
 import { getMessageApi } from '@/components/FeedbackBridge';
 import { clearToken, getToken, redirectToLogin } from '@/utils/auth';
 import { isRequestError, toHttpError } from '@/utils/error';
 import { t } from '@/utils/i18n';
 
 /**
- * 适配 Laravel 标准响应的请求配置
+ * 适配 Laravel 标准响应的请求配置（请求头带 Bearer Token 与当前界面语言 Accept-Language）
  * - 成功：HTTP 2xx，响应体为 API Resource（`{data}`）或 204 无内容
  * - 失败：HTTP 状态码 + `{message, errors?}`
  *
@@ -68,6 +69,8 @@ export const errorConfig: RequestConfig = {
         headers: {
           ...config.headers,
           Accept: 'application/json',
+          // 后端按此返回对应语言的 message / errors；跟随界面语言而不是浏览器语言
+          'Accept-Language': getLocale(),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       };

@@ -1,0 +1,8 @@
+    {
+      title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
+      dataIndex: '{{ field.name }}',
+      key: '{{ field.name }}',
+      search: false,
+      ellipsis: true,
+      width: 240,
+    },

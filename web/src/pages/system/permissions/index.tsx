@@ -1,16 +1,34 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { useQuery } from '@tanstack/react-query';
 import { Tag } from 'antd';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePermissionTranslator } from '@/hooks/usePermissionName';
 import { getPermissionTree } from '@/services/permission';
 import { useT } from '@/utils/i18n';
 import { collectParentIds, pruneEmptyChildren } from '@/utils/tree';
 
-/** 权限点在后端配置中声明并同步，这里只读展示 */
+/** 权限点在后端配置中声明并同步，这里只读展示；名称按 code 翻译（缺失回退后端 name） */
 const PermissionList: React.FC = () => {
   const t = useT();
+  const translatePermissions = usePermissionTranslator();
   const [expandedKeys, setExpandedKeys] = useState<readonly React.Key[]>([]);
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['permissions', 'tree'],
+    queryFn: async () => (await getPermissionTree()).data,
+  });
+
+  useEffect(() => {
+    if (data) setExpandedKeys(collectParentIds(data));
+  }, [data]);
+
+  // 切换语言时只重新翻译，不重新请求
+  const dataSource = useMemo(
+    () => pruneEmptyChildren(translatePermissions(data ?? [])),
+    [data, translatePermissions],
+  );
 
   const columns: ProColumns<API.PermissionNode>[] = [
     { title: t('pages.system.permissions.name'), dataIndex: 'name' },
@@ -39,14 +57,12 @@ const PermissionList: React.FC = () => {
         columns={columns}
         search={false}
         pagination={false}
+        loading={isFetching}
+        dataSource={dataSource}
+        options={{ reload: () => refetch() }}
         expandable={{
           expandedRowKeys: expandedKeys,
           onExpandedRowsChange: setExpandedKeys,
-        }}
-        request={async () => {
-          const { data } = await getPermissionTree();
-          setExpandedKeys(collectParentIds(data));
-          return { data: pruneEmptyChildren(data), success: true };
         }}
       />
     </PageContainer>

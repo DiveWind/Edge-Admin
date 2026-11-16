@@ -5,6 +5,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.content.articles.edit': 'Edit Article',
   'pages.content.articles.title': 'Title',
   'pages.content.articles.category': 'Category',
+  'pages.content.articles.source': 'Source',
   'pages.content.articles.summary': 'Summary',
   'pages.content.articles.cover': 'Cover',
   'pages.content.articles.content': 'Content',

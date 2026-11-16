@@ -7,10 +7,15 @@ export default {
   'menu.system.permissions': '权限管理',
   'menu.system.departments': '部门管理',
   'menu.system.positions': '岗位管理',
+  'menu.system.dicts': '数据字典',
+  'menu.system.settings': '系统参数',
+  'menu.system.attachments': '附件管理',
   'menu.monitor': '系统监控',
   'menu.monitor.login-logs': '登录日志',
   'menu.monitor.operation-logs': '操作日志',
   'menu.monitor.tasks': '任务调度',
+  'menu.monitor.online-sessions': '在线会话',
+  'menu.monitor.system-info': '系统信息',
   'menu.message': '消息中心',
   'menu.message.announcements': '通知公告',
   'menu.message.notifications': '我的通知',
@@ -18,4 +23,5 @@ export default {
   'menu.content.articles': '文章管理',
   'menu.content.categories': '文章分类',
   'menu.account-settings': '个人设置',
+  // edge:menu
 };

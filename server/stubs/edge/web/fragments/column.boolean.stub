@@ -1,0 +1,8 @@
+    {
+      title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
+      dataIndex: '{{ field.name }}',
+      valueType: 'select',
+      valueEnum: {{ field.camel }}Enum,
+      // 搜索值 'true' / 'false' → 契约的 1 / 0
+      search: { transform: booleanTransform('{{ field.name }}') },
+    },

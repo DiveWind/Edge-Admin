@@ -10,6 +10,8 @@ import login from './en-US/pages/login';
 import message from './en-US/pages/message';
 import monitor from './en-US/pages/monitor';
 import system from './en-US/pages/system';
+import permission from './en-US/permission';
+// edge:locale-imports
 
 /** 各模块已用 zh-CN 的 key 约束，漏翻会在 tsc 阶段报错 */
 export default {
@@ -17,6 +19,7 @@ export default {
   ...common,
   ...component,
   ...menu,
+  ...permission,
   ...login,
   ...exception,
   ...dashboard,
@@ -25,4 +28,5 @@ export default {
   ...message,
   ...content,
   ...account,
+  // edge:locale-spread
 };

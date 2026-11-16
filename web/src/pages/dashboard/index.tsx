@@ -1,7 +1,9 @@
 import {
   ApartmentOutlined,
+  CloudServerOutlined,
   FileTextOutlined,
   LoginOutlined,
+  PaperClipOutlined,
   SafetyOutlined,
   ThunderboltOutlined,
   UserOutlined,
@@ -63,6 +65,16 @@ const TOTALS: {
     title: 'pages.dashboard.totals.todayOperations',
     icon: <ThunderboltOutlined />,
   },
+  {
+    key: 'online_sessions',
+    title: 'pages.dashboard.totals.onlineSessions',
+    icon: <CloudServerOutlined />,
+  },
+  {
+    key: 'attachments',
+    title: 'pages.dashboard.totals.attachments',
+    icon: <PaperClipOutlined />,
+  },
 ];
 
 const Dashboard: React.FC = () => {
@@ -86,8 +98,7 @@ const Dashboard: React.FC = () => {
       ellipsis: true,
       render: (_, record) => (
         <>
-          <Tag>{record.method}</Tag>
-          {record.summary || record.path}
+          <Tag>{record.method}</Tag> {record.summary || record.path}
         </>
       ),
     },
@@ -115,11 +126,16 @@ const Dashboard: React.FC = () => {
         name: initialState?.currentUser?.name ?? '',
       })}
     >
-      {/* 栅格用 Row/Col（纯 CSS 断点），首屏即是最终布局；图表宽度由 ChartBox 跟随容器 */}
+      {/*
+        栅格用 Row/Col（纯 CSS 断点），首屏即是最终布局；图表宽度由 ChartBox 跟随容器。
+        8 张统计卡：手机 / 平板 2 列、桌面 4 列（两行）、超宽屏 8 列（一行）
+      */}
       <Row gutter={[16, 16]}>
         {TOTALS.map(({ key, title, icon }) => (
-          <Col key={key} xs={12} md={8} xl={4}>
+          <Col key={key} xs={12} xl={6} xxl={3}>
             <StatisticCard
+              // 标题换行时同一行的卡片保持等高
+              style={{ height: '100%' }}
               loading={isLoading}
               statistic={{
                 title: t(title),
@@ -170,6 +186,8 @@ const Dashboard: React.FC = () => {
               options={false}
               toolBarRender={false}
               pagination={false}
+              // 窄屏时在卡片内横向滚动，避免省略列被挤没
+              scroll={{ x: 520 }}
               loading={isLoading}
               dataSource={data?.recent_operations ?? []}
               columns={operationColumns}

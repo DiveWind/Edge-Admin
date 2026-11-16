@@ -1,0 +1,8 @@
+    {
+      title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
+      dataIndex: '{{ field.name }}',
+      valueType: 'dateTime',
+      width: 170,
+      search: false,
+      sorter: true,
+    },

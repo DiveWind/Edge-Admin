@@ -30,4 +30,7 @@ export default {
   'common.updatedAt': '更新时间',
   'common.publishedAt': '发布时间',
   'common.passwordMismatch': '两次输入的密码不一致',
+  'common.yes': '是',
+  'common.no': '否',
+  'common.jsonInvalid': '请输入合法的 JSON',
 };

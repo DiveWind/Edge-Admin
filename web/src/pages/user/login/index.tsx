@@ -2,16 +2,17 @@ import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import type { ProFormInstance } from '@ant-design/pro-components';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, useModel } from '@umijs/max';
-import { Alert, App } from 'antd';
+import { Alert, App, Flex } from 'antd';
 import { createStyles } from 'antd-style';
 import type React from 'react';
 import { useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { Footer, LangDropdown } from '@/components';
+import { Footer, LangDropdown, ThemeSwitch } from '@/components';
 import { login } from '@/services/auth';
 import { getSafeRedirect, setToken } from '@/utils/auth';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
+import { DEFAULT_SITE_SETTINGS } from '@/utils/settings';
 import defaultSettings from '../../../../config/defaultSettings';
 
 const useStyles = createStyles(({ token, css }) => ({
@@ -21,7 +22,7 @@ const useStyles = createStyles(({ token, css }) => ({
     min-height: 100vh;
     background: ${token.colorBgLayout};
   `,
-  lang: css`
+  actions: css`
     position: fixed;
     top: ${token.margin}px;
     right: ${token.margin}px;
@@ -38,6 +39,7 @@ const Login: React.FC = () => {
   const { message } = App.useApp();
   const { initialState, setInitialState } = useModel('@@initialState');
   const formRef = useRef<ProFormInstance<API.LoginParams>>(undefined);
+  const site = initialState?.site ?? DEFAULT_SITE_SETTINGS;
 
   const handleSubmit = async (values: API.LoginParams) => {
     const { data } = await login(values);
@@ -58,13 +60,16 @@ const Login: React.FC = () => {
   return (
     <div className={styles.container}>
       <Helmet>
-        <title>{`${t('menu.login')} - ${defaultSettings.title}`}</title>
+        <title>{`${t('menu.login')} - ${site.name}`}</title>
       </Helmet>
-      <LangDropdown className={styles.lang} />
+      <Flex className={styles.actions} gap={4}>
+        <ThemeSwitch />
+        <LangDropdown />
+      </Flex>
       <div className={styles.main}>
         <LoginForm<API.LoginParams>
           logo={<img alt="logo" src={defaultSettings.logo} />}
-          title={defaultSettings.title}
+          title={site.name}
           subTitle={t('pages.login.subTitle')}
           formRef={formRef}
           // 422（账号或密码错误、账号禁用）回填到 username 字段；提示由全局 errorHandler 负责
@@ -72,6 +77,15 @@ const Login: React.FC = () => {
             submitForm(formRef.current, () => handleSubmit(values))
           }
         >
+          {/* 系统参数 site.login_notice，为空不展示 */}
+          {site.loginNotice && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title={site.loginNotice}
+            />
+          )}
           <Alert
             type="info"
             showIcon
