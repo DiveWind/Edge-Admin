@@ -97,11 +97,15 @@ class User extends Authenticatable
     }
 
     /**
-     * 是否拥有权限码；超级管理员拥有全部权限。
+     * 是否拥有权限码；超级管理员拥有全部权限，但停用节点（含祖先停用）的权限码对所有人都不生效。
      */
     public function hasPermission(string $code): bool
     {
-        return $this->isSuperAdmin() || in_array($code, $this->permissionCodes(), true);
+        if ($this->isSuperAdmin()) {
+            return ! app(PermissionRegistry::class)->isDisabledCode($code);
+        }
+
+        return in_array($code, $this->permissionCodes(), true);
     }
 
     /**

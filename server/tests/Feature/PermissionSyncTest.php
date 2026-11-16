@@ -15,7 +15,7 @@ test('permission sync is idempotent and marks builtin nodes', function () {
         ->and(Permission::query()->where('is_system', false)->exists())->toBeFalse()
         ->and(Permission::query()->where('code', 'system')->value('type'))->toBe(PermissionType::Directory)
         ->and(Permission::query()->where('code', 'system.user')->first(['type', 'path', 'icon'])?->toArray())
-        ->toBe(['type' => PermissionType::Menu, 'path' => '/system/users', 'icon' => 'UserOutlined'])
+        ->toBe(['type' => 'menu', 'path' => '/system/users', 'icon' => 'UserOutlined'])
         ->and(Permission::query()->where('code', 'system.user.reset-password')->value('type'))->toBe(PermissionType::Action);
 });
 
@@ -43,7 +43,7 @@ test('permission sync restores structural fields of builtin nodes', function () 
     $this->artisan('permission:sync')->assertSuccessful();
 
     expect(Permission::query()->where('code', 'system.user')->first(['type', 'path', 'is_system'])?->toArray())
-        ->toBe(['type' => PermissionType::Menu, 'path' => '/system/users', 'is_system' => true]);
+        ->toBe(['type' => 'menu', 'path' => '/system/users', 'is_system' => true]);
 });
 
 test('permission sync keeps custom nodes and releases builtin nodes removed from the config', function () {

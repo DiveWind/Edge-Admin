@@ -7,6 +7,6 @@ export default {
   '{{ web.locale_prefix }}.department': '部门',
   '{{ web.locale_prefix }}.creator': '创建人',
 {{/if}}
-  // 角色授权树 / 权限管理页中的菜单名称（操作名称使用通用文案 permission.action.*）
+  // 侧边菜单 / 菜单管理 / 角色授权树中的菜单名称（中文须与 config/permissions.php 的 name 一致；操作名称使用通用文案 permission.action.*）
   'permission.{{ permission }}': '{{ title_plural }}',
 };

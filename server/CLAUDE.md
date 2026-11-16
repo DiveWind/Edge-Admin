@@ -184,7 +184,10 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - 树形数据（部门、权限）用 `#[CollectedBy(App\Collections\TreeCollection::class)]` + `->toTree()` 在 PHP 侧组装，不写递归 SQL。
 - 列表请求继承 `App\Http\Requests\ListRequest`：声明 `filterRules()`、`$sortable`、`$defaultSort`；控制器 `->filter($request->filters())`、
   `$request->applySort($query)->paginate($request->perPage())->withQueryString()`。
-- 功能权限：`config/permissions.php` 声明 → `php artisan permission:sync` → 路由 `can:<code>`（`Route::apiResource()->middlewareFor()`）。权限码必须含 `.`。
+- 功能权限 / 动态菜单：`permissions` 是目录 / 菜单 / 操作三级树。内置节点在 `config/permissions.php` 声明（菜单带 `path` / `icon`）→ `php artisan permission:sync`
+  （只新增缺失项、修正 type / path / is_external，不覆盖界面修改、不删除节点）→ 路由 `can:<操作码>`（`Route::apiResource()->middlewareFor()`）。
+  操作权限码必须含 `.`。权限判定一律走 `User::permissionCodes()` / `hasPermission()`（经 `App\Services\PermissionRegistry`：每请求一次查询，
+  停用节点含后代不生效）；绕过模型事件批量改 `permissions` 表后调用 `PermissionRegistry::flush()`。
 - 记录级规则写在 Policy（数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()` → 403）；编辑接口的 Policy 检查放在
   Form Request 的 `authorize()`，保证先授权再校验。字段级约束写在 Form Request（422）。
 - 数据权限：模型 `use HasDataScope`，列表 `->visibleTo($user)`，单条在 Policy 中 `$model->isVisibleTo($user)`。

@@ -30,17 +30,17 @@ Edge Admin 前端：RBAC 中后台脚手架，基于 Ant Design Pro v6（Umi Max
 ```
 config/
   config.ts             # Umi 配置（插件开关、locale、proxy 选择）
-  routes.ts             # 声明式路由 = 菜单 + 路由级权限
+  routes.ts             # 静态路由 = 页面组件 + 路由级权限（侧边菜单来自服务端 GET /api/auth/menus）
   defaultSettings.ts    # ProLayout 设置（标题、logo、布局），在 src/app.tsx 的 layout 中展开
   proxy.ts              # 开发代理
 src/
-  app.tsx               # 运行时配置：getInitialState（当前用户 + 公开系统参数 + 主题）、layout、antd、request、innerProvider
+  app.tsx               # 运行时配置：getInitialState（当前用户 + 菜单 + 公开系统参数 + 主题）、layout（menuDataRender）、antd、request、innerProvider
   access.ts             # 权限（见下）
   requestErrorConfig.ts # 请求拦截（Bearer Token、Accept-Language）+ Laravel 错误处理
-  components/           # 跨页面公共组件（DeleteAction、DictTag、ImageUpload、GlobalStyle、FeedbackBridge、RightContent/*、ErrorBoundary...）
-  hooks/                # useValueEnums（状态 / 发布 / 数据权限 / 布尔）、useDict、usePermissionName、useThemeMode
-  services/             # 跨页面接口：auth、options、dict、upload、notification、permission；typings.d.ts 为全局 API 类型
-  utils/                # 纯函数：auth、table、form（422 回填 / JSON）、dict、permission、settings、theme、format、error、i18n、tree
+  components/           # 跨页面公共组件（DeleteAction、DictTag、ImageUpload、IconPicker/MenuIcon、PermissionTypeTag、GlobalStyle、FeedbackBridge、RightContent/*、ErrorBoundary...）
+  hooks/                # useValueEnums（状态 / 发布 / 数据权限 / 布尔）、useDict、usePermissionName、useRefreshAccess、useThemeMode
+  services/             # 跨页面接口：auth、options、dict、upload、notification；typings.d.ts 为全局 API 类型
+  utils/                # 纯函数：auth、table、form（422 回填 / JSON）、dict、permission、menu、route、settings、theme、format、error、i18n、tree
   locales/<lang>.ts + <lang>/{app,common,component,menu,permission}.ts + <lang>/pages/*.ts
   pages/<模块>/<页面>/   # index.tsx + service.ts + data.d.ts (+ components/)
 e2e/                    # Playwright 用例（global-setup 为各角色生成登录态）
@@ -105,8 +105,8 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
 
 ### 落地页
 
-`/` 由 `src/pages/home` 处理：按 `config/routes.ts` 的菜单顺序跳到当前用户第一个有权限的页面（`findFirstMenuPath`），
-一个都没有时显示 403。登录成功且没有 `redirect` 参数时同样回到 `/`。新增菜单无需改这里。
+`/` 由 `src/pages/home` 处理：按服务端菜单（`initialState.menus`）顺序跳到第一个有静态路由且可访问的页面
+（`findFirstMenuPath` + `canAccessPath`），一个都没有时显示 403。登录成功且没有 `redirect` 参数时同样回到 `/`。新增菜单无需改这里。
 
 ### 图表
 
@@ -117,18 +117,23 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
 
 - 权限码以 `/api/auth/me` 的 `permissions` 为唯一来源（含 `system`、`system.user` 这类菜单级码）；`src/access.ts` 中的
   `PermissionCode` 只是类型，防止拼写错误，新增后端权限点时同步追加。
-- **路由级**：`config/routes.ts` 写 `access: 'routeFilter'` + `permission: 'xxx.view'`（或数组，满足其一）。无权限菜单隐藏、
+- **侧边菜单来自服务端**（`GET /api/auth/menus` → `initialState.menus` → `layout.menuDataRender` + `utils/menu.ts`）：结构 / 名称 / 图标 /
+  顺序 / 显隐以服务端为准（菜单管理页维护），静态路由只提供页面；菜单通过 `path` 对应静态路由，对应路由无权访问时不显示；外链新窗口打开。
+  图标是服务端下发的 @ant-design/icons 名称，只能用 `components/IconPicker/icons.ts` 精选映射中的图标（需要时在那里追加）。
+  菜单 / 角色变更后调用 `useRefreshAccess()` 重新拉取当前用户与菜单。隐藏的菜单页面仍可访问，停用的菜单权限失效（403）。
+- **路由级**：`config/routes.ts` 写 `access: 'routeFilter'` + `permission: 'xxx.view'`（或数组，满足其一）。无权限时对应菜单不显示、
   直接访问渲染 403。分组路由不写 access，也不要在分组里放没有权限声明的 redirect 子路由（会让分组永远可见）。
   不把权限码直接铺成 access 的 key：Umi access 插件对未声明 `access` 的路由默认可访问，用单一过滤函数 + 路由自定义字段
   更不容易漏，也不需要维护"权限码 → 布尔值"的映射。
 - **按钮级**：`const access = useAccess(); access.can('system.user.create') && <Button />`，或 `<Access accessible={...}>`。
   前端隐藏只是体验，真正的校验在后端。
-- **权限名称**按 code 翻译：`permission.<code>` → 操作类 `permission.action.<动作>` → 后端 `name`（`locales/<lang>/permission.ts`，
-  `usePermissionTranslator()`）。新增模块补菜单级 `permission.<code>`。
+- **菜单 / 权限名称**按 code 翻译：`permission.<code>` → 操作类 `permission.action.<动作>` → 后端 `name`（`locales/<lang>/permission.ts`，
+  `usePermissionName()` / `usePermissionTranslator()`）；后端 `name` 与 zh-CN 文案不同（管理员改过名）时直接显示 `name`，
+  所以 zh-CN 文案须与后端 `config/permissions.php` 的 `name` 一致。新增模块补菜单级 `permission.<code>`。
 
 ### i18n
 
-- 只有 `zh-CN`（默认）与 `en-US`。路由 `name` → `menu.<父 name>.<name>`；页面文案按模块放 `locales/<lang>/pages/<模块>.ts`。
+- 只有 `zh-CN`（默认）与 `en-US`。静态路由 `name` → `menu.<父 name>.<name>`（只用于服务端菜单之外页面的标题 / 面包屑）；页面文案按模块放 `locales/<lang>/pages/<模块>.ts`。
 - 组件内 `const t = useT(); t('common.create')`，组件外 `t()`（`@/utils/i18n`）。key 类型来自 zh-CN，en-US 各模块用
   `Record<keyof typeof zh, string>` 约束，拼错 key 或漏翻都会在 `tsc` 阶段报错。
 
@@ -140,11 +145,12 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
    （`PageContainer` + `ProTable`）、`components/XxxForm.tsx`（`ModalForm`，参考 `content/categories`）。
    带数据权限 / 详情回填 / 上传的完整示例看 `content/articles`。
 4. `config/routes.ts`：加路由，`access: 'routeFilter'` + `permission`。
-5. `src/locales/{zh-CN,en-US}/menu.ts` 加菜单名，`pages/<模块>.ts` 加页面文案，`permission.ts` 加菜单级权限名称。
+5. 菜单：后端 `config/permissions.php` 声明菜单节点（`path` 为路由路径）并 sync，或在菜单管理页新建，再授权给角色（见 `../docs/permissions.md` 1.3）。
+   `pages/<模块>.ts` 加页面文案，`permission.ts` 加菜单级名称（中文与后端 `name` 一致）。
 6. 跑 `npm run lint && npx antd lint ./src && npm test && npm run build`，在 `e2e/smoke.spec.ts` 加冒烟。
 
 单表 CRUD 可以用后端生成器 `php artisan edge:make-module` 一次生成前后端骨架，生成后的收尾见 `../docs/generator.md` 第 6 节。
-`config/routes.ts`、`src/access.ts`、`src/locales/<lang>.ts`、`src/locales/<lang>/menu.ts` 中的 `// edge:*` 注释是生成器锚点，不要删除或移动。
+`config/routes.ts`、`src/access.ts`、`src/locales/<lang>.ts` 中的 `// edge:*` 注释是生成器锚点，不要删除或移动。
 
 ## AI Skills
 

@@ -31,7 +31,6 @@ beforeEach(function () {
 
     foreach (['zh-CN', 'en-US'] as $locale) {
         File::ensureDirectoryExists("{$this->web}/src/locales/{$locale}/pages");
-        File::put("{$this->web}/src/locales/{$locale}/menu.ts", "export default {\n  'menu.dashboard': 'Dashboard',\n  // edge:menu\n};\n");
         File::put("{$this->web}/src/locales/{$locale}.ts", "import menu from './{$locale}/menu';\n// edge:locale-imports\n\nexport default {\n  ...menu,\n  // edge:locale-spread\n};\n");
     }
 
@@ -107,6 +106,9 @@ test('it generates a complete backend and frontend module', function () {
     expect($files['server/config/permissions.php'])
         ->toContain("'code' => 'crm',")
         ->toContain("'code' => 'crm.ticket',")
+        ->toContain("'name' => 'Tickets',")
+        ->toContain("'path' => '/crm/tickets',")
+        ->toContain("'type' => 'directory',\n        'path' => '/crm',\n        'icon' => 'AppstoreOutlined',")
         ->toContain('// edge:permissions:crm');
     expect($files['server/routes/api.php'])
         ->toContain("Route::apiResource('tickets', TicketController::class)")
@@ -115,9 +117,9 @@ test('it generates a complete backend and frontend module', function () {
     expect($files['server/lang/zh_CN/operations.php'])->toContain("'tickets.store' => '新增Ticket',");
     expect($files['server/lang/en/operations.php'])->toContain("'tickets.destroy' => 'Delete Ticket',");
 
-    expect($files['web/config/routes.ts'])->toContain("path: '/crm/tickets',")->toContain('// edge:routes:crm');
+    expect($files['web/config/routes.ts'])->toContain("path: '/crm/tickets',")->toContain("locale: 'permission.crm.ticket',")->toContain('// edge:routes:crm');
     expect($files['web/src/access.ts'])->toContain("| 'crm.ticket.delete'");
-    expect($files['web/src/locales/zh-CN/menu.ts'])->toContain("'menu.crm': 'Crm',")->toContain("'menu.crm.tickets': 'Tickets',");
+    expect(array_keys($files))->not->toContain('web/src/locales/zh-CN/menu.ts');
     expect($files['web/src/locales/en-US.ts'])->toContain("import crmTickets from './en-US/pages/crm-tickets';")->toContain('...crmTickets,');
     expect($files['web/src/pages/crm/tickets/data.d.ts'])
         ->toContain('starts_on: string | null;')
@@ -156,6 +158,19 @@ test('it generates a complete backend and frontend module', function () {
 
         expect($content)->not->toMatch('/\{\{\s*[a-z_.]+\s*\}\}/');
     }
+});
+
+test('the generated menu node shows up in the dynamic menu after permission:sync', function () {
+    $this->artisan('edge:make-module', ['name' => 'Ticket', '--module' => 'crm', '--fields' => 'name:string'])->assertSuccessful();
+
+    config()->set('permissions', require "{$this->base}/config/permissions.php");
+    $this->artisan('permission:sync')->assertSuccessful();
+    actingAsUser(superAdmin());
+
+    $crm = collect($this->getJson('/api/auth/menus')->assertOk()->json('data'))->firstWhere('code', 'crm');
+
+    expect($crm)->toMatchArray(['type' => 'directory', 'path' => '/crm', 'icon' => 'AppstoreOutlined'])
+        ->and($crm['children'][0])->toMatchArray(['code' => 'crm.ticket', 'type' => 'menu', 'path' => '/crm/tickets', 'name' => 'Tickets']);
 });
 
 test('--with-options generates an option endpoint and foreign fields without one get a TODO', function () {

@@ -20,7 +20,7 @@
 | Form Request | `app/Http/Requests/<模块>/` | 字段校验（422）；编辑类接口在 `authorize()` 中 `Gate::inspect()` 做记录级授权，保证先授权后校验 | 写入数据、调用外部服务 |
 | Controller | `app/Http/Controllers/Api/<模块>/` | 授权 → 调用 Action 或**单表** Eloquent → 返回 Resource | 事务、多步写入、派发 Job、发通知、操作文件 / 缓存（架构测试禁止依赖 `DB` `Storage` `Cache` `Artisan` `Bus` `Queue` `Notification` facade 与 `App\Jobs` `App\Notifications`） |
 | Action | `app/Actions/<模块>/` | 一个写操作用例，单一 `handle()`，构造器注入依赖，**事务在 Action 内** | 依赖 HTTP 层（Request / Resource / `App\Http`） |
-| Service | `app/Services/` | 可复用的读取 / 计算 / 基础设施封装（字典、系统参数、统计、系统信息、数据权限解析） | 依赖 HTTP 层 |
+| Service | `app/Services/` | 可复用的读取 / 计算 / 基础设施封装（字典、系统参数、统计、系统信息、数据权限解析、菜单权限树 `PermissionRegistry`） | 依赖 HTTP 层 |
 | Model | `app/Models/` | 表结构映射：`#[Fillable]`、`casts()`、关系、`#[Scope]`、与自身数据相关的小方法（如 `Role::syncAuthorizations()`） | 依赖 HTTP 层与 Action |
 | Policy | `app/Policies/` | 记录级规则：数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()`（403） | 功能权限判断（交给 `can:`）、写数据 |
 | Resource | `app/Http/Resources/` | 输出字段（snake_case），时间 `?->toIso8601String()`，关联用 `whenLoaded()` | 查询数据库（关联应在控制器预加载） |
@@ -141,7 +141,7 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
   不匹配时用 `APP_LOCALE`，响应带 `Content-Language`；
 - 需要双语的后端文案：校验消息与属性名（`validation.php`）、业务提示（`policy.php`、`messages.php`、`auth.php`）、操作日志摘要（`operations.php`）、
   框架 JSON 文案（`lang/zh_CN.json`）；
-- **不做多语言的数据**：权限点 / 菜单名称（前端按 `code` 做 i18n，后端 `name` 为中文兜底）、字典项 `label`、系统参数值。
+- **不做多语言的数据**：权限点 / 菜单名称（前端按 `code` 做 i18n，后端 `name` 为中文兜底，管理员改过名时前端直接显示 `name`）、字典项 `label`、系统参数值。
 
 ## 7. 基础设施的使用
 

@@ -43,7 +43,7 @@ class StorePermissionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => ['required', Rule::enum(PermissionType::class)],
+            'type' => $this->typeRules(),
             'parent_id' => ['nullable', 'integer', Rule::exists('permissions', 'id'), $this->parentRule()],
             'name' => ['required', 'string', 'max:64'],
             'code' => ['required', 'string', 'max:128', 'regex:'.self::CODE_PATTERN, Rule::unique('permissions')->ignore($this->permission()), $this->actionCodeRule()],
@@ -51,7 +51,7 @@ class StorePermissionRequest extends FormRequest
             'icon' => ['nullable', 'string', 'max:64', 'regex:/^[A-Z][A-Za-z0-9]*$/'],
             'is_external' => ['sometimes', 'boolean'],
             'is_visible' => ['sometimes', 'boolean'],
-            'status' => ['required', Rule::enum(Status::class)],
+            'status' => $this->statusRules(),
             'sort' => ['sometimes', 'integer', 'min:0'],
             'remark' => ['nullable', 'string', 'max:255'],
         ];
@@ -94,6 +94,22 @@ class StorePermissionRequest extends FormRequest
     protected function type(): ?PermissionType
     {
         return PermissionType::tryFrom($this->string('type')->toString());
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function typeRules(): array
+    {
+        return ['required', Rule::enum(PermissionType::class)];
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function statusRules(): array
+    {
+        return ['required', Rule::enum(Status::class)];
     }
 
     /**

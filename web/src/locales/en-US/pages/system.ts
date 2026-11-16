@@ -28,12 +28,41 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.system.roles.departments': 'Custom Departments',
   'pages.system.roles.usersCount': 'Users',
   'pages.system.permissions.description':
-    'Permissions are declared in the backend config/permissions.php and synced with php artisan permission:sync. Read only.',
+    'Manage the sidebar menus and button permissions: directories hold directories / menus, menus hold buttons (action permissions). Built-in nodes are declared in the backend config/permissions.php: they cannot be deleted and their code / type / path are read only.',
+  'pages.system.permissions.create': 'New Menu',
+  'pages.system.permissions.edit': 'Edit Menu',
+  'pages.system.permissions.addChild': 'Add Child',
   'pages.system.permissions.name': 'Name',
   'pages.system.permissions.code': 'Code',
+  'pages.system.permissions.code.tooltip':
+    'Unique; lowercase letters, digits, - and _, separated by dots. Button codes must contain a dot (e.g. system.user.export) and are checked by the API and the UI',
   'pages.system.permissions.type': 'Type',
-  'pages.system.permissions.type.menu': 'Menu',
-  'pages.system.permissions.type.action': 'Action',
+  'pages.system.permissions.icon': 'Icon',
+  'pages.system.permissions.icon.tooltip': 'Only shown on top-level menus',
+  'pages.system.permissions.path': 'Path',
+  'pages.system.permissions.path.tooltip':
+    'The path of a static frontend route (web/config/routes.ts); use an http(s) URL for external links',
+  'pages.system.permissions.path.placeholder': 'e.g. /system/users',
+  'pages.system.permissions.externalPath.placeholder':
+    'e.g. https://ant.design',
+  'pages.system.permissions.isExternal': 'External',
+  'pages.system.permissions.isExternal.tooltip':
+    'Opens the URL in a new window',
+  'pages.system.permissions.isVisible': 'Visible',
+  'pages.system.permissions.isVisible.tooltip':
+    'Hidden nodes are not shown in the sidebar, but their permissions still apply and the page can be opened directly',
+  'pages.system.permissions.status.tooltip':
+    'Disabling a node revokes the permissions of the node and all its descendants and removes them from the menu',
+  'pages.system.permissions.parent': 'Parent',
+  'pages.system.permissions.parent.placeholder':
+    'Leave empty for a top-level node',
+  'pages.system.permissions.builtin': 'Built-in',
+  'pages.system.permissions.builtin.tooltip':
+    'Declared in the backend config/permissions.php: cannot be deleted, and the code / type / path cannot be changed',
+  'pages.system.permissions.deleteConfirm':
+    'Delete this node? Roles granted this node will lose it.',
+  'pages.system.permissions.visible.shown': 'Shown',
+  'pages.system.permissions.visible.hidden': 'Hidden',
   'pages.system.departments.create': 'New Department',
   'pages.system.departments.edit': 'Edit Department',
   'pages.system.departments.name': 'Department Name',

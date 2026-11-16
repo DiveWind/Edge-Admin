@@ -90,15 +90,43 @@ declare namespace API {
     children?: DepartmentOption[];
   }
 
-  /** `GET /api/permissions` 树节点 */
+  /** 菜单树节点类型：目录 / 菜单 / 操作（按钮） */
+  type PermissionType = 'directory' | 'menu' | 'action';
+
+  /** `GET /api/permissions`、`GET /api/options/permissions` 树节点（菜单管理 / 角色授权） */
   interface PermissionNode {
     id: Id;
     parent_id: Id | null;
     name: string;
     code: string;
-    type: 'menu' | 'action';
+    type: PermissionType;
+    /** 前端路由路径或外链 URL（action 为 null） */
+    path: string | null;
+    /** @ant-design/icons 图标名，如 `SettingOutlined` */
+    icon: string | null;
+    is_external: boolean;
+    is_visible: boolean;
+    status: Status;
+    is_system: boolean;
     sort: number;
+    remark: string | null;
+    created_at?: string;
+    updated_at?: string;
     children?: PermissionNode[];
+  }
+
+  /** `GET /api/auth/menus` 当前用户可见的菜单节点（只有 directory / menu） */
+  interface MenuNode {
+    id: Id;
+    parent_id: Id | null;
+    name: string;
+    code: string;
+    type: Exclude<PermissionType, 'action'>;
+    path: string | null;
+    icon: string | null;
+    is_external: boolean;
+    sort: number;
+    children?: MenuNode[];
   }
 
   interface LoginParams {

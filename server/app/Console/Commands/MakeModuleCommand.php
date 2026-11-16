@@ -27,7 +27,7 @@ use RuntimeException;
     {--no-web : 不生成前端代码}
     {--force : 覆盖已存在的文件}
     {--dry-run : 只打印将要创建 / 修改的文件，不写入}')]
-#[Description('生成一个完整的业务模块：迁移、模型、工厂、请求、资源、Policy、控制器、测试，并登记权限点、路由、操作日志与前端页面')]
+#[Description('生成一个完整的业务模块：迁移、模型、工厂、请求、资源、Policy、控制器、测试，并登记菜单权限、路由、操作日志与前端页面')]
 class MakeModuleCommand extends Command
 {
     /**
@@ -243,10 +243,6 @@ class MakeModuleCommand extends Command
 
             $this->create("{$web}/src/locales/{$locale}/pages/{$variables['web.locale_file']}.ts", $this->stubs->render($localeStub, $localeVariables, $fields));
 
-            $menu = "{$web}/src/locales/{$locale}/menu.ts";
-            $this->insert($menu, "'{$variables['web.menu_module']}':", ['// edge:menu' => $this->localeSnippet('web/menu_module', $locale, $localeVariables)]);
-            $this->insert($menu, "'{$variables['web.menu_key']}':", ['// edge:menu' => $this->localeSnippet('web/menu_item', $locale, $localeVariables)]);
-
             $index = "{$web}/src/locales/{$locale}.ts";
             $this->insert($index, "/pages/{$variables['web.locale_file']}'", ['// edge:locale-imports' => $this->stubs->snippet('web/locale_import', $localeVariables)]);
             $this->insert($index, "...{$variables['web.locale_module']},", ['// edge:locale-spread' => $this->stubs->snippet('web/locale_spread', $localeVariables)]);
@@ -324,14 +320,6 @@ class MakeModuleCommand extends Command
         return $this->stubs->render($this->resolve($stub), $variables, $this->blueprint->fields);
     }
 
-    /**
-     * @param  array<string, string|null>  $variables
-     */
-    protected function localeSnippet(string $stub, string $locale, array $variables): string
-    {
-        return $this->stubs->snippet($this->stubs->resolve($stub, [$locale]) ?? throw new RuntimeException("模板 [{$stub}.stub] 不存在。"), $variables);
-    }
-
     protected function resolve(string $stub): string
     {
         return $this->stubs->resolve($stub, $this->blueprint->variants()) ?? throw new RuntimeException("模板 [{$stub}.stub] 不存在。");
@@ -400,7 +388,7 @@ class MakeModuleCommand extends Command
     {
         $this->components->info("模块 {$this->blueprint->class} 已生成，接下来：");
         $this->components->bulletList([
-            'php artisan permission:sync && php artisan migrate',
+            'php artisan permission:sync && php artisan migrate（菜单自动出现在侧边栏，非超级管理员需在角色管理中授权）',
             "php artisan test --filter={$this->blueprint->class}Test",
             '在 docs/architecture.md 中补充接口契约，按需补充 Policy 规则、Seeder 与中文文案',
         ]);

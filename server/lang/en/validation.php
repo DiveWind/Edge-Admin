@@ -25,6 +25,7 @@ return [
             'action_code' => 'The code of an action must contain a dot (e.g. system.user.view).',
             'external_path' => 'An external link must be an http(s) URL.',
             'internal_path' => 'The path must start with / and contain no spaces.',
+            'lockout' => 'This node contains the menu management permissions; disabling it would lock everyone out of menu management.',
             'system_code' => 'The code of a built-in menu cannot be changed.',
             'system_type' => 'The type of a built-in menu cannot be changed.',
         ],

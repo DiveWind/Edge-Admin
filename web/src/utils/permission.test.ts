@@ -2,14 +2,22 @@ import { describe, expect, it } from 'vitest';
 import type { MessageLookup } from './permission';
 import { permissionName, translatePermissionTree } from './permission';
 
-const messages: Record<string, string> = {
+const zh: Record<string, string> = {
+  'permission.system': '系统管理',
+  'permission.system.user': '用户管理',
+  'permission.action.view': '查看',
+  'permission.action.delete': '删除',
+  'permission.monitor.online-session.delete': '强制下线',
+};
+const en: Record<string, string> = {
   'permission.system': 'System',
   'permission.system.user': 'Users',
   'permission.action.view': 'View',
   'permission.action.delete': 'Delete',
   'permission.monitor.online-session.delete': 'Force logout',
 };
-const lookup: MessageLookup = (id) => messages[id];
+const lookup: MessageLookup = (id) => en[id];
+const defaults: MessageLookup = (id) => zh[id];
 
 describe('permissionName', () => {
   it('uses the exact code translation first', () => {
@@ -17,6 +25,7 @@ describe('permissionName', () => {
       permissionName(
         { code: 'system.user', name: '用户管理', type: 'menu' },
         lookup,
+        defaults,
       ),
     ).toBe('Users');
     expect(
@@ -27,6 +36,7 @@ describe('permissionName', () => {
           type: 'action',
         },
         lookup,
+        defaults,
       ),
     ).toBe('Force logout');
   });
@@ -36,8 +46,26 @@ describe('permissionName', () => {
       permissionName(
         { code: 'content.tag.delete', name: '删除', type: 'action' },
         lookup,
+        defaults,
       ),
     ).toBe('Delete');
+  });
+
+  it('shows the backend name when the node was renamed by an administrator', () => {
+    expect(
+      permissionName(
+        { code: 'system.user', name: '成员管理', type: 'menu' },
+        lookup,
+        defaults,
+      ),
+    ).toBe('成员管理');
+    expect(
+      permissionName(
+        { code: 'content.tag.delete', name: '移除', type: 'action' },
+        lookup,
+        defaults,
+      ),
+    ).toBe('移除');
   });
 
   it('falls back to the backend name when nothing matches', () => {
@@ -45,45 +73,54 @@ describe('permissionName', () => {
       permissionName(
         { code: 'content.tag', name: '标签', type: 'menu' },
         lookup,
+        defaults,
       ),
     ).toBe('标签');
     expect(
       permissionName(
         { code: 'content.tag.export', name: '导出', type: 'action' },
         lookup,
+        defaults,
       ),
     ).toBe('导出');
-    // 菜单节点不走通用操作文案（避免 `xxx.view` 形式的菜单码被误翻）
+    // 菜单 / 目录节点不走通用操作文案（避免 `xxx.view` 形式的菜单码被误翻）
     expect(
-      permissionName({ code: 'demo.view', name: '演示', type: 'menu' }, lookup),
-    ).toBe('演示');
+      permissionName(
+        { code: 'demo.view', name: '查看', type: 'menu' },
+        lookup,
+        defaults,
+      ),
+    ).toBe('查看');
   });
 });
 
 describe('translatePermissionTree', () => {
   it('translates names recursively without mutating the input', () => {
-    const tree: API.PermissionNode[] = [
+    interface Node {
+      id: number;
+      name: string;
+      code: string;
+      type: API.PermissionType;
+      children?: Node[];
+    }
+    const tree: Node[] = [
       {
         id: 1,
-        parent_id: null,
         name: '系统管理',
         code: 'system',
-        type: 'menu',
-        sort: 0,
+        type: 'directory',
         children: [
           {
             id: 2,
-            parent_id: 1,
             name: '查看',
             code: 'system.user.view',
             type: 'action',
-            sort: 0,
             children: [],
           },
         ],
       },
     ];
-    const translated = translatePermissionTree(tree, lookup);
+    const translated = translatePermissionTree(tree, lookup, defaults);
     expect(translated[0].name).toBe('System');
     expect(translated[0].children?.[0].name).toBe('View');
     expect(translated[0].children?.[0].children).toEqual([]);

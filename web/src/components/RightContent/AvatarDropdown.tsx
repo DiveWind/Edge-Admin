@@ -25,7 +25,7 @@ export const AvatarDropdown: React.FC<{ children?: React.ReactNode }> = ({
     } finally {
       clearToken();
       setInitialState((state) =>
-        state ? { ...state, currentUser: undefined } : state,
+        state ? { ...state, currentUser: undefined, menus: [] } : state,
       );
       history.replace(LOGIN_PATH);
     }

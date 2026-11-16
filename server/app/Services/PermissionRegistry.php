@@ -71,15 +71,27 @@ class PermissionRegistry
             return $resolved[$node->id] = $node->isActive() && ($parent === null || $isEnabled($parent));
         };
 
-        return $this->enabledIds = $this->all()
+        $ids = $this->all()
             ->filter(fn (Permission $node): bool => $isEnabled($node))
-            ->mapWithKeys(fn (Permission $node): array => [$node->id => true])
+            ->map(fn (Permission $node): int => $node->id)
             ->all();
+
+        return $this->enabledIds = array_fill_keys($ids, true);
     }
 
     public function isEnabled(int $id): bool
     {
         return isset($this->enabledIds()[$id]);
+    }
+
+    /**
+     * 权限码存在但未生效（自身或祖先停用）。
+     */
+    public function isDisabledCode(string $code): bool
+    {
+        $node = $this->all()->first(fn (Permission $node): bool => $node->code === $code);
+
+        return $node !== null && ! $this->isEnabled($node->id);
     }
 
     /**
@@ -109,7 +121,7 @@ class PermissionRegistry
      */
     public function enabledCodes(): array
     {
-        return $this->enabled()->map(fn (Permission $node): string => $node->code)->values()->all();
+        return array_values($this->enabled()->map(fn (Permission $node): string => $node->code)->all());
     }
 
     /**

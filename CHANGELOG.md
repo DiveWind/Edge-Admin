@@ -8,6 +8,21 @@
 
 ### Added
 
+- 动态菜单权限：`permissions` 升级为目录 / 菜单 / 按钮三级菜单树（`path`、`icon`、`is_external`、`is_visible`、`status`、`is_system`、`remark`）；
+  菜单管理接口 `POST/GET/PUT/DELETE /api/permissions[/{id}]`（层级校验、防成环、内置节点保护、删除时解除角色授权）与权限码
+  `system.permission.create/update/delete`；当前用户菜单 `GET /api/auth/menus`；停用节点（含祖先停用）的权限对所有人不生效。
+- 前端：侧边菜单改为服务端下发（`menuDataRender`，名称 / 图标 / 顺序 / 显隐以服务端为准，外链新窗口打开，登录与保存后即时刷新）；
+  菜单管理页（树形表格、按类型联动的表单、`IconPicker` 图标选择器、显示 / 状态快捷切换）；角色授权树区分目录 / 菜单 / 按钮；
+  `/` 落地页按服务端菜单跳转；失败队列拆为独立页面 `/monitor/failed-jobs`（对应 `monitor.failed-job` 菜单）。
+- 菜单「我的通知」（`message.notification`）。
+
+### Changed
+
+- `permission:sync` 只新增缺失的内置节点并修正 `type` / `path` / `is_external`，不覆盖界面上修改过的名称 / 图标 / 排序 / 显示 / 状态 / 上级，
+  不再删除任何节点（已从配置移除的内置节点转为自定义节点）。
+- 代码生成器登记的菜单节点带 `type` / `path` / `icon`，sync 后自动出现在动态菜单中；不再修改前端 `menu.ts`（移除 `web/menu_item`、`web/menu_module` 模板与 `// edge:menu` 锚点）。
+- 菜单 / 权限名称 i18n：后端 `name` 被管理员改过时，所有语言下直接显示 `name`。
+
 - 认证：Sanctum API Token 登录 / 退出、个人资料、修改密码（吊销其他设备 token）、登录限流与登录日志。
 - 系统管理：用户、角色、权限（代码声明 + `permission:sync`）、部门（树）、岗位。
 - 权限：原生 Gate / Policy / `can:` 的功能权限；五种数据权限（全部 / 自定义部门 / 本部门及下级 / 本部门 / 本人），多角色取并集。

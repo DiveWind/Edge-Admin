@@ -10,10 +10,12 @@ import {
   ProFormTextArea,
 } from '@ant-design/pro-components';
 import { useQuery } from '@tanstack/react-query';
-import { App } from 'antd';
+import { App, Space } from 'antd';
 import type React from 'react';
 import { useMemo, useRef } from 'react';
+import { PermissionTypeTag } from '@/components';
 import { usePermissionTranslator } from '@/hooks/usePermissionName';
+import { useRefreshAccess } from '@/hooks/useRefreshAccess';
 import { useDataScopeEnum, useStatusEnum } from '@/hooks/useValueEnums';
 import { getDepartmentOptions, getPermissionOptions } from '@/services/options';
 import { submitForm } from '@/utils/form';
@@ -55,13 +57,14 @@ const RoleForm: React.FC<RoleFormProps> = ({
   /** 超级管理员角色：拥有全部权限，不可改码 / 禁用 / 改授权 */
   const isSuperAdmin = Boolean(record?.is_super_admin);
 
+  const refreshAccess = useRefreshAccess();
   const translatePermissions = usePermissionTranslator();
   const { data: rawPermissions } = useQuery({
     queryKey: ['options', 'permissions'],
     queryFn: async () => (await getPermissionOptions()).data,
     enabled: open,
   });
-  // 权限名称按 code 翻译（permission.<code>），缺失时回退后端 name
+  // 授权树只含生效节点（停用节点不下发）；名称按 code 翻译（permission.<code>），改过名或缺失时显示后端 name
   const permissions = useMemo(
     () => translatePermissions(rawPermissions ?? []),
     [rawPermissions, translatePermissions],
@@ -86,6 +89,8 @@ const RoleForm: React.FC<RoleFormProps> = ({
       }
       message.success(t(record ? 'common.updated' : 'common.created'));
       onSuccess();
+      // 当前用户的角色可能被修改：刷新权限码与侧边菜单
+      refreshAccess();
     });
 
   return (
@@ -146,7 +151,16 @@ const RoleForm: React.FC<RoleFormProps> = ({
         name="permission_ids"
         label={t('pages.system.roles.permissions')}
       >
-        <CheckTree treeData={permissions} disabled={isSuperAdmin} />
+        <CheckTree
+          treeData={permissions}
+          disabled={isSuperAdmin}
+          renderTitle={(node) => (
+            <Space size={4}>
+              {node.name}
+              <PermissionTypeTag type={node.type} />
+            </Space>
+          )}
+        />
       </ProForm.Item>
       <ProFormSelect
         name="data_scope"

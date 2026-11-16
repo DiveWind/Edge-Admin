@@ -4,8 +4,14 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { collectLeafIds, toTreeData } from '@/utils/tree';
 
-export interface CheckTreeProps {
-  treeData: Parameters<typeof toTreeData>[0];
+interface CheckTreeNode {
+  id: API.Id;
+  name: string;
+  children?: CheckTreeNode[];
+}
+
+export interface CheckTreeProps<T extends CheckTreeNode> {
+  treeData: T[];
   value?: API.Id[];
   onChange?: (value: API.Id[]) => void;
   /**
@@ -14,16 +20,34 @@ export interface CheckTreeProps {
    */
   strict?: boolean;
   disabled?: boolean;
+  /** 自定义节点标题（如权限树按类型加 Tag） */
+  renderTitle?: (node: T) => React.ReactNode;
 }
 
-/** 可勾选的树形表单控件，value 为 id 数组，可直接放进 ProForm.Item */
-const CheckTree: React.FC<CheckTreeProps> = ({
+function indexById<T extends CheckTreeNode>(
+  nodes: T[],
+  map = new Map<API.Id, T>(),
+) {
+  for (const node of nodes) {
+    map.set(node.id, node);
+    indexById((node.children ?? []) as T[], map);
+  }
+  return map;
+}
+
+/**
+ * 可勾选的树形表单控件，value 为 id 数组，可直接放进 ProForm.Item。
+ * value 中不在树里的 id（如已停用、未下发的权限节点）原样保留，保存时不会被丢掉。
+ */
+function CheckTree<T extends CheckTreeNode>({
   treeData,
   value = [],
   onChange,
   strict = false,
   disabled,
-}) => {
+  renderTitle,
+}: CheckTreeProps<T>) {
+  const byId = useMemo(() => indexById(treeData), [treeData]);
   const leafIds = useMemo(() => new Set(collectLeafIds(treeData)), [treeData]);
   const nodes = useMemo(() => toTreeData(treeData), [treeData]);
 
@@ -39,7 +63,8 @@ const CheckTree: React.FC<CheckTreeProps> = ({
     const keys = Array.isArray(checked)
       ? [...checked, ...(info.halfCheckedKeys ?? [])]
       : checked.checked;
-    onChange?.(keys as API.Id[]);
+    const outside = value.filter((id) => !byId.has(id));
+    onChange?.([...(keys as API.Id[]), ...outside]);
   };
 
   return (
@@ -53,8 +78,16 @@ const CheckTree: React.FC<CheckTreeProps> = ({
       treeData={nodes}
       checkedKeys={checkedKeys}
       onCheck={onCheck}
+      titleRender={
+        renderTitle
+          ? (data) => {
+              const node = byId.get(data.key as API.Id);
+              return node ? renderTitle(node) : null;
+            }
+          : undefined
+      }
     />
   );
-};
+}
 
 export default CheckTree;

@@ -24,7 +24,6 @@ export default {
   // 定时任务
   'pages.monitor.tasks.tab.tasks': '定时任务',
   'pages.monitor.tasks.tab.logs': '执行日志',
-  'pages.monitor.tasks.tab.failedJobs': '失败队列',
   'pages.monitor.tasks.command': '命令',
   'pages.monitor.tasks.expression': 'Cron 表达式',
   'pages.monitor.tasks.nextRunAt': '下次执行',

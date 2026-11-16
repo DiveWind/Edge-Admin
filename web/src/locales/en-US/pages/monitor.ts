@@ -23,7 +23,6 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.monitor.operationLogs.payload': 'Payload',
   'pages.monitor.tasks.tab.tasks': 'Scheduled Tasks',
   'pages.monitor.tasks.tab.logs': 'Run Logs',
-  'pages.monitor.tasks.tab.failedJobs': 'Failed Jobs',
   'pages.monitor.tasks.command': 'Command',
   'pages.monitor.tasks.expression': 'Cron Expression',
   'pages.monitor.tasks.nextRunAt': 'Next Run',

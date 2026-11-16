@@ -1,7 +1,6 @@
 {
   path: '/{{ module }}',
   name: '{{ module }}',
-  icon: 'appstore',
   routes: [
 {{ route_node }}
     // edge:routes:{{ module }}

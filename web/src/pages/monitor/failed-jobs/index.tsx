@@ -1,15 +1,16 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { ProTable } from '@ant-design/pro-components';
+import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import { App, Popconfirm, Typography } from 'antd';
 import type React from 'react';
 import { useRef } from 'react';
 import { DeleteAction } from '@/components';
 import { useT } from '@/utils/i18n';
-import type { FailedJob } from '../data';
-import { deleteFailedJob, getFailedJobs, retryFailedJob } from '../service';
+import type { FailedJob } from './data';
+import { deleteFailedJob, getFailedJobs, retryFailedJob } from './service';
 
-const FailedJobTable: React.FC = () => {
+/** 失败队列（monitor.failed-job.view）：重试 / 删除 */
+const FailedJobList: React.FC = () => {
   const t = useT();
   const access = useAccess();
   const { message } = App.useApp();
@@ -69,28 +70,30 @@ const FailedJobTable: React.FC = () => {
   ];
 
   return (
-    <ProTable<FailedJob>
-      rowKey="uuid"
-      actionRef={actionRef}
-      columns={columns}
-      search={false}
-      pagination={false}
-      request={async () => {
-        const { data } = await getFailedJobs();
-        return { data, success: true };
-      }}
-      expandable={{
-        expandedRowRender: (record) => (
-          <Typography.Paragraph
-            style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}
-            copyable
-          >
-            {record.exception}
-          </Typography.Paragraph>
-        ),
-      }}
-    />
+    <PageContainer>
+      <ProTable<FailedJob>
+        rowKey="uuid"
+        actionRef={actionRef}
+        columns={columns}
+        search={false}
+        pagination={false}
+        request={async () => {
+          const { data } = await getFailedJobs();
+          return { data, success: true };
+        }}
+        expandable={{
+          expandedRowRender: (record) => (
+            <Typography.Paragraph
+              style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}
+              copyable
+            >
+              {record.exception}
+            </Typography.Paragraph>
+          ),
+        }}
+      />
+    </PageContainer>
   );
 };
 
-export default FailedJobTable;
+export default FailedJobList;

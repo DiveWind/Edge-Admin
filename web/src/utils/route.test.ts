@@ -1,19 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { AppRoute } from '../../config/routes';
-import { findFirstMenuPath } from './route';
+import { canAccessPath, findRoute } from './route';
 
 const routes: AppRoute[] = [
   {
     path: '/user',
     layout: false,
     routes: [{ path: '/user/login', name: 'login', component: './user/login' }],
-  },
-  {
-    path: '/dashboard',
-    name: 'dashboard',
-    component: './dashboard',
-    access: 'routeFilter',
-    permission: 'dashboard.view',
   },
   {
     path: '/system',
@@ -29,23 +22,10 @@ const routes: AppRoute[] = [
     ],
   },
   {
-    path: '/message',
-    name: 'message',
-    routes: [
-      {
-        path: '/message/notifications',
-        name: 'notifications',
-        component: './message/notifications',
-      },
-    ],
+    path: '/message/notifications',
+    name: 'notifications',
+    component: './message/notifications',
   },
-  {
-    path: '/account/settings',
-    name: 'account-settings',
-    component: './account/settings',
-    hideInMenu: true,
-  },
-  { path: '/', redirect: '/dashboard' },
 ];
 
 const granting =
@@ -54,23 +34,28 @@ const granting =
     !route.permission ||
     [route.permission].flat().some((code) => codes.includes(code));
 
-describe('findFirstMenuPath', () => {
-  it('returns the first accessible menu page in menu order', () => {
-    expect(findFirstMenuPath(routes, granting(['dashboard.view']))).toBe(
-      '/dashboard',
+describe('findRoute', () => {
+  it('finds nested page routes by exact path', () => {
+    expect(findRoute(routes, '/system/users')?.component).toBe(
+      './system/users',
     );
-    expect(findFirstMenuPath(routes, granting(['system.user.view']))).toBe(
-      '/system/users',
+    expect(findRoute(routes, '/system')).toBeUndefined();
+    expect(findRoute(routes, '/missing')).toBeUndefined();
+  });
+});
+
+describe('canAccessPath', () => {
+  it('checks the route permission declared on the static route', () => {
+    expect(canAccessPath(routes, '/system/users', granting([]))).toBe(false);
+    expect(
+      canAccessPath(routes, '/system/users', granting(['system.user.view'])),
+    ).toBe(true);
+    expect(canAccessPath(routes, '/message/notifications', granting([]))).toBe(
+      true,
     );
   });
 
-  it('falls back to pages that only require login', () => {
-    expect(findFirstMenuPath(routes, granting([]))).toBe(
-      '/message/notifications',
-    );
-  });
-
-  it('returns undefined when nothing is accessible', () => {
-    expect(findFirstMenuPath(routes, () => false)).toBeUndefined();
+  it('treats paths without a static page as not accessible', () => {
+    expect(canAccessPath(routes, '/custom/page', () => true)).toBe(false);
   });
 });

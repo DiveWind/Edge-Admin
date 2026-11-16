@@ -70,6 +70,7 @@ return [
             'action_code' => '操作的权限码必须包含 .（如 system.user.view）。',
             'external_path' => '外链地址必须是 http(s) 开头的 URL。',
             'internal_path' => '路由地址必须以 / 开头且不含空格。',
+            'lockout' => '该节点包含菜单管理权限，停用后将无法再管理菜单。',
             'system_code' => '内置菜单不可修改权限码。',
             'system_type' => '内置菜单不可修改类型。',
         ],

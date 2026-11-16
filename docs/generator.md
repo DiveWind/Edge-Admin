@@ -1,6 +1,6 @@
 # 代码生成器 `edge:make-module`
 
-一条命令生成一个符合本项目规范的单表 CRUD 业务模块（后端全套 + 前端列表 / 表单页面），并**幂等地**登记权限点、路由、操作日志摘要与前端路由 / 菜单 / 文案。
+一条命令生成一个符合本项目规范的单表 CRUD 业务模块（后端全套 + 前端列表 / 表单页面），并**幂等地**登记菜单权限（`config/permissions.php`，带 `path` / `icon`，sync 后**自动出现在动态菜单里**）、路由、操作日志摘要与前端路由 / 文案。
 生成物只是起点：多步写入、副作用、记录级规则等仍按 [backend-guide.md](backend-guide.md) 手工补充。
 
 ```bash
@@ -8,7 +8,7 @@ cd server
 php artisan edge:make-module Tag --module=content --with-options \
   --fields="name:string:required|max:50,color:string:nullable,sort:integer,status:status"
 
-php artisan permission:sync && php artisan migrate     # 完成
+php artisan permission:sync && php artisan migrate     # 完成：菜单自动出现在侧边栏（非超级管理员需在角色管理中授权）
 ```
 
 生成物无需手工清理即可通过两端全部检查：后端 `composer lint && composer analyse && composer test`（含生成的 `TagTest`），
@@ -20,7 +20,7 @@ php artisan permission:sync && php artisan migrate     # 完成
 | 参数 / 选项 | 说明 |
 |---|---|
 | `name` | 模型名，单数 StudlyCase（`Tag`、`ArticleTag`）。表名 / 路由 / 权限码由它推导，见第 3 节 |
-| `--module=` | **必填**。所属模块（小写字母、数字、`-`），决定权限码前缀、控制器 / 请求命名空间、前端菜单分组，如 `content` |
+| `--module=` | **必填**。所属模块（小写字母、数字、`-`），决定权限码前缀、控制器 / 请求命名空间、菜单目录（`/<模块>`），如 `content` |
 | `--fields=` | **必填**。字段定义，见第 2 节 |
 | `--data-scope` | 接入数据权限：模型 `use HasDataScope`，迁移加 `department_id` / `created_by`，控制器 `visibleTo()`，Policy `isVisibleTo()` |
 | `--soft-deletes` | 迁移 `softDeletes()`，模型 `use SoftDeletes`，生成的测试断言软删除 |
@@ -69,17 +69,17 @@ php artisan permission:sync && php artisan migrate     # 完成
 | 资源 / 授权 | `app/Http/Resources/TagResource.php`、`app/Policies/TagPolicy.php` |
 | 控制器 | `app/Http/Controllers/Api/Content/TagController.php`（单表 CRUD，不含 Action）；`--with-options` 时另有 `app/Http/Controllers/Api/Options/TagOptionController.php` |
 | 测试 | `tests/Feature/TagTest.php`：列表、CRUD（datetime 字段断言时区换算、软删除断言 `assertSoftDeleted`）、校验、无权限 403；`--with-options` 时含选项接口 |
-| 登记（修改） | `config/permissions.php`：`content.tag` 节点（view/create/update/delete）；`routes/api.php`：`apiResource('tags')` + `can:` 中间件 + `use`（`--with-options` 时另在 `options` 分组登记 `Route::get('tags', TagOptionController::class)`）；`lang/*/operations.php`：`tags.store/update/destroy` 摘要 |
-| 前端 | `web/src/pages/content/tags/{index.tsx,service.ts,data.d.ts,components/TagForm.tsx}`（列表 + 删除、新建 / 编辑弹窗，见第 6 节）、`web/src/locales/{zh-CN,en-US}/pages/content-tags.ts`；修改 `config/routes.ts`、`src/locales/{zh-CN,en-US}/menu.ts`、`src/locales/{zh-CN,en-US}.ts`、`src/access.ts` |
+| 登记（修改） | `config/permissions.php`：`content.tag` 菜单节点（`type: menu`、`path: /content/tags`、`icon: TableOutlined`、view/create/update/delete 操作；模块分组不存在时新建 `type: directory`、`path: /content`、`icon: AppstoreOutlined` 的目录）；`routes/api.php`：`apiResource('tags')` + `can:` 中间件 + `use`（`--with-options` 时另在 `options` 分组登记 `Route::get('tags', TagOptionController::class)`）；`lang/*/operations.php`：`tags.store/update/destroy` 摘要 |
+| 前端 | `web/src/pages/content/tags/{index.tsx,service.ts,data.d.ts,components/TagForm.tsx}`（列表 + 删除、新建 / 编辑弹窗，见第 6 节）、`web/src/locales/{zh-CN,en-US}/pages/content-tags.ts`；修改 `config/routes.ts`、`src/locales/{zh-CN,en-US}.ts`、`src/access.ts`（侧边菜单来自服务端，**不再修改 `menu.ts`**） |
 
 命名推导：类 `Tag` → 复数 `Tags`、表 `tags`、路由 / URL `tags`、路由参数 `tag`、权限码 `content.tag`、前端路径 `/content/tags`、
-文案前缀 `pages.content.tags`、菜单键 `menu.content.tags`。
+文案前缀 `pages.content.tags`、菜单名称 `permission.content.tag`（页面文案中生成，与权限节点 `name` 同为 `Tags`）。
 
 生成的模型与手写模型一样 `use StoresDatesInAppTimezone`（日期时间输入换算到应用时区，见 [backend-guide.md](backend-guide.md) 3 节"日期时间"）。
 
 生成后请补充：`docs/architecture.md` 中的契约（含 `--with-options` 的选项接口）、Policy 中的业务规则（如"被引用时不可删"——
 被外键 `restrictOnDelete()` 引用的记录直接删除会触发数据库约束错误）、Seeder、更合适的中文名称
-（权限点 `name`、`operations.php`、前端文案默认用英文 Headline），见 6.3。
+（权限节点 `name`、`operations.php`、前端文案默认用英文 Headline；菜单名称也可以直接在菜单管理界面修改），见 6.3。
 
 ## 4. 模板（stub）
 
@@ -94,13 +94,12 @@ php artisan permission:sync && php artisan migrate     # 完成
 | `policy.data_scope` `controller.data_scope` | `--data-scope` 时的变体（`<名称>.<变体>.stub` 优先于 `<名称>.stub`） |
 | `routes` | 插入 `routes/api.php` 的路由块 |
 | `option_controller` / `option_route` | `--with-options` 的选项控制器 / 插入 `routes/api.php` `options` 分组的路由 |
-| `permission` / `permission_group` | 插入 `config/permissions.php` 的权限节点 / 新模块分组 |
+| `permission` / `permission_group` | 插入 `config/permissions.php` 的菜单节点（含 `type` / `path` / `icon`）/ 新模块目录 |
 | `operations.<locale>` / `operations` | 插入 `lang/<locale>/operations.php` 的摘要（`operations.zh_CN.stub`，其余语言用 `operations.stub`） |
 | `fragments/<片段>[.<字段类型>]` | 后端按字段重复的片段，见 4.3 |
 | `web/index.tsx` `web/form.tsx` `web/service.ts` `web/data.d.ts` | 前端页面文件（`form.tsx` → `components/<Class>Form.tsx`，见第 6 节） |
 | `web/locale.<locale>` / `web/locale` | 页面文案文件（`web/locale.zh-CN.stub`，其余语言用 `web/locale.stub`） |
 | `web/route` / `web/route_group` | 插入 `config/routes.ts` 的路由 / 新模块分组 |
-| `web/menu_module` `web/menu_item`（可加 `.<locale>`） | 插入 `menu.ts` 的模块与菜单文案 |
 | `web/locale_import` `web/locale_spread` | 在 `src/locales/<locale>.ts` 中注册页面文案 |
 | `web/permission_codes` | 插入 `src/access.ts` 的 `PermissionCode` 联合类型 |
 | `web/fragments/<片段>[.<字段类型>]` | 前端按字段重复的片段，见 6.2 |
@@ -127,7 +126,6 @@ php artisan permission:sync && php artisan migrate     # 完成
 | `web.path` | `/content/tags` | `web.page_dir` | `content/tags` |
 | `web.component` | `TagList` | `web.form_component` | `TagForm` |
 | `web.locale_prefix` | `pages.content.tags` | `imports` | 仅前端模板：汇总后的 TS 导入，见 4.5 |
-| `web.menu_module` | `menu.content` | `web.menu_key` | `menu.content.tags` |
 | `web.locale_file` | `content-tags` | `web.locale_module` | `contentTags` |
 | `permission_node` | 仅 `permission_group`：已渲染的权限节点 | `route_node` | 仅 `web/route_group`：已渲染的路由 |
 
@@ -208,7 +206,6 @@ php artisan permission:sync && php artisan migrate     # 完成
 | `server/lang/<locale>/operations.php` | `// edge:operations`（数组末尾） | 三条操作日志摘要 |
 | `web/config/routes.ts` | `// edge:routes:<模块>`（该模块分组的 `routes` 数组末尾） | 路由对象 |
 | 同上 | `// edge:routes`（顶层路由数组中） | 模块分组不存在时：新分组（自带 `// edge:routes:<模块>`） |
-| `web/src/locales/<locale>/menu.ts` | `// edge:menu`（对象末尾） | `'menu.<模块>'`（不存在时）与 `'menu.<模块>.<路由>'` |
 | `web/src/locales/<locale>.ts` | `// edge:locale-imports`（import 区末尾） | `import <web.locale_module> from './<locale>/pages/<web.locale_file>';` |
 | 同上 | `// edge:locale-spread`（默认导出对象末尾） | `...<web.locale_module>,` |
 | `web/src/access.ts` | `// edge:permission-codes`（`PermissionCode` 联合类型中、末尾 `\| never` 之前） | `\| '<权限码>.view'` 等四行 |
@@ -232,9 +229,6 @@ export type PermissionCode =
 // src/locales/<lang>.ts —— import 区末尾 + 默认导出对象末尾
 // edge:locale-imports
   // edge:locale-spread
-
-// src/locales/<lang>/menu.ts —— 对象末尾
-  // edge:menu
 ```
 
 `web/` 目录不存在（或 `--no-web`）时跳过前端部分；目录位置由 `EDGE_GENERATOR_WEB_PATH`（默认 `../web`）指定，
@@ -254,9 +248,9 @@ export type PermissionCode =
 | `web/form.tsx` | `web.form_hook` `web.initial_value` `web.form_item`；`web.form_component` `web.locale_prefix` `class` |
 | `web/service.ts` | `query<Classes>` / `get<Class>` / `create<Class>` / `update<Class>` / `delete<Class>`，路径 `/api/{{ route }}` |
 | `web/data.d.ts` | `web.type`（实体与 `FormValues` 共用）；`{{#if data_scope}}` 时实体追加 `department_id` / `created_by` |
-| `web/locale.zh-CN` / `web/locale` | `web.locale`；另含 `<prefix>.create` / `<prefix>.edit`、`--data-scope` 时的 `<prefix>.department` / `<prefix>.creator` 与 `permission.<权限码>`（角色授权树中的菜单名，操作名走通用的 `permission.action.*`） |
+| `web/locale.zh-CN` / `web/locale` | `web.locale`；另含 `<prefix>.create` / `<prefix>.edit`、`--data-scope` 时的 `<prefix>.department` / `<prefix>.creator` 与 `permission.<权限码>`（侧边菜单 / 菜单管理 / 角色授权树中的菜单名，操作名走通用的 `permission.action.*`） |
 | `web/permission_codes` | 四个权限码（`\| '<权限码>.view'` …） |
-| `web/route` / `web/route_group` / `web/menu_*` / `web/locale_import` / `web/locale_spread` | 见第 5 节 |
+| `web/route` / `web/route_group` / `web/locale_import` / `web/locale_spread` | 见第 5 节（静态路由只提供页面与路由级权限，菜单的名称 / 图标 / 顺序来自服务端；路由带 `locale: 'permission.<权限码>'`，页面标题 / 面包屑复用页面文案中的菜单名称） |
 
 页面模板与各片段用 `{{@import …}}` 声明自己用到的导入（4.5），生成结果只包含实际用到的导入。
 
@@ -307,14 +301,15 @@ export type PermissionCode =
 ### 6.3 生成后
 
 ```bash
-cd server && php artisan permission:sync && php artisan migrate     # 完成：两端检查均可直接通过
+cd server && php artisan permission:sync && php artisan migrate     # 完成：两端检查均可直接通过，新菜单自动出现在侧边栏
 ```
 
 按需继续完善（都不是通过检查的前提）：
 
 1. **契约**：在 `docs/architecture.md` 补接口、权限码、排序白名单（`--with-options` 时还有 `/api/options/<路由>`）。
-2. **文案**：`zh-CN` 的字段名默认为英文 Headline，改成中文；菜单名在 `menu.ts`，角色授权树里的菜单名在页面文案的 `permission.<权限码>`。
-   新模块分组的 `permission.<模块>` 未生成，缺失时回退后端 `name`。
+2. **文案**：`zh-CN` 的字段名默认为英文 Headline，改成中文；菜单名称在页面文案的 `permission.<权限码>`，**同时**把
+   `config/permissions.php` 中节点的 `name` 改成同样的中文（前端只在后端 `name` 等于 zh-CN 文案时才按语言翻译，否则视为管理员改过名、直接显示 `name`）。
+   已 sync 过的节点名称不会被再次 sync 覆盖，可在菜单管理界面修改。新模块目录的 `permission.<模块>` 未生成，缺失时显示后端 `name`；图标也可以在菜单管理中更换。
 3. **业务规则**：Policy（如"被引用时不可删"）、Seeder、多步写入 / 副作用改用 Action。
 4. **列宽 / 默认隐藏列**：字段多时按 [frontend-guide.md](frontend-guide.md) 的列表规范调整 `width`、`columnsState`，保证 1440 宽下常用列完整显示。
 5. 冒烟用例：在 `web/e2e/smoke.spec.ts` 中加上新页面。

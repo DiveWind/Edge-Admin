@@ -4,7 +4,7 @@ import type {
   RunTimeLayoutConfig,
   RuntimeAntdConfig,
 } from '@umijs/max';
-import { history, Link } from '@umijs/max';
+import { getIntl, history, Link } from '@umijs/max';
 import type React from 'react';
 import {
   AvatarDropdown,
@@ -13,12 +13,14 @@ import {
   Footer,
   GlobalStyle,
   LangDropdown,
+  MenuIcon,
   NoticeBell,
   OfflineBanner,
   ThemeSwitch,
 } from '@/components';
+import { defaultMessageLookup } from '@/hooks/usePermissionName';
 import Forbidden from '@/pages/exception/403';
-import { getCurrentUser } from '@/services/auth';
+import { getCurrentUser, getMenus } from '@/services/auth';
 import { getPublicSettings } from '@/services/options';
 import {
   clearToken,
@@ -27,6 +29,8 @@ import {
   redirectToLogin,
 } from '@/utils/auth';
 import { toHttpError } from '@/utils/error';
+import { buildMenuData } from '@/utils/menu';
+import { permissionName } from '@/utils/permission';
 import type { SiteSettings } from '@/utils/settings';
 import { DEFAULT_SITE_SETTINGS, toSiteSettings } from '@/utils/settings';
 import type { ThemeMode } from '@/utils/theme';
@@ -38,6 +42,10 @@ export interface InitialState {
   currentUser?: API.CurrentUser;
   /** 重新拉取当前用户（登录后、修改资料后调用） */
   fetchUserInfo: () => Promise<API.CurrentUser | undefined>;
+  /** 当前用户的侧边菜单（`GET /api/auth/menus`），见 utils/menu.ts */
+  menus: API.MenuNode[];
+  /** 重新拉取菜单（登录、菜单 / 角色变更后调用，通常用 `useRefreshAccess()`） */
+  fetchMenus: () => Promise<API.MenuNode[]>;
   /** 公开系统参数（站点名称、登录页公告、备案号） */
   site: SiteSettings;
   /** 重新拉取公开系统参数（修改系统参数后调用） */
@@ -57,6 +65,17 @@ async function fetchUserInfo(): Promise<API.CurrentUser | undefined> {
   }
 }
 
+/** 侧边菜单，失败（含未登录）时为空菜单 */
+async function fetchMenus(): Promise<API.MenuNode[]> {
+  if (!getToken()) return [];
+  try {
+    const { data } = await getMenus({ skipErrorHandler: true });
+    return data;
+  } catch {
+    return [];
+  }
+}
+
 /** 公开系统参数，失败时回退默认配置（不阻塞页面） */
 async function fetchSiteSettings(): Promise<SiteSettings> {
   try {
@@ -68,19 +87,22 @@ async function fetchSiteSettings(): Promise<SiteSettings> {
 }
 
 /**
- * 全局初始状态：当前用户（`GET /api/auth/me`）与公开系统参数（`GET /api/options/settings`）并行加载
+ * 全局初始状态：当前用户（`GET /api/auth/me`）、侧边菜单（`GET /api/auth/menus`）与公开系统参数（`GET /api/options/settings`）并行加载
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
  */
 export async function getInitialState(): Promise<InitialState> {
   const isLoginPage = history.location.pathname === LOGIN_PATH;
-  const [site, currentUser] = await Promise.all([
+  const [site, currentUser, menus] = await Promise.all([
     fetchSiteSettings(),
     isLoginPage ? Promise.resolve(undefined) : fetchUserInfo(),
+    isLoginPage ? Promise.resolve([]) : fetchMenus(),
   ]);
   if (!isLoginPage && !currentUser) redirectToLogin();
   return {
     currentUser,
     fetchUserInfo,
+    menus: currentUser ? menus : [],
+    fetchMenus,
     site,
     fetchSiteSettings,
     theme: getStoredTheme(),
@@ -103,8 +125,21 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
   ...defaultSettings,
   title: initialState?.site.name ?? defaultSettings.title,
   navTheme: navTheme(initialState?.theme ?? 'light'),
+  // 菜单以服务端为准（静态路由只提供页面与路由级权限），名称按 code 翻译、改过名的显示后端 name
+  menuDataRender: (menuData) => {
+    const { messages } = getIntl();
+    const lookup = (id: string) => {
+      const message = messages[id];
+      return typeof message === 'string' ? message : undefined;
+    };
+    return buildMenuData(initialState?.menus ?? [], menuData, {
+      translate: (node) => permissionName(node, lookup, defaultMessageLookup),
+      renderIcon: (name) => <MenuIcon name={name} />,
+    });
+  },
+  // 外链（isUrl）由 ProLayout 默认在新窗口打开
   menuItemRender: (item, dom) =>
-    item.path ? (
+    item.path && !item.isUrl ? (
       <Link to={item.path} prefetch>
         {dom}
       </Link>

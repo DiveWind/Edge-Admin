@@ -18,17 +18,17 @@ Edge Admin 前端位于 `web/`，基于 Ant Design Pro v6（Umi Max 4 + antd 6 +
 web/
   config/
     config.ts            # Umi 配置（插件、locale、代理）
-    routes.ts            # 声明式路由 = 菜单 + 路由级权限（含生成器锚点）
+    routes.ts            # 静态路由 = 页面组件 + 路由级权限（含生成器锚点）；侧边菜单来自服务端
     defaultSettings.ts   # ProLayout 默认设置
   e2e/                   # Playwright 端到端用例（npm run e2e）
   src/
-    app.tsx              # 运行时：getInitialState（当前用户 + 公开参数 + 主题）、layout、antd、request、innerProvider
+    app.tsx              # 运行时：getInitialState（当前用户 + 菜单 + 公开参数 + 主题）、layout（menuDataRender）、antd、request、innerProvider
     access.ts            # 权限：PermissionCode 类型 + routeFilter / can
     requestErrorConfig.ts# 请求拦截（Token、Accept-Language）与统一错误处理
-    components/          # 跨页面组件：DeleteAction、DictTag、ImageUpload、GlobalStyle、RightContent/*（通知、主题、语言、头像）...
-    hooks/               # useValueEnums、useDict、usePermissionName、useThemeMode
-    services/            # 跨页面接口（auth、options、dict、upload、notification、permission）与全局类型 typings.d.ts
-    utils/               # 纯函数：table、form、dict、permission、settings、theme、format、tree、route、error、i18n、auth
+    components/          # 跨页面组件：DeleteAction、DictTag、ImageUpload、IconPicker / MenuIcon、PermissionTypeTag、GlobalStyle、RightContent/*（通知、主题、语言、头像）...
+    hooks/               # useValueEnums、useDict、usePermissionName、useRefreshAccess、useThemeMode
+    services/            # 跨页面接口（auth、options、dict、upload、notification）与全局类型 typings.d.ts
+    utils/               # 纯函数：table、form、dict、permission、menu、settings、theme、format、tree、route、error、i18n、auth
     locales/             # zh-CN（默认，key 类型来源）/ en-US
     pages/<模块>/<页面>/  # index.tsx + service.ts + data.d.ts (+ components/)
 ```
@@ -48,15 +48,26 @@ web/
 - 单个请求要自己处理错误时传 `skipErrorHandler: true`。
 - 组件外需要提示用 `getMessageApi()`，不要用 antd 静态 `message.xxx`（拿不到主题与语言）。
 
-## 4. 权限
+## 4. 权限与动态菜单
 
-- 权限码唯一来源是 `GET /api/auth/me` 的 `permissions`（含菜单级码）。`src/access.ts` 的 `PermissionCode` 只是类型，后端新增权限点时同步追加（生成器会自动追加）。
-- **路由级**：`config/routes.ts` 中 `access: 'routeFilter'` + `permission: 'xxx.view'`（或数组，满足其一）。无权限时菜单隐藏，直接访问渲染 403。
+- 权限码唯一来源是 `GET /api/auth/me` 的 `permissions`（含目录 / 菜单级码，停用节点不在其中）。`src/access.ts` 的 `PermissionCode` 只是类型，后端新增权限点时同步追加（生成器会自动追加）。
+- **侧边菜单来自服务端**：`getInitialState` 并行加载 `GET /api/auth/menus` 到 `initialState.menus`，`app.tsx` 的 `layout.menuDataRender`
+  用 `buildMenuData()`（`utils/menu.ts`）把它转成 ProLayout 菜单——**结构 / 名称 / 图标 / 顺序 / 显隐完全以服务端为准**（菜单管理页维护）：
+  - 服务端菜单按 `path` 对应 `config/routes.ts` 的静态路由；对应路由无权访问时不显示，没有可显示子菜单的目录也不显示；
+  - 外链菜单（`is_external`，path 为 URL）由 ProLayout 在新窗口打开；
+  - 服务端菜单没覆盖到的静态页面（个人设置、被隐藏的菜单页面）以 `hideInMenu` 保留，用于页面标题与面包屑；
+  - 图标：服务端下发 @ant-design/icons 图标名，`components/IconPicker/icons.ts` 维护约 100 个精选图标（按名引入，不整包打包），
+    `<MenuIcon name />` 渲染（未收录的名称不渲染），菜单表单用 `<IconPicker />` 选择。ProLayout 只在一级菜单显示图标。
+  - 刷新：登录（login 页同时拉取用户与菜单）、退出（清空）、菜单管理 / 角色保存后调用 `useRefreshAccess()`（重新拉取当前用户与菜单），侧边栏即时变化。
+- **路由级**：`config/routes.ts` 中 `access: 'routeFilter'` + `permission: 'xxx.view'`（或数组，满足其一）。无权限时直接访问渲染 403（对应菜单也不显示）。
   分组路由不写 `access`；不要在分组里放没有权限声明的 redirect。
+  - 菜单被**隐藏**：权限仍有效，页面可直接访问；菜单被**停用**：权限码失效，直接访问渲染 403。
 - **按钮级**：`const access = useAccess(); access.can('system.dict.create') && <Button />`。前端隐藏只是体验，真正的校验在后端。
-- **权限名称 i18n**：后端约定菜单 / 权限点名称由前端按 `code` 翻译，后端 `name` 兜底。查找顺序：
-  `permission.<code>` → 操作类 `permission.action.<最后一段>`（view / create / update / delete / publish……）→ 后端 `name`。
-  文案在 `locales/<lang>/permission.ts`；角色授权树、权限管理页用 `usePermissionTranslator()` 翻译整棵树。新增模块时补菜单级 `permission.<code>` 即可。
+- **落地页** `/`（`pages/home`）：按服务端菜单顺序跳到第一个有静态路由且可访问的站内页面（`findFirstMenuPath` + `canAccessPath`），一个都没有时显示 403。
+- **菜单 / 权限名称 i18n**（`utils/permission.ts`）：查找顺序 `permission.<code>` → 操作类 `permission.action.<最后一段>`（view / create / update / delete / publish……）→ 后端 `name`。
+  **只有名称未被管理员修改**（后端 `name` 等于 zh-CN 中同一 key 的文案）时才使用翻译，改过名的内置节点与自定义节点在所有语言下直接显示后端 `name`。
+  文案在 `locales/<lang>/permission.ts`（中文须与后端 `config/permissions.php` 的 `name` 一致）；侧边菜单、菜单管理页、角色授权树都走这套规则
+  （`usePermissionName()` / `usePermissionTranslator()`）。新增模块时补菜单级 `permission.<code>` 即可。
 
 ## 5. 字典与系统参数
 
@@ -142,10 +153,10 @@ const formRef = useRef<ProFormInstance<XxxFormValues>>(undefined);
 
 ## 8. i18n
 
-- 只有 `zh-CN`（默认）与 `en-US`。路由 `name` → `menu.<父 name>.<name>`；页面文案按模块放 `locales/<lang>/pages/<模块>.ts`；权限名称在 `locales/<lang>/permission.ts`。
+- 只有 `zh-CN`（默认）与 `en-US`。静态路由 `name` → `menu.<父 name>.<name>`（只用于服务端菜单之外页面的标题）；页面文案按模块放 `locales/<lang>/pages/<模块>.ts`；权限名称在 `locales/<lang>/permission.ts`。
 - 组件内 `const t = useT(); t('common.create')`，组件外 `t()`。key 类型来自 zh-CN，en-US 用 `Record<keyof typeof zh, string>` 约束，拼错或漏翻会在 `tsc` 报错。
 - 数据（字典 label、系统参数、后端 `name`）不做多语言；后端提示文案随 `Accept-Language` 切换。
-- 不要删除 `locales/<lang>.ts` 与 `menu.ts` 中的 `// edge:*` 锚点。
+- 不要删除 `locales/<lang>.ts` 中的 `// edge:*` 锚点。
 
 ## 9. 主题
 
@@ -165,8 +176,10 @@ const formRef = useRef<ProFormInstance<XxxFormValues>>(undefined);
 3. `src/pages/<模块>/<页面>/`：`data.d.ts`、`service.ts`、`index.tsx`（`PageContainer` + `ProTable`）、`components/XxxForm.tsx`。
    参考：标准 CRUD `content/categories`；数据权限 / 详情回填 / 上传 / 字典 `content/articles`；主从（抽屉）`system/dicts`；按类型切换控件 `system/settings`。
 4. `config/routes.ts`：加路由（`access: 'routeFilter'` + `permission`）。
-5. `locales/{zh-CN,en-US}/menu.ts` 加菜单名，`pages/<模块>.ts` 加页面文案，`permission.ts` 加菜单级权限名称。
-6. `npm run lint && npx antd lint ./src && npm test && npm run build`，并补 e2e 冒烟。
+5. 菜单：后端 `config/permissions.php` 声明菜单节点（`path` 为上一步的路由路径）并 `permission:sync`，或在菜单管理界面新建；授权给角色。
+   流程见 [permissions.md](permissions.md) 1.3。
+6. `pages/<模块>.ts` 加页面文案，`permission.ts` 加菜单级名称（`permission.<code>`，中文与后端 `name` 一致）。
+7. `npm run lint && npx antd lint ./src && npm test && npm run build`，并补 e2e 冒烟。
 
 ### 10.2 用生成器
 
@@ -177,14 +190,14 @@ php artisan permission:sync && php artisan migrate
 ```
 
 生成器写好列表页、`components/<Class>Form.tsx`、service、类型、双语文案（导入按需生成、带与后端一致的必填 / 长度校验、外键下拉接入选项接口、
-日期时间按上面的约定提交），登记路由、菜单、权限码，并在 `node_modules` 存在时用 Biome 格式化，生成后直接通过 lint / build。
+日期时间按上面的约定提交），登记静态路由、权限码（菜单由后端 `config/permissions.php` 下发，sync 后自动出现在侧边栏），并在 `node_modules` 存在时用 Biome 格式化，生成后直接通过 lint / build。
 之后的完善（中文文案、列宽、e2e 冒烟）与模板定制方法见 [generator.md](generator.md) 第 6 节。
 
 ## 11. 测试
 
 | 命令 | 内容 |
 |---|---|
-| `npm test` | Vitest 单元测试（node 环境，`src/**/*.test.ts`）：纯逻辑——权限、列表参数转换、表单工具、字典转换与批量加载、权限名称回退、公开参数、格式化…… |
+| `npm test` | Vitest 单元测试（node 环境，`src/**/*.test.ts`）：纯逻辑——权限、动态菜单转换与落地页、菜单树层级规则、列表参数转换、表单工具、字典转换与批量加载、权限名称回退、公开参数、格式化…… |
 | `npm run e2e` | Playwright 端到端（`e2e/*.spec.ts`），**需要真实后端**，不在默认 `npm test` 与 CI 必过项中 |
 
 e2e 前置条件：
@@ -195,7 +208,7 @@ cd server && php artisan queue:work                                             
 cd web && npm run e2e        # 未运行 dev server 时自动启动；E2E_BASE_URL 可指向其他地址
 ```
 
-- 覆盖：登录 / 登出与 redirect、各角色菜单收敛与 403、每个模块冒烟、岗位完整 CRUD（含 422 回填）、公告 → 通知流程、
+- 覆盖：登录 / 登出与 redirect、各角色菜单收敛与 403、菜单管理（CRUD、外链、改名 / 图标 / 排序后侧边栏即时变化、隐藏与停用、未授权菜单不可见）、每个模块冒烟、岗位完整 CRUD（含 422 回填）、公告 → 通知流程、
   字典（含缓存失效）、系统参数、附件、在线会话、系统信息、文章来源、工作台、暗色主题、英文界面下的后端文案与权限名称。
 - `global-setup.ts` 用 API 为每个角色登录一次并保存 `storageState`（复用登录态，用例更快；登录接口按"用户名 + IP"只限制失败次数，成功登录不计数）。
 - 用例写入的数据带随机后缀并在用例内清理；建议每次运行前 `migrate:fresh --seed`。浏览器使用预装的 Chromium（`PLAYWRIGHT_BROWSERS_PATH`），

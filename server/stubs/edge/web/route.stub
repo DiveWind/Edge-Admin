@@ -1,6 +1,8 @@
 {
   path: '{{ web.path }}',
   name: '{{ route }}',
+  // 标题 / 面包屑的文案（菜单本身来自服务端）：复用页面文案中的菜单名称，无需在 menu.ts 中登记
+  locale: 'permission.{{ permission }}',
   component: './{{ web.page_dir }}',
   access: 'routeFilter',
   permission: '{{ permission }}.view',

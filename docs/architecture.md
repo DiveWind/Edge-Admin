@@ -44,7 +44,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 - **多语言**：请求头 `Accept-Language` 决定接口文案语言（`message`、`errors`、操作日志摘要），支持 `zh-CN` / `zh_CN` / `zh`
   → 中文，`en-US` / `en` → 英文；未携带或不支持时使用后端 `APP_LOCALE`（默认 `zh_CN`）。响应头 `Content-Language`
   返回实际语言（`zh-CN` / `en`）。**前端应按当前界面语言显式发送该请求头**（浏览器默认的 Accept-Language 可能与界面语言不一致）。
-  字典项 `label`、系统参数、权限点 / 菜单的 `name` 等**数据**不做多语言，菜单与权限点名称由前端按 `code` 做 i18n 展示（`name` 为中文兜底）。
+  字典项 `label`、系统参数、权限点 / 菜单的 `name` 等**数据**不做多语言，菜单与权限点名称由前端按 `code` 做 i18n 展示（`name` 为中文兜底；管理员改过名称的节点直接显示 `name`）。
 - **限流**：全部 `/api/*` 每分钟 120 次（`EDGE_API_RATE_LIMIT`，已登录按用户、未登录按 IP），登录接口另有独立限流（见 5.1）。
 - **时间**：输出的时间字段一律为带时区偏移的 ISO 8601（如 `2026-01-01T08:00:00+08:00`，时区由 `APP_TIMEZONE` 决定，默认 `Asia/Shanghai`）。
   输入的日期时间（表单字段、`created_from` / `created_to` 等过滤参数）：
@@ -56,17 +56,27 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 
 ## 3. 权限模型
 
-### 3.1 功能权限
+### 3.1 功能权限与动态菜单
 
-- 权限点是**代码里声明的**（`config/permissions.php`，树形：模块 → 菜单 → 操作），
-  通过 `php artisan permission:sync` 同步到 `permissions` 表；界面只读展示，并用于给角色授权。
-  新增业务功能 = 在配置里加权限点 + sync + 路由上挂 `can:` 中间件。
-- 权限码格式 `模块.资源.操作`，如 `system.user.view`；**必须包含 `.`**（不含 `.` 的 ability 视为 Policy 方法名）。
-  模块、菜单节点本身也有权限码（如 `system`、`system.user`，`type=menu`），可分配给角色用于菜单展示。
+- `permissions` 表是一棵**菜单权限树**，节点 `type` 三种：
+  - `directory` 目录：侧边菜单分组，可放目录 / 菜单；
+  - `menu` 菜单：对应一个前端页面（`path` 为前端静态路由路径）或外链（`is_external`，`path` 为 http(s) URL，新窗口打开），只能放操作；
+  - `action` 操作（按钮）：接口与按钮的权限点，没有子节点，必须挂在菜单下。
+  节点的 `code` 即权限码（唯一，小写字母、数字、`-`、`_`，以 `.` 分段）；**`action` 的 code 必须含 `.`**（作为 Gate ability），
+  目录 / 菜单可以是单段（如 `system`、`dashboard`），只用于菜单显示与授权树。
+- **内置节点**（`is_system`）在后端 `config/permissions.php` 声明，`php artisan permission:sync` 同步（规则见 [permissions.md](permissions.md#11-内置菜单与同步)）；
+  不可删除、不可改 `code` / `type`，`path` / `is_external` 以配置为准（提交的值被忽略），其余字段（名称、图标、排序、显示、状态、上级、备注）可在菜单管理界面修改且 sync 不覆盖。
+  管理员也可以在界面上新增**自定义节点**（目录、菜单、外链、操作）。
+- **隐藏**（`is_visible=false`）：不出现在菜单中，权限仍然有效，页面可直接访问。
+  **停用**（`status=disabled`）：该节点及其全部后代的权限码**对所有人（含超级管理员）不生效**——不出现在 `/api/auth/me` 的 `permissions`、
+  `/api/auth/menus` 与授权树中，接口返回 403。包含 `system.permission.view` / `.update` 的节点（及其祖先）不可停用（422），避免锁死菜单管理。
+- 权限码格式 `模块.资源.操作`，如 `system.user.view`；不含 `.` 的 ability 视为 Policy 方法名。
 - 后端用 Laravel 原生 Gate：`Gate::before` 中判定；路由用官方 `can:<code>` 中间件。
   记录级规则（数据权限、受保护对象等）由 Policy 判定，超级管理员同样受其约束（例如不能删除自己）。
-- 角色 `code = super-admin` 为超级管理员，拥有全部权限且不可删除/禁用/改码；`id=1` 的用户同理受保护。
+- 角色 `code = super-admin` 为超级管理员，拥有全部（未停用的）权限且不可删除/禁用/改码；`id=1` 的用户同理受保护。
 - 被禁用的角色不生效；被禁用的用户无法登录，已有 token 立即失效。
+- 前端侧边菜单完全来自 `GET /api/auth/menus`（结构 / 名称 / 图标 / 顺序 / 显隐）；页面组件仍是前端静态路由，菜单通过 `path` 对应页面，
+  路由级权限由静态路由上的权限声明判定。
 
 ### 3.2 数据权限
 
@@ -93,7 +103,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | 工作台 | `dashboard.view` |
 | 用户 | `system.user.view` `.create` `.update` `.delete` `.reset-password` |
 | 角色 | `system.role.view` `.create` `.update` `.delete` |
-| 权限 | `system.permission.view` |
+| 菜单管理 | `system.permission.view` `.create` `.update` `.delete` |
 | 部门 | `system.department.view` `.create` `.update` `.delete` |
 | 岗位 | `system.position.view` `.create` `.update` `.delete` |
 | 登录日志 | `monitor.login-log.view` `.delete` |
@@ -110,7 +120,8 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | 系统信息 | `monitor.system-info.view` |
 
 个人中心、我的通知、`/api/options/*`、文件上传只要求登录；`GET /api/options/settings` 无需登录。
-对应的菜单级权限码：`system.dict`、`system.setting`、`system.attachment`、`monitor.online-session`、`monitor.system-info`（`type=menu`）。
+以上为操作（`type=action`）权限码；目录 / 菜单本身也有权限码（如 `system`（目录）、`system.user`、`monitor.failed-job`、
+`message.notification`（我的通知，页面只要求登录，菜单码只控制菜单显示）），用于菜单显示，可分配给角色。完整树见 `server/config/permissions.php`。
 
 ## 4. 数据表
 
@@ -120,7 +131,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | `departments` | parent_id? name leader_id? sort status |
 | `positions` | name code(唯一) sort status remark? |
 | `roles` | name code(唯一) data_scope sort status remark? |
-| `permissions` | parent_id? name code(唯一) type(`menu`/`action`) sort |
+| `permissions` | parent_id? name code(唯一) type(`directory`/`menu`/`action`) path? icon? is_external is_visible status is_system sort remark? |
 | `role_user` `position_user` `permission_role` `department_role` | 关联表 |
 | `login_logs` | user_id? username ip user_agent status(`success`/`failed`) message? created_at |
 | `operation_logs` | user_id? method path route_name? summary? ip user_agent status_code duration_ms payload(json，脱敏) created_at |
@@ -147,6 +158,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 | POST | `/api/auth/login` | `{username, password}` → `{data:{token, token_type:"Bearer", expires_at}}`；限流：按 用户名+IP **只累计失败**（密码错误、账号禁用），每分钟允许的失败次数取系统参数 `security.login_max_attempts`（默认 5），超出后返回 429（带 `Retry-After`，`message` 提示剩余秒数），**登录成功后计数清零**；写登录日志，token 记录 ip / user_agent。账号或密码错误、账号被禁用均返回 `422`，错误在 `errors.username` |
 | POST | `/api/auth/logout` | 吊销当前 token，204 |
 | GET | `/api/auth/me` | 见下方 CurrentUser |
+| GET | `/api/auth/menus` | 当前用户的侧边菜单树，见下方 Menu |
 | PUT | `/api/auth/profile` | `{name, email?, phone?, avatar?}` → CurrentUser |
 | PUT | `/api/auth/password` | `{current_password, password, password_confirmation}` → 204（同时吊销该用户其他 token） |
 
@@ -166,8 +178,23 @@ CurrentUser：
 } }
 ```
 
-`permissions` 为该用户实际拥有的权限码全集（含模块 / 菜单级权限码；超级管理员返回所有权限码）。
+`permissions` 为该用户实际拥有且生效的权限码全集（含目录 / 菜单级权限码；超级管理员返回所有生效的权限码；停用节点及其后代不含在内）。
 `data_scope` 为展示值：多角色时取范围最大的一个（实际可见范围为各角色的并集）。
+
+Menu（`GET /api/auth/menus`，仅需登录）：
+
+```json
+{ "data": [
+  { "id": 2, "parent_id": null, "name": "系统管理", "code": "system", "type": "directory", "path": "/system",
+    "icon": "SettingOutlined", "is_external": false, "sort": 1, "children": [
+      { "id": 3, "parent_id": 2, "name": "用户管理", "code": "system.user", "type": "menu", "path": "/system/users",
+        "icon": "UserOutlined", "is_external": false, "sort": 0, "children": [] }
+  ] }
+] }
+```
+
+只含 `directory` / `menu` 节点，且须同时满足：生效（自身与祖先均启用）、可见（自身与祖先均 `is_visible`）、用户拥有该节点权限码（超级管理员全部）；
+没有可见子菜单的目录被剔除。按 `sort`、`id` 升序。`icon` 为 @ant-design/icons 图标名；`name` 为管理员可编辑的数据，前端按 code 翻译（见 §2 多语言）。
 
 ### 5.2 系统管理
 
@@ -184,7 +211,11 @@ CurrentUser：
 | POST/PUT | `/api/roles[/{id}]` | `.create`/`.update` | name code data_scope sort status remark? permission_ids[] department_ids[]（仅 custom 时生效） |
 | GET | `/api/roles/{id}` | `.view` | 含 permission_ids department_ids |
 | DELETE | `/api/roles/{id}` | `.delete` | 已分配用户的角色不可删 |
-| GET | `/api/permissions` | `system.permission.view` | 树 `[{id,parent_id,name,code,type,sort,children:[]}]` |
+| GET | `/api/permissions` | `system.permission.view` | 菜单树（不分页），过滤 name code（模糊）type status；项见下方 Permission；有过滤条件时，匹配节点的父节点不在结果中则作为根节点 |
+| POST | `/api/permissions` | `.create` | type parent_id? name code path? icon? is_external? is_visible? status sort? remark? → 201；层级：目录下放目录 / 菜单，菜单下只放操作，操作必须挂在菜单下（422 `errors.parent_id`）；`menu` 的 path 必填（外链为 http(s) URL，否则以 `/` 开头）；非菜单的 `is_external` 置为 false，操作的 path / icon 置为 null |
+| GET | `/api/permissions/{id}` | `.view` | Permission |
+| PUT | `/api/permissions/{id}` | `.update` | 同新增；上级不能是自己或自己的下级（422 `errors.parent_id`）；有子节点时新类型须能容纳现有子节点（422 `errors.type`）；内置节点不可改 code / type（422），path / is_external 保持配置值；包含菜单管理查看 / 编辑权限的节点不可停用（422 `errors.status`） |
+| DELETE | `/api/permissions/{id}` | `.delete` | 内置节点、有子节点的节点不可删（403）；被角色引用时同时解除授权；204 |
 | GET | `/api/departments` | `system.department.view` | 树（不分页），过滤 name status；节点含 leader{id,name} |
 | POST/PUT/DELETE | `/api/departments[/{id}]` | 对应权限 | parent_id? name leader_id? sort status；有子部门或用户时不可删；不可把自己设为自己的下级 |
 | GET/POST/PUT/DELETE | `/api/positions[/{id}]` | `system.position.*` | name code status；有用户时不可删 |
@@ -199,6 +230,14 @@ CurrentUser：
 | GET/DELETE | `/api/settings/{id}` | `.view`/`.delete` | 内置参数不可删（403） |
 | GET | `/api/attachments` | `system.attachment.view` | 过滤 name mime(模糊，如 `image/`、`pdf`) uploaded_by created_from/to；项见下方 Attachment，含 `uploader{id,name}` |
 | DELETE | `/api/attachments/{id}` | `system.attachment.delete` | 同时删除物理文件，204（引用该 URL 的头像 / 封面等不会自动清空） |
+
+Permission：
+
+```json
+{ "id": 3, "parent_id": 2, "name": "用户管理", "code": "system.user", "type": "menu", "path": "/system/users",
+  "icon": "UserOutlined", "is_external": false, "is_visible": true, "status": "active", "is_system": true, "sort": 0,
+  "remark": null, "created_at": "", "updated_at": "", "children": [] }
+```
 
 Setting：
 
@@ -279,7 +318,7 @@ SystemInfo（不含主机、账号、密钥等敏感配置；无法获取的指�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/options/departments` | 启用部门树 `[{id, name, parent_id, children}]` |
-| GET | `/api/options/permissions` | 权限树，形状同 `GET /api/permissions`；供角色授权表单使用（无需 `system.permission.view`） |
+| GET | `/api/options/permissions` | 角色授权树：全部**生效**节点（三种类型，停用节点及其后代不返回，隐藏节点照常返回），节点形状同 Permission；无需 `system.permission.view`。角色已授权但已停用的节点 id 仍保存在角色上（前端编辑角色时原样提交） |
 | GET | `/api/options/roles` `/positions` `/article-categories` `/users` | 启用项 `[{id, name}]`（roles/positions 额外带 code） |
 | GET | `/api/options/<资源>`（生成器 `--with-options`） | 代码生成器生成的业务模块选项，形状同上 `[{id, name}]`（有 `status` 时仅启用项）；具体资源在各模块契约中登记 |
 | GET | `/api/options/dicts?codes=a,b` | `{data: {"a": [{label, value, color}], "b": [...]}}`：仅启用字典的启用项，按 sort；不存在 / 已禁用的 code 返回 `[]`；`codes` 必填（422）；后端缓存，字典变更即失效 |
@@ -329,4 +368,5 @@ Dashboard：
 - 数据字典：`article_source`（原创 / 转载 / 翻译）、`common_yes_no`（是 / 否）、`user_gender`（男 / 女 / 未知）。
 - 内置系统参数（`is_system`）：`site.name` 站点名称（公开）、`site.login_notice` 登录页公告（公开）、`site.icp` 备案号（公开，默认空）、
   `security.login_max_attempts` 登录尝试次数（接入登录限流）、`log.retention_days` 日志保留天数（接入 `model:prune`）。
-- 角色权限：只读访客自动拥有全部 `*.view` 与菜单权限码；内容编辑额外拥有 `system.attachment.view`。
+- 角色权限：只读访客自动拥有全部 `*.view` 与目录 / 菜单权限码；内容编辑额外拥有 `system.attachment.view`。
+- 菜单：`permission:sync` 同步的内置菜单树（`is_system`），无自定义节点。

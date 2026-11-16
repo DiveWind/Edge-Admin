@@ -20,6 +20,14 @@ export function getCurrentUser(options?: { skipErrorHandler?: boolean }) {
   });
 }
 
+/** 当前用户可见的侧边菜单树（启用、可见、已授权的目录 / 菜单） */
+export function getMenus(options?: { skipErrorHandler?: boolean }) {
+  return request<API.Collection<API.MenuNode>>('/api/auth/menus', {
+    method: 'GET',
+    ...options,
+  });
+}
+
 export function updateProfile(body: API.ProfileParams) {
   return request<API.Resource<API.CurrentUser>>('/api/auth/profile', {
     method: 'PUT',

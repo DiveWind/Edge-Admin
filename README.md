@@ -17,9 +17,10 @@ Edge Admin 是一个前后端分离的 **RBAC 中后台框架**：后端是纯 A
 ## 特性
 
 - **认证**：Sanctum API Token，登录失败限流（只计失败、成功清零，次数可在线调整）、登录日志、修改密码时其他设备下线
-- **权限**：功能权限在代码中声明（`config/permissions.php` → `permission:sync` → 路由 `can:`），无第三方权限包；
+- **权限**：原生 Gate / Policy / `can:`，无第三方权限包；**动态菜单权限**——目录 / 菜单 / 按钮三级权限树，内置菜单在代码中声明（`config/permissions.php` → `permission:sync`），
+  也可在「菜单管理」界面新增、改名、换图标、排序、隐藏、停用（停用即权限失效）与添加外链，侧边菜单由服务端按角色下发；
   记录级规则写在 Policy；**五种数据权限**（全部 / 自定义部门 / 本部门及下级 / 本部门 / 本人），多角色取并集
-- **系统管理**：用户、角色、权限、部门（树）、岗位、**数据字典**（带缓存 + `InDict` 校验）、**系统参数**（类型化、内置参数保护、
+- **系统管理**：用户、角色、菜单管理、部门（树）、岗位、**数据字典**（带缓存 + `InDict` 校验）、**系统参数**（类型化、内置参数保护、
   免登录的公开参数）、**附件管理**
 - **系统监控**：登录日志、操作日志（自动记录、脱敏、双语摘要）、**在线会话**（强制下线）、**系统信息**、定时任务（查看 / 立即执行 / 执行日志）、失败队列
 - **消息**：通知公告（发布后队列推送站内信）、我的通知
@@ -27,7 +28,7 @@ Edge Admin 是一个前后端分离的 **RBAC 中后台框架**：后端是纯 A
 - **时区**：输入的日期时间按 ISO 8601 偏移换算到 `APP_TIMEZONE`（不带偏移按应用时区解释），输出一律带偏移
 - **代码生成器**：`php artisan edge:make-module Tag --module=content --fields="name:string:required|max:50,status:status"`
   一次生成迁移、模型、工厂、请求、资源、Policy、控制器、测试与前端页面（列表 + 独立表单组件，带与后端一致的必填 / 长度校验、
-  外键下拉选项、可选的 `--with-options` 选项接口），并幂等登记权限点 / 路由 / 菜单 / 文案；生成后 `permission:sync` + `migrate` 即可通过两端全部检查
+  外键下拉选项、可选的 `--with-options` 选项接口），并幂等登记菜单权限 / 路由 / 文案；生成后 `permission:sync` + `migrate` 即可通过两端全部检查，新菜单自动出现在侧边栏
 - **工程化**：Pest（含架构测试）· Larastan level 8 · Pint · GitHub Actions · 数据库无关（SQLite / MySQL / PostgreSQL）· 可选 Laravel Sail
 - **业务示例**：接入数据权限与数据字典的"文章"模块，作为业务开发范本
 
@@ -84,7 +85,7 @@ npm run dev             # http://localhost:8001，/api 代理到 8000
 | [快速开始](docs/getting-started.md) | 环境、本地运行、常用命令 |
 | [架构与接口契约](docs/architecture.md) | 前后端唯一依据：接口、字段、权限码、错误格式、初始数据 |
 | [后端开发规范](docs/backend-guide.md) | 分层职责、何时用 Action、列表 / 错误 / 多语言 / 测试规范 |
-| [权限](docs/permissions.md) | 功能权限、记录级规则、数据权限的使用与扩展 |
+| [权限](docs/permissions.md) | 动态菜单与功能权限（新增页面流程、sync 规则、隐藏 vs 停用）、记录级规则、数据权限的使用与扩展 |
 | [代码生成器](docs/generator.md) | 字段 DSL、模板与占位符、锚点约定 |
 | [部署](docs/deployment.md) | Nginx、队列、调度、环境变量 |
 
@@ -109,7 +110,7 @@ npm run dev             # http://localhost:8001，/api 代理到 8000
 │   │   ├── Rules/                 # InDict
 │   │   └── Services/              # Dictionary、Settings、SystemInfo、DataScopeResolver…
 │   ├── config/edge.php            # 项目配置
-│   ├── config/permissions.php     # 权限点声明（树）
+│   ├── config/permissions.php     # 内置菜单权限声明（目录 / 菜单 / 按钮树）
 │   ├── database/                  # 迁移、Factory、Seeder
 │   ├── lang/{zh_CN,en}/           # 双语文案、操作日志摘要
 │   ├── routes/api.php             # 全部接口（含 can: 权限声明）

@@ -1,21 +1,23 @@
 import type { PermissionCode } from '../src/access';
 
 /**
- * 声明式路由，同时生成菜单。
+ * 静态路由：页面组件（编译期确定）与路由级权限。
  *
- * - `name` 对应 `menu.<父级 name>.<name>` 国际化 key（见 src/locales/<lang>/menu.ts）
+ * - **侧边菜单不来自这里**：菜单的结构 / 名称 / 图标 / 顺序 / 显隐以服务端 `GET /api/auth/menus` 为准
+ *   （菜单管理页维护，见 src/utils/menu.ts）。服务端菜单通过 `path` 对应到这里的路由；
+ *   这里的 `name`（`menu.<父级 name>.<name>`）只用作服务端菜单之外页面（个人设置、隐藏菜单等）的标题与面包屑。
  * - 需要权限的页面写 `access: 'routeFilter'` + `permission`（权限码或权限码数组，满足其一即可）。
- *   无权限时菜单自动隐藏，直接访问 URL 渲染 403。只要求登录的页面不写 access。
+ *   无权限时直接访问 URL 渲染 403，对应的服务端菜单也不显示。只要求登录的页面不写 access。
  * - `// edge:routes`、`// edge:routes:<模块>` 是代码生成器（edge:make-module）的锚点，新路由插在它们之前，请勿删除。
- * - 分组路由（只有 routes 没有 component）不要写 access，也不要放无权限要求的 redirect 子路由，
- *   否则"所有子路由都不可访问时隐藏分组"的判定会失效。
+ * - 分组路由（只有 routes 没有 component）不要写 access，也不要放无权限要求的 redirect 子路由。
  *
  * @doc https://umijs.org/docs/guides/routes
  */
 export interface AppRoute {
   path: string;
   name?: string;
-  icon?: string;
+  /** 标题文案 key（默认 `menu.<父级 name>.<name>`），生成器生成的路由指向 `permission.<code>` */
+  locale?: string;
   component?: string;
   redirect?: string;
   layout?: false;
@@ -34,7 +36,6 @@ const routes: AppRoute[] = [
   {
     path: '/dashboard',
     name: 'dashboard',
-    icon: 'dashboard',
     component: './dashboard',
     access: 'routeFilter',
     permission: 'dashboard.view',
@@ -42,7 +43,6 @@ const routes: AppRoute[] = [
   {
     path: '/system',
     name: 'system',
-    icon: 'setting',
     routes: [
       {
         path: '/system/users',
@@ -106,7 +106,6 @@ const routes: AppRoute[] = [
   {
     path: '/monitor',
     name: 'monitor',
-    icon: 'monitor',
     routes: [
       {
         path: '/monitor/login-logs',
@@ -127,7 +126,14 @@ const routes: AppRoute[] = [
         name: 'tasks',
         component: './monitor/tasks',
         access: 'routeFilter',
-        permission: ['monitor.scheduled-task.view', 'monitor.failed-job.view'],
+        permission: 'monitor.scheduled-task.view',
+      },
+      {
+        path: '/monitor/failed-jobs',
+        name: 'failed-jobs',
+        component: './monitor/failed-jobs',
+        access: 'routeFilter',
+        permission: 'monitor.failed-job.view',
       },
       {
         path: '/monitor/online-sessions',
@@ -149,7 +155,6 @@ const routes: AppRoute[] = [
   {
     path: '/message',
     name: 'message',
-    icon: 'message',
     routes: [
       {
         path: '/message/announcements',
@@ -169,7 +174,6 @@ const routes: AppRoute[] = [
   {
     path: '/content',
     name: 'content',
-    icon: 'read',
     routes: [
       {
         path: '/content/articles',

@@ -4,7 +4,7 @@ export default {
   'menu.system': '系统管理',
   'menu.system.users': '用户管理',
   'menu.system.roles': '角色管理',
-  'menu.system.permissions': '权限管理',
+  'menu.system.permissions': '菜单管理',
   'menu.system.departments': '部门管理',
   'menu.system.positions': '岗位管理',
   'menu.system.dicts': '数据字典',
@@ -13,7 +13,8 @@ export default {
   'menu.monitor': '系统监控',
   'menu.monitor.login-logs': '登录日志',
   'menu.monitor.operation-logs': '操作日志',
-  'menu.monitor.tasks': '任务调度',
+  'menu.monitor.tasks': '定时任务',
+  'menu.monitor.failed-jobs': '失败队列',
   'menu.monitor.online-sessions': '在线会话',
   'menu.monitor.system-info': '系统信息',
   'menu.message': '消息中心',
@@ -23,5 +24,4 @@ export default {
   'menu.content.articles': '文章管理',
   'menu.content.categories': '文章分类',
   'menu.account-settings': '个人设置',
-  // edge:menu
 };

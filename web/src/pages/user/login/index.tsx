@@ -44,11 +44,16 @@ const Login: React.FC = () => {
   const handleSubmit = async (values: API.LoginParams) => {
     const { data } = await login(values);
     setToken(data.token);
-    const currentUser = await initialState?.fetchUserInfo();
+    const [currentUser, menus = []] = await Promise.all([
+      initialState?.fetchUserInfo(),
+      initialState?.fetchMenus(),
+    ]);
     if (!currentUser) return;
-    // 同步提交 initialState，避免跳转后 layout 读到旧的未登录状态
+    // 同步提交 initialState（当前用户 + 该用户的菜单），避免跳转后 layout 读到旧的未登录状态 / 上一个账号的菜单
     flushSync(() => {
-      setInitialState((state) => (state ? { ...state, currentUser } : state));
+      setInitialState((state) =>
+        state ? { ...state, currentUser, menus } : state,
+      );
     });
     message.success(t('pages.login.success'));
     const redirect = new URLSearchParams(window.location.search).get(

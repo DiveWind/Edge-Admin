@@ -22,6 +22,7 @@ const PAGES: { path: string; rows: boolean }[] = [
   { path: '/monitor/login-logs', rows: true },
   { path: '/monitor/operation-logs', rows: true },
   { path: '/monitor/tasks', rows: true },
+  { path: '/monitor/failed-jobs', rows: false },
   { path: '/monitor/online-sessions', rows: true },
   { path: '/monitor/system-info', rows: false },
   { path: '/message/announcements', rows: true },

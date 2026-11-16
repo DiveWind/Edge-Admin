@@ -1,6 +1,9 @@
 [
     'code' => '{{ module }}',
     'name' => '{{ module_title }}',
+    'type' => 'directory',
+    'path' => '/{{ module }}',
+    'icon' => 'AppstoreOutlined',
     'children' => [
 {{ permission_node }}
         // edge:permissions:{{ module }}

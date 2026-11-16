@@ -2,20 +2,37 @@
 
 Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依赖第三方权限包。权限码清单与接口见 [architecture.md §3](architecture.md#3-权限模型)。
 
-## 1. 功能权限
+## 1. 功能权限与动态菜单
 
-### 1.1 声明与同步
+权限点与侧边菜单是同一棵树（`permissions` 表），节点三种类型：
 
-权限点**写在代码里**：`server/config/permissions.php` 以树形声明（模块 → 菜单 → 操作），节点的 `actions` 展开为 `<节点 code>.<key>`：
+| 类型 | 用途 | 可放的下级 | 关键字段 |
+|---|---|---|---|
+| `directory` 目录 | 侧边菜单分组 | 目录、菜单 | 名称、图标、排序 |
+| `menu` 菜单 | 一个页面（前端静态路由的 `path`）或外链（`is_external` + http(s) URL，新窗口打开） | 操作 | + 路由地址 / 外链 |
+| `action` 操作（按钮） | 接口与按钮的权限点，code 必须含 `.` | 无 | 名称、权限码 |
+
+节点的 `code` 就是权限码。目录 / 菜单的权限码（如 `system`、`system.user`）只控制菜单显示与授权树的勾选，接口鉴权用操作权限码。
+
+### 1.1 内置菜单与同步
+
+内置菜单**写在代码里**：`server/config/permissions.php` 以树形声明（目录 → 菜单 → 操作），节点的 `actions` 展开为 `<节点 code>.<key>`：
 
 ```php
 [
     'code' => 'content',
     'name' => '内容管理',
+    'type' => 'directory',          // 省略时：有 children 为 directory，否则为 menu
+    'path' => '/content',
+    'icon' => 'ReadOutlined',       // @ant-design/icons 图标名，前端只在一级菜单显示
     'children' => [
         [
             'code' => 'content.article',
             'name' => '文章管理',
+            'path' => '/content/articles',   // 菜单必填，对应 web/config/routes.ts 中的静态路由
+            'icon' => 'FileTextOutlined',
+            // 'visible' => false,           // 默认 true；false 时不在菜单中显示
+            // 'external' => true,           // 外链：path 写 http(s) URL
             'actions' => ['view' => '查看', 'create' => '新增', 'update' => '编辑', 'delete' => '删除'],
         ],
         // edge:permissions:content   ← 代码生成器的插入锚点
@@ -23,13 +40,44 @@ Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依
 ],
 ```
 
-`php artisan permission:sync` 将其同步到 `permissions` 表（幂等：新增、更新名称 / 层级 / 排序，删除配置中已不存在的项）。
-`DatabaseSeeder` 会自动执行；**每次部署也应执行一次**。界面上权限只读，仅用于给角色授权。
+`php artisan permission:sync` 把配置同步到 `permissions` 表并标记为内置（`is_system`）。`DatabaseSeeder` 会自动执行；**每次部署也应执行一次**。同步规则：
 
-- 权限码格式 `模块.资源.操作`，**必须包含 `.`**；模块与菜单节点自身也是权限码（`type=menu`），用于前端菜单显示；
-- `name` 为中文默认名称；前端按 `code` 做多语言展示，后端不翻译权限名称。
+| 情况 | 处理 |
+|---|---|
+| 配置中有、表中没有 | 按配置新增（名称、类型、路由、图标、显示、排序），上级按 code 查找（上级被管理员移动过时挂到它当前的位置） |
+| 两边都有 | 只修正**结构性字段** `type` / `path` / `is_external`（与前端静态路由绑定）并标记 `is_system`；`name` / `icon` / `sort` / `is_visible` / `status` / `parent_id` / `remark` 以数据库为准，**管理员在界面上的修改不会被覆盖** |
+| 表中有、配置中没有的自定义节点 | 不处理（sync 不再删除任何节点） |
+| 曾经内置、已从配置移除 | 解除 `is_system`，转为自定义节点（保留角色授权，命令输出列出这些节点），不需要时由管理员在菜单管理中删除——比自动删除安全：不会静默收回角色已有的授权 |
 
-### 1.2 使用
+内置节点在界面上不可删除，`code` / `type` 不可修改（422），`path` / `is_external` 只读（提交的值被忽略，以配置为准）。
+
+- 权限码格式 `模块.资源.操作`；**操作必须包含 `.`**（不含 `.` 的 ability 视为 Policy 方法名），目录 / 菜单可以是单段；
+- `name` 为中文默认名称；前端按 `code` 做多语言展示（`permission.<code>`），**名称被管理员改过时直接显示 `name`**，
+  因此 `config/permissions.php` 的 `name` 要与前端 `locales/zh-CN/permission.ts`（或页面文案中的 `permission.<code>`）保持一致。
+
+### 1.2 隐藏与停用
+
+| | 菜单 | 权限 | 直接访问页面 |
+|---|---|---|---|
+| 隐藏（`is_visible = false`） | 不显示（隐藏目录时其下级也不显示） | 仍然有效 | 可以访问 |
+| 停用（`status = disabled`） | 不显示 | 该节点**及全部后代**的权限码对所有人（含超级管理员）失效，不出现在 `/api/auth/me` 与授权树中 | 403 |
+
+包含 `system.permission.view` / `.update` 的节点（菜单管理及其祖先目录）不能停用，避免把所有人锁在菜单管理之外。
+停用节点的角色授权会保留，重新启用后立即恢复。权限判定每个请求只查询一次 `permissions` 表（`App\Services\PermissionRegistry`，节点变更由模型事件清除）。
+
+### 1.3 新增一个页面（完整流程）
+
+1. **写页面与静态路由**：`web/src/pages/<模块>/<页面>/` + `web/config/routes.ts`（`access: 'routeFilter'` + `permission: '<code>.view'`）。
+   页面组件是编译期确定的，菜单只能指向已有的静态路由（或外链）。
+2. **声明菜单**（二选一）：
+   - 内置：在 `config/permissions.php` 加菜单节点（`path` = 静态路由路径、`icon`、`actions`），执行 `php artisan permission:sync`；
+     接口用操作权限码挂 `can:` 中间件。随代码发布，适合业务模块（代码生成器即这样做）；
+   - 自定义：在「系统管理 → 菜单管理」新建菜单（路由地址填静态路由路径）及其下的按钮。适合外链、调整菜单结构或复用已有页面。
+3. **授权给角色**：在「角色管理」勾选目录 / 菜单（菜单显示）与操作（接口 / 按钮）。超级管理员自动拥有全部。
+
+前端侧边菜单来自 `GET /api/auth/menus`，登录、切换账号、菜单管理 / 角色保存后即时刷新；名称、图标、顺序、显隐都在菜单管理里调整，不需要改前端代码。
+
+### 1.4 使用
 
 ```php
 // 路由：官方 can 中间件
@@ -46,14 +94,14 @@ $user->can('content.article.update');
 $user->hasPermission('content.article.update');
 ```
 
-`AppServiceProvider` 中的 `Gate::before()`：ability 含 `.` 视为权限码，用户拥有即放行（超级管理员拥有全部）；
+`AppServiceProvider` 中的 `Gate::before()`：ability 含 `.` 视为权限码，用户拥有即放行（超级管理员拥有全部未停用的权限码）；
 不含 `.` 的 ability（`view`、`update`、`delete`…）返回 `null` 交给 Policy，因此**超级管理员同样受记录级规则约束**（如不能删除自己）。
 
-### 1.3 角色与用户
+### 1.5 角色与用户
 
-- 角色 `code = super-admin` 为超级管理员：拥有全部权限，不可删除 / 禁用 / 改码；`id = 1` 的用户受保护（不可删除 / 禁用 / 去掉超级管理员角色）；
+- 角色 `code = super-admin` 为超级管理员：拥有全部（未停用的）权限，不可删除 / 禁用 / 改码；`id = 1` 的用户受保护（不可删除 / 禁用 / 去掉超级管理员角色）；
 - 被禁用的角色不生效；被禁用的用户无法登录，已签发的 token 被 `active` 中间件拒绝（401）并删除；
-- `/api/auth/me` 的 `permissions` 返回用户实际拥有的权限码全集，前端据此控制菜单与按钮。
+- `/api/auth/me` 的 `permissions` 返回用户实际拥有且生效的权限码全集，前端据此控制路由与按钮；侧边菜单由 `/api/auth/menus` 下发。
 
 ## 2. 记录级规则（Policy）
 

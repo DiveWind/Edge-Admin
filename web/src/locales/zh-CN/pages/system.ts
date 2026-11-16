@@ -28,14 +28,40 @@ export default {
   'pages.system.roles.departments': '自定义部门',
   'pages.system.roles.usersCount': '用户数',
   // 权限
+  // 部门
   'pages.system.permissions.description':
-    '权限点在后端 config/permissions.php 中声明，执行 php artisan permission:sync 同步，此处只读。',
+    '管理侧边菜单与按钮权限：目录下放目录 / 菜单，菜单下放按钮（操作权限）。内置节点由后端 config/permissions.php 声明，不可删除，权限码 / 类型 / 路由只读。',
+  'pages.system.permissions.create': '新建菜单',
+  'pages.system.permissions.edit': '编辑菜单',
+  'pages.system.permissions.addChild': '添加下级',
   'pages.system.permissions.name': '名称',
   'pages.system.permissions.code': '权限码',
+  'pages.system.permissions.code.tooltip':
+    '唯一，小写字母、数字、- 和 _，以 . 分段；按钮权限必须含 .（如 system.user.export），作为后端接口与前端按钮的权限判定',
   'pages.system.permissions.type': '类型',
-  'pages.system.permissions.type.menu': '菜单',
-  'pages.system.permissions.type.action': '操作',
-  // 部门
+  'pages.system.permissions.icon': '图标',
+  'pages.system.permissions.icon.tooltip': '只在一级菜单显示',
+  'pages.system.permissions.path': '路由地址',
+  'pages.system.permissions.path.tooltip':
+    '对应前端静态路由（web/config/routes.ts）的 path；外链填写 http(s) 地址',
+  'pages.system.permissions.path.placeholder': '如 /system/users',
+  'pages.system.permissions.externalPath.placeholder': '如 https://ant.design',
+  'pages.system.permissions.isExternal': '外链',
+  'pages.system.permissions.isExternal.tooltip': '在新窗口打开外部地址',
+  'pages.system.permissions.isVisible': '显示',
+  'pages.system.permissions.isVisible.tooltip':
+    '隐藏后不在侧边栏显示，但权限仍然有效，页面可直接访问',
+  'pages.system.permissions.status.tooltip':
+    '停用后该节点及全部下级的权限失效，也不出现在菜单中',
+  'pages.system.permissions.parent': '上级',
+  'pages.system.permissions.parent.placeholder': '不选则为顶级',
+  'pages.system.permissions.builtin': '内置',
+  'pages.system.permissions.builtin.tooltip':
+    '由后端 config/permissions.php 声明：不可删除，权限码 / 类型 / 路由不可修改',
+  'pages.system.permissions.deleteConfirm':
+    '确定删除该节点吗？已授权的角色将同时解除授权。',
+  'pages.system.permissions.visible.shown': '显示',
+  'pages.system.permissions.visible.hidden': '隐藏',
   'pages.system.departments.create': '新建部门',
   'pages.system.departments.edit': '编辑部门',
   'pages.system.departments.name': '部门名称',

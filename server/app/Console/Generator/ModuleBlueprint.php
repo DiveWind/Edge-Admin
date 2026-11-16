@@ -153,8 +153,6 @@ class ModuleBlueprint
             'web.component' => "{$this->class}List",
             'web.form_component' => "{$this->class}Form",
             'web.locale_prefix' => "pages.{$this->module}.{$this->route()}",
-            'web.menu_module' => "menu.{$this->module}",
-            'web.menu_key' => "menu.{$this->module}.{$this->route()}",
             'web.locale_file' => "{$this->module}-{$this->route()}",
             'web.locale_module' => Str::camel($this->module.'-'.$this->route()),
         ];
