@@ -51,6 +51,7 @@ const OperationLogList: React.FC = () => {
       dataIndex: 'summary',
       search: false,
       ellipsis: true,
+      width: 160,
     },
     {
       title: t('pages.monitor.operationLogs.method'),
@@ -65,6 +66,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.path'),
       dataIndex: 'path',
       ellipsis: true,
+      width: 240,
     },
     {
       title: t('pages.monitor.operationLogs.statusCode'),

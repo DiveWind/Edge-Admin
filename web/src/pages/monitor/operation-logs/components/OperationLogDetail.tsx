@@ -86,7 +86,7 @@ const OperationLogDetail: React.FC<OperationLogDetailProps> = ({
             valueType: 'jsonCode',
             // jsonCode 只格式化字符串，先序列化
             renderText: (payload: OperationLog['payload']) =>
-              JSON.stringify(payload ?? {}),
+              JSON.stringify(payload),
           },
         ]}
       />

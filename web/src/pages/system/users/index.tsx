@@ -31,15 +31,9 @@ import { toTreeData } from '@/utils/tree';
 import ResetPasswordForm from './components/ResetPasswordForm';
 import UserForm from './components/UserForm';
 import type { User } from './data';
-import {
-  deleteUser,
-  getUser,
-  queryUsers,
-  toUserFormValues,
-  updateUser,
-} from './service';
+import { deleteUser, queryUsers, updateUserStatus } from './service';
 
-/** 契约：id=1 的用户受保护，不可删除 / 禁用 */
+/** 契约：id=1 的用户受保护 */
 const PROTECTED_USER_ID = 1;
 
 const UserList: React.FC = () => {
@@ -60,9 +54,12 @@ const UserList: React.FC = () => {
     queryFn: async () => (await getDepartmentOptions()).data,
   });
 
+  const [togglingId, setTogglingId] = useState<API.Id>();
+
   const reload = () => actionRef.current?.reload();
 
-  const isProtected = (record: User) =>
+  /** 不能删除 id=1 与自己（后端同样会拒绝，这里只是提前置灰） */
+  const isUndeletable = (record: User) =>
     record.id === PROTECTED_USER_ID ||
     record.id === initialState?.currentUser?.id;
 
@@ -71,15 +68,19 @@ const UserList: React.FC = () => {
     setFormOpen(true);
   };
 
-  /** 契约没有单独的启停接口：取详情后带完整数据 PUT */
+  /**
+   * 启停：Switch 受控于 record.status，只有成功后刷新列表才会变化；
+   * 失败（id=1 → 422、禁用自己 → 403）时由全局 errorHandler 提示后端文案，Switch 保持原状。
+   */
   const toggleStatus = async (record: User, checked: boolean) => {
-    const { data } = await getUser(record.id);
-    await updateUser(record.id, {
-      ...toUserFormValues(data),
-      status: checked ? 'active' : 'disabled',
-    });
-    message.success(t('common.updated'));
-    reload();
+    setTogglingId(record.id);
+    try {
+      await updateUserStatus(record.id, checked ? 'active' : 'disabled');
+      message.success(t('common.updated'));
+      reload();
+    } finally {
+      setTogglingId(undefined);
+    }
   };
 
   const columns: ProColumns<User>[] = [
@@ -94,6 +95,7 @@ const UserList: React.FC = () => {
     {
       title: t('pages.system.users.phone'),
       dataIndex: 'phone',
+      key: 'phone',
     },
     {
       title: t('pages.system.users.department'),
@@ -126,7 +128,7 @@ const UserList: React.FC = () => {
           <Switch
             size="small"
             checked={record.status === 'active'}
-            disabled={isProtected(record)}
+            loading={togglingId === record.id}
             onChange={(checked) =>
               toggleStatus(record, checked).catch(() => undefined)
             }
@@ -146,6 +148,7 @@ const UserList: React.FC = () => {
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
+      key: 'created_at',
       valueType: 'dateTime',
       width: 170,
       search: false,
@@ -155,7 +158,7 @@ const UserList: React.FC = () => {
       title: t('common.actions'),
       valueType: 'option',
       fixed: 'right',
-      width: 200,
+      width: 180,
       render: (_, record) => [
         access.can('system.user.update') && (
           <Typography.Link key="edit" onClick={() => openForm(record)}>
@@ -170,7 +173,7 @@ const UserList: React.FC = () => {
         access.can('system.user.delete') && (
           <DeleteAction
             key="delete"
-            disabled={isProtected(record)}
+            disabled={isUndeletable(record)}
             onConfirm={() => deleteUser(record.id)}
             onSuccess={reload}
           />
@@ -182,7 +185,7 @@ const UserList: React.FC = () => {
   return (
     <PageContainer>
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={6} xxl={4}>
+        <Col xs={24} lg={6} xl={5} xxl={4}>
           <ProCard title={t('pages.system.users.departmentTree')}>
             <Spin spinning={departmentsLoading}>
               {departments.length ? (
@@ -199,13 +202,20 @@ const UserList: React.FC = () => {
             </Spin>
           </ProCard>
         </Col>
-        <Col xs={24} lg={18} xxl={20}>
+        <Col xs={24} lg={18} xl={19} xxl={20}>
           <ProTable<User>
             rowKey="id"
             actionRef={actionRef}
             columns={columns}
             params={{ department_id: departmentId }}
             scroll={{ x: 'max-content' }}
+            // 列较多：手机号、创建时间默认隐藏，可在列设置中打开
+            columnsState={{
+              defaultValue: {
+                phone: { show: false },
+                created_at: { show: false },
+              },
+            }}
             request={tableRequest(queryUsers)}
             toolBarRender={() => [
               access.can('system.user.create') && (

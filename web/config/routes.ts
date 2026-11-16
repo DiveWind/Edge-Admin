@@ -163,7 +163,8 @@ const routes: AppRoute[] = [
       { path: '/exception/500', component: './exception/500' },
     ],
   },
-  { path: '/', redirect: '/dashboard' },
+  // 落地页：跳到第一个有权限的菜单（src/pages/home）
+  { path: '/', component: './home' },
   { path: '*', layout: false, component: './exception/404' },
 ];
 

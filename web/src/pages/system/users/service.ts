@@ -20,6 +20,14 @@ export function updateUser(id: API.Id, data: UserFormValues) {
   });
 }
 
+/** 启停：id=1 → 422 errors.status；禁用自己 → 403 */
+export function updateUserStatus(id: API.Id, status: API.Status) {
+  return request<API.Resource<User>>(`/api/users/${id}/status`, {
+    method: 'PATCH',
+    data: { status },
+  });
+}
+
 export function deleteUser(id: API.Id) {
   return request<void>(`/api/users/${id}`, { method: 'DELETE' });
 }
@@ -28,7 +36,7 @@ export function resetUserPassword(id: API.Id, data: ResetPasswordValues) {
   return request<void>(`/api/users/${id}/password`, { method: 'PUT', data });
 }
 
-/** 详情 → 表单值（编辑回填、启停时提交完整数据） */
+/** 详情 → 表单值（编辑回填） */
 export function toUserFormValues(user: User): UserFormValues {
   return {
     username: user.username,

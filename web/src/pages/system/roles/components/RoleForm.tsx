@@ -14,8 +14,7 @@ import { App } from 'antd';
 import type React from 'react';
 import { useRef } from 'react';
 import { useDataScopeEnum, useStatusEnum } from '@/hooks/useValueEnums';
-import { getDepartmentOptions } from '@/services/options';
-import { getPermissionTree } from '@/services/permission';
+import { getDepartmentOptions, getPermissionOptions } from '@/services/options';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
 import type { Role, RoleDetail, RoleFormValues } from '../data';
@@ -56,8 +55,8 @@ const RoleForm: React.FC<RoleFormProps> = ({
   const isSuperAdmin = Boolean(record?.is_super_admin);
 
   const { data: permissions = [] } = useQuery({
-    queryKey: ['permissions', 'tree'],
-    queryFn: async () => (await getPermissionTree()).data,
+    queryKey: ['options', 'permissions'],
+    queryFn: async () => (await getPermissionOptions()).data,
     enabled: open,
   });
   const { data: departments = [] } = useQuery({

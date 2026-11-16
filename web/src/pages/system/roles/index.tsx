@@ -60,6 +60,7 @@ const RoleList: React.FC = () => {
       dataIndex: 'remark',
       search: false,
       ellipsis: true,
+      width: 200,
     },
     {
       title: t('common.createdAt'),

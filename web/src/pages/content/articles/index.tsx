@@ -44,6 +44,7 @@ const ArticleList: React.FC = () => {
       title: t('pages.content.articles.title'),
       dataIndex: 'title',
       ellipsis: true,
+      width: 260,
     },
     {
       title: t('pages.content.articles.category'),

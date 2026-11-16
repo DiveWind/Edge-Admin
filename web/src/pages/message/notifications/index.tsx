@@ -59,6 +59,7 @@ const NotificationList: React.FC = () => {
       title: t('pages.message.notifications.content'),
       dataIndex: 'content',
       ellipsis: true,
+      width: 360,
     },
     {
       title: t('pages.message.notifications.receivedAt'),

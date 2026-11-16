@@ -8,6 +8,13 @@ export function getDepartmentOptions() {
   );
 }
 
+/** 权限树（同 GET /api/permissions），角色授权用，不需要 system.permission.view */
+export function getPermissionOptions() {
+  return request<API.Collection<API.PermissionNode>>(
+    '/api/options/permissions',
+  );
+}
+
 export function getRoleOptions() {
   return request<API.Collection<API.Option>>('/api/options/roles');
 }

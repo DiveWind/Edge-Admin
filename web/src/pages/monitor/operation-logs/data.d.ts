@@ -11,7 +11,7 @@ export interface OperationLog {
   user_agent: string;
   status_code: number;
   duration_ms: number;
-  /** 空 payload 时后端返回 `[]` */
-  payload: Record<string, unknown> | unknown[] | null;
+  /** 恒为对象，无内容时为 `{}` */
+  payload: Record<string, unknown>;
   created_at: string;
 }

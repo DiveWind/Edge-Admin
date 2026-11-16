@@ -46,6 +46,7 @@ const AnnouncementList: React.FC = () => {
       title: t('pages.message.announcements.title'),
       dataIndex: 'title',
       ellipsis: true,
+      width: 280,
     },
     {
       title: t('pages.message.announcements.type'),
