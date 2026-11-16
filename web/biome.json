@@ -12,18 +12,13 @@
       "!**/.umi",
       "!**/.umi-production",
       "!**/.umi-test",
-      "!**/.umi-test-production",
-      "!**/src/services",
-      "!**/mock",
       "!**/dist",
-      "!**/server",
       "!**/public",
       "!**/coverage",
       "!**/node_modules",
       "!biome.json",
       "!tailwind.css",
-      "!package-lock.json",
-      "!**/.worktrees"
+      "!package-lock.json"
     ]
   },
   "formatter": {
@@ -35,7 +30,7 @@
     "rules": {
       "preset": "recommended",
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "error",
         "noUnknownAtRules": "off"
       },
       "correctness": {
