@@ -4,6 +4,8 @@ export interface Category {
   name: string;
   sort: number;
   status: API.Status;
+  /** 分类下文章数（> 0 时不可删除） */
+  articles_count: number;
   created_at: string;
 }
 

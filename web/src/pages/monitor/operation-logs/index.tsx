@@ -76,6 +76,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.duration'),
       dataIndex: 'duration_ms',
       search: false,
+      sorter: true,
       renderText: (value: number) => `${value} ms`,
     },
     {
@@ -87,6 +88,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.operatedAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },

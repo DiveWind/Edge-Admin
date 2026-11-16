@@ -5,11 +5,14 @@ export function getScheduledTasks() {
   return request<API.Collection<ScheduledTask>>('/api/scheduled-tasks');
 }
 
-/** 立即执行一次（入队），202 */
+/** 立即执行一次（入队），202 `{message}` */
 export function runScheduledTask(key: string) {
-  return request<void>(`/api/scheduled-tasks/${encodeURIComponent(key)}/run`, {
-    method: 'POST',
-  });
+  return request<{ message: string }>(
+    `/api/scheduled-tasks/${encodeURIComponent(key)}/run`,
+    {
+      method: 'POST',
+    },
+  );
 }
 
 export function queryTaskLogs(params: API.ListQuery) {
@@ -18,12 +21,9 @@ export function queryTaskLogs(params: API.ListQuery) {
   });
 }
 
-/** 契约未说明是否分页，分页 / 非分页响应均可（见 toTableResult） */
-export function queryFailedJobs(params: API.ListQuery) {
-  return request<API.Paginated<FailedJob> | API.Collection<FailedJob>>(
-    '/api/failed-jobs',
-    { params },
-  );
+/** 不分页 */
+export function getFailedJobs() {
+  return request<API.Collection<FailedJob>>('/api/failed-jobs');
 }
 
 export function retryFailedJob(uuid: string) {

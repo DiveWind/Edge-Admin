@@ -6,6 +6,7 @@ import {
 import { useModel } from '@umijs/max';
 import { App, Col, Divider, Form, Row, Space, Tag } from 'antd';
 import type React from 'react';
+import { useState } from 'react';
 import { ImageUpload } from '@/components';
 import { useDataScopeEnum } from '@/hooks/useValueEnums';
 import { updateProfile } from '@/services/auth';
@@ -21,6 +22,13 @@ const BasicSettings: React.FC<{ currentUser: API.CurrentUser }> = ({
   const { setInitialState } = useModel('@@initialState');
   const dataScopeEnum = useDataScopeEnum();
   const [form] = Form.useForm<API.ProfileParams>();
+  // 只在挂载时取一次：保存后 currentUser 会更新，但表单已持有最新值
+  const [initialValues] = useState<API.ProfileParams>(() => ({
+    name: currentUser.name,
+    email: currentUser.email,
+    phone: currentUser.phone,
+    avatar: currentUser.avatar,
+  }));
 
   const handleFinish = (values: API.ProfileParams) =>
     submitForm(form, async () => {
@@ -81,12 +89,7 @@ const BasicSettings: React.FC<{ currentUser: API.CurrentUser }> = ({
             form={form}
             omitNil={false}
             layout="vertical"
-            initialValues={{
-              name: currentUser.name,
-              email: currentUser.email,
-              phone: currentUser.phone,
-              avatar: currentUser.avatar,
-            }}
+            initialValues={initialValues}
             submitter={{
               searchConfig: { submitText: t('pages.account.save') },
               resetButtonProps: false,

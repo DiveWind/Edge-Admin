@@ -36,7 +36,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       : [];
 
   const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-    if (!file.type.startsWith('image/')) {
+    // 后端只接受位图（不含 svg）
+    if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
       message.error(t('component.upload.imageOnly'));
       return Upload.LIST_IGNORE;
     }
@@ -63,7 +64,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
   return (
     <Upload
-      accept="image/*"
+      accept="image/png,image/jpeg,image/gif,image/webp"
       listType="picture-card"
       maxCount={1}
       disabled={disabled}

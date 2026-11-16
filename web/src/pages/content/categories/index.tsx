@@ -32,6 +32,11 @@ const CategoryList: React.FC = () => {
     { title: t('pages.content.categories.name'), dataIndex: 'name' },
     { title: t('common.sort'), dataIndex: 'sort', search: false, sorter: true },
     {
+      title: t('pages.content.categories.articlesCount'),
+      dataIndex: 'articles_count',
+      search: false,
+    },
+    {
       title: t('common.status'),
       dataIndex: 'status',
       valueType: 'select',
@@ -41,6 +46,7 @@ const CategoryList: React.FC = () => {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },
@@ -57,6 +63,7 @@ const CategoryList: React.FC = () => {
         access.can('content.category.delete') && (
           <DeleteAction
             key="delete"
+            disabled={record.articles_count > 0}
             title={t('pages.content.categories.deleteConfirm')}
             onConfirm={() => deleteCategory(record.id)}
             onSuccess={reload}

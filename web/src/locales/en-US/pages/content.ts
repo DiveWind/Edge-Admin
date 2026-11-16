@@ -13,6 +13,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.content.categories.create': 'New Category',
   'pages.content.categories.edit': 'Edit Category',
   'pages.content.categories.name': 'Category Name',
+  'pages.content.categories.articlesCount': 'Articles',
   'pages.content.categories.deleteConfirm':
     'Delete this category? Categories that still have articles cannot be deleted.',
 };

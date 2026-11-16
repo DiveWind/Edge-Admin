@@ -11,7 +11,7 @@ import { useT } from '@/utils/i18n';
 import { tableRequest } from '@/utils/table';
 import RoleForm from './components/RoleForm';
 import type { Role } from './data';
-import { deleteRole, queryRoles, SUPER_ADMIN_CODE } from './service';
+import { deleteRole, queryRoles } from './service';
 
 const RoleList: React.FC = () => {
   const t = useT();
@@ -51,6 +51,11 @@ const RoleList: React.FC = () => {
       valueEnum: statusEnum,
     },
     {
+      title: t('pages.system.roles.usersCount'),
+      dataIndex: 'users_count',
+      search: false,
+    },
+    {
       title: t('common.remark'),
       dataIndex: 'remark',
       search: false,
@@ -60,6 +65,7 @@ const RoleList: React.FC = () => {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },
@@ -76,7 +82,8 @@ const RoleList: React.FC = () => {
         access.can('system.role.delete') && (
           <DeleteAction
             key="delete"
-            disabled={record.code === SUPER_ADMIN_CODE}
+            // 超级管理员角色、已分配用户的角色不可删除
+            disabled={record.is_super_admin || record.users_count > 0}
             onConfirm={() => deleteRole(record.id)}
             onSuccess={reload}
           />

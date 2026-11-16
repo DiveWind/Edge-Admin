@@ -1,13 +1,16 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import type { ProFormInstance } from '@ant-design/pro-components';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, useModel } from '@umijs/max';
 import { Alert, App } from 'antd';
 import { createStyles } from 'antd-style';
 import type React from 'react';
+import { useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { Footer, LangDropdown } from '@/components';
 import { login } from '@/services/auth';
 import { getSafeRedirect, setToken } from '@/utils/auth';
+import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
 import defaultSettings from '../../../../config/defaultSettings';
 
@@ -34,6 +37,7 @@ const Login: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
   const { initialState, setInitialState } = useModel('@@initialState');
+  const formRef = useRef<ProFormInstance<API.LoginParams>>(undefined);
 
   const handleSubmit = async (values: API.LoginParams) => {
     const { data } = await login(values);
@@ -62,10 +66,11 @@ const Login: React.FC = () => {
           logo={<img alt="logo" src={defaultSettings.logo} />}
           title={defaultSettings.title}
           subTitle={t('pages.login.subTitle')}
-          onFinish={async (values) => {
-            // 失败提示（422 账号或密码错误、429 限流等）由全局 errorHandler 负责
-            await handleSubmit(values).catch(() => undefined);
-          }}
+          formRef={formRef}
+          // 422（账号或密码错误、账号禁用）回填到 username 字段；提示由全局 errorHandler 负责
+          onFinish={(values) =>
+            submitForm(formRef.current, () => handleSubmit(values))
+          }
         >
           <Alert
             type="info"

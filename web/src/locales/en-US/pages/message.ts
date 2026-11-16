@@ -9,6 +9,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.message.announcements.type.notice': 'Notice',
   'pages.message.announcements.type.announcement': 'Announcement',
   'pages.message.announcements.content': 'Content',
+  'pages.message.announcements.creator': 'Author',
   'pages.message.announcements.publish': 'Publish',
   'pages.message.announcements.publishConfirm':
     'All active users will be notified and it can no longer be edited. Publish now?',

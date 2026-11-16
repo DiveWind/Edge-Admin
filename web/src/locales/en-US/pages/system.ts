@@ -26,6 +26,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.system.roles.dataScope': 'Data Scope',
   'pages.system.roles.permissions': 'Permissions',
   'pages.system.roles.departments': 'Custom Departments',
+  'pages.system.roles.usersCount': 'Users',
   'pages.system.permissions.description':
     'Permissions are declared in the backend config/permissions.php and synced with php artisan permission:sync. Read only.',
   'pages.system.permissions.name': 'Name',

@@ -8,6 +8,7 @@ export default {
   'pages.message.announcements.type.notice': '通知',
   'pages.message.announcements.type.announcement': '公告',
   'pages.message.announcements.content': '内容',
+  'pages.message.announcements.creator': '发布人',
   'pages.message.announcements.publish': '发布',
   'pages.message.announcements.publishConfirm':
     '发布后将通知所有启用用户，且不可再编辑，确定发布吗？',

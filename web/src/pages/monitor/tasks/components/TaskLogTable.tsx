@@ -29,6 +29,7 @@ const TaskLogTable: React.FC<TaskLogTableProps> = ({ task }) => {
       title: t('pages.monitor.tasks.duration'),
       dataIndex: 'duration_ms',
       search: false,
+      sorter: true,
       renderText: (value: number | null) =>
         value === null ? '-' : `${value} ms`,
     },
@@ -36,6 +37,7 @@ const TaskLogTable: React.FC<TaskLogTableProps> = ({ task }) => {
       title: t('pages.monitor.tasks.startedAt'),
       dataIndex: 'started_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },
@@ -43,6 +45,7 @@ const TaskLogTable: React.FC<TaskLogTableProps> = ({ task }) => {
       title: t('pages.monitor.tasks.finishedAt'),
       dataIndex: 'finished_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
     },
   ];

@@ -4,7 +4,6 @@ import { history, useModel } from '@umijs/max';
 import {
   Badge,
   Button,
-  Divider,
   Empty,
   Flex,
   Listy,
@@ -38,6 +37,9 @@ const useStyles = createStyles(({ token, css }) => ({
   item: css`
     padding: ${token.paddingXS}px 0;
     border-bottom: 1px solid ${token.colorSplit};
+  `,
+  footer: css`
+    padding-top: ${token.paddingXS}px;
   `,
 }));
 
@@ -122,8 +124,7 @@ export const NoticeBell: React.FC = () => {
           />
         )}
       </Spin>
-      <Divider style={{ margin: '8px 0' }} />
-      <Flex justify="space-between">
+      <Flex justify="space-between" className={styles.footer}>
         <Button
           type="link"
           size="small"

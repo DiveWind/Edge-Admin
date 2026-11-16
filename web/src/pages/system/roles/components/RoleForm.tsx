@@ -19,7 +19,7 @@ import { getPermissionTree } from '@/services/permission';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
 import type { Role, RoleDetail, RoleFormValues } from '../data';
-import { createRole, getRole, SUPER_ADMIN_CODE, updateRole } from '../service';
+import { createRole, getRole, updateRole } from '../service';
 import CheckTree from './CheckTree';
 
 interface RoleFormProps {
@@ -52,7 +52,8 @@ const RoleForm: React.FC<RoleFormProps> = ({
   const dataScopeEnum = useDataScopeEnum();
   // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
   const formRef = useRef<ProFormInstance<RoleFormValues>>(undefined);
-  const isSuperAdmin = record?.code === SUPER_ADMIN_CODE;
+  /** 超级管理员角色：拥有全部权限，不可改码 / 禁用 / 改授权 */
+  const isSuperAdmin = Boolean(record?.is_super_admin);
 
   const { data: permissions = [] } = useQuery({
     queryKey: ['permissions', 'tree'],

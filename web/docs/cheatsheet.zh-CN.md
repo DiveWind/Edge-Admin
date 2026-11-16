@@ -1,5 +1,8 @@
 # Ant Design Pro Cheatsheet
 
+> **上游参考**：本文是 Ant Design Pro 官方速查（v6 模板），保留作为 Umi / ProComponents 用法参考。
+> 其中 mock、openapi、多语言、`npm run simple`、`/api/currentUser` 等内容不适用于 Edge Admin，项目约定以 `../CLAUDE.md` 为准。
+
 [![GitHub](https://img.shields.io/badge/GitHub-ant--design%2Fant--design--pro-181717?logo=github)](https://github.com/ant-design/ant-design-pro) [![Stars](https://img.shields.io/github/stars/ant-design/ant-design-pro?style=social)](https://github.com/ant-design/ant-design-pro) [![Version](https://img.shields.io/github/package-json/v/ant-design/ant-design-pro)](https://github.com/ant-design/ant-design-pro/releases) [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/) [![React Review](https://react.review/api/badge/ant-design/ant-design-pro)](https://react.review/repo/ant-design/ant-design-pro)
 
 ![Ant Design Pro](https://mdn.alipayobjects.com/huamei_fkc4p0/afts/img/A*EX3ISYC2ghEAAAAAddAAAAgAeobDAQ/original)

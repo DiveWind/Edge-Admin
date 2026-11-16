@@ -43,6 +43,7 @@ const DepartmentList: React.FC = () => {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
     },
     {

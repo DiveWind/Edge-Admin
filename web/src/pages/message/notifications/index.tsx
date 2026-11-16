@@ -65,6 +65,7 @@ const NotificationList: React.FC = () => {
       dataIndex: 'created_at',
       valueType: 'dateTime',
       width: 180,
+      sorter: true,
     },
     {
       title: t('common.actions'),

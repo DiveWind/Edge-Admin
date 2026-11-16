@@ -1,9 +1,6 @@
 import { request } from '@umijs/max';
 import type { Role, RoleDetail, RoleFormValues } from './data';
 
-/** 契约：超级管理员角色不可删除 / 禁用 / 改码 */
-export const SUPER_ADMIN_CODE = 'super-admin';
-
 export function queryRoles(params: API.ListQuery) {
   return request<API.Paginated<Role>>('/api/roles', { params });
 }

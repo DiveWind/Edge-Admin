@@ -9,6 +9,7 @@ export interface Announcement {
   status: API.PublishStatus;
   published_at: string | null;
   created_by: API.Id;
+  creator: API.Brief | null;
   created_at: string;
   updated_at: string;
 }

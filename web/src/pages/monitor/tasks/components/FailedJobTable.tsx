@@ -6,9 +6,8 @@ import type React from 'react';
 import { useRef } from 'react';
 import { DeleteAction } from '@/components';
 import { useT } from '@/utils/i18n';
-import { tableRequest } from '@/utils/table';
 import type { FailedJob } from '../data';
-import { deleteFailedJob, queryFailedJobs, retryFailedJob } from '../service';
+import { deleteFailedJob, getFailedJobs, retryFailedJob } from '../service';
 
 const FailedJobTable: React.FC = () => {
   const t = useT();
@@ -40,6 +39,7 @@ const FailedJobTable: React.FC = () => {
       title: t('pages.monitor.failedJobs.failedAt'),
       dataIndex: 'failed_at',
       valueType: 'dateTime',
+      width: 170,
     },
     {
       title: t('common.actions'),
@@ -74,7 +74,11 @@ const FailedJobTable: React.FC = () => {
       actionRef={actionRef}
       columns={columns}
       search={false}
-      request={tableRequest(queryFailedJobs)}
+      pagination={false}
+      request={async () => {
+        const { data } = await getFailedJobs();
+        return { data, success: true };
+      }}
       expandable={{
         expandedRowRender: (record) => (
           <Typography.Paragraph

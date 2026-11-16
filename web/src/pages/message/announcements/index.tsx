@@ -60,15 +60,23 @@ const AnnouncementList: React.FC = () => {
       valueEnum: statusEnum,
     },
     {
+      title: t('pages.message.announcements.creator'),
+      dataIndex: ['creator', 'name'],
+      search: false,
+    },
+    {
       title: t('common.publishedAt'),
       dataIndex: 'published_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
+      sorter: true,
     },
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },

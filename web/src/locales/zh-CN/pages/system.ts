@@ -26,6 +26,7 @@ export default {
   'pages.system.roles.dataScope': '数据权限',
   'pages.system.roles.permissions': '功能权限',
   'pages.system.roles.departments': '自定义部门',
+  'pages.system.roles.usersCount': '用户数',
   // 权限
   'pages.system.permissions.description':
     '权限点在后端 config/permissions.php 中声明，执行 php artisan permission:sync 同步，此处只读。',

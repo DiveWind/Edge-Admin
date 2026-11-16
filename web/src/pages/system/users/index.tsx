@@ -139,12 +139,15 @@ const UserList: React.FC = () => {
       title: t('pages.system.users.lastLoginAt'),
       dataIndex: 'last_login_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
+      sorter: true,
     },
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },
@@ -202,7 +205,7 @@ const UserList: React.FC = () => {
             actionRef={actionRef}
             columns={columns}
             params={{ department_id: departmentId }}
-            scroll={{ x: 1100 }}
+            scroll={{ x: 'max-content' }}
             request={tableRequest(queryUsers)}
             toolBarRender={() => [
               access.can('system.user.create') && (

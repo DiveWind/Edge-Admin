@@ -60,6 +60,7 @@ const LoginLogList: React.FC = () => {
       title: t('pages.monitor.loginLogs.loginAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },

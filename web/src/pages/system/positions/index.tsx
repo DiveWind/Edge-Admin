@@ -52,6 +52,7 @@ const PositionList: React.FC = () => {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
       valueType: 'dateTime',
+      width: 170,
       search: false,
       sorter: true,
     },
@@ -68,6 +69,7 @@ const PositionList: React.FC = () => {
         access.can('system.position.delete') && (
           <DeleteAction
             key="delete"
+            disabled={record.users_count > 0}
             onConfirm={() => deletePosition(record.id)}
             onSuccess={reload}
           />

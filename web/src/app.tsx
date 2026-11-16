@@ -1,3 +1,4 @@
+import { UserOutlined } from '@ant-design/icons';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
 import type React from 'react';
@@ -70,6 +71,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
   ],
   avatarProps: {
     src: initialState?.currentUser?.avatar || undefined,
+    icon: <UserOutlined />,
     title: initialState?.currentUser?.name,
     size: 'small',
     render: (_, avatarChildren) => (

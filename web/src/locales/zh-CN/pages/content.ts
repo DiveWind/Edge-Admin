@@ -13,6 +13,7 @@ export default {
   'pages.content.categories.create': '新建分类',
   'pages.content.categories.edit': '编辑分类',
   'pages.content.categories.name': '分类名称',
+  'pages.content.categories.articlesCount': '文章数',
   'pages.content.categories.deleteConfirm':
     '确定删除该分类吗？分类下存在文章时无法删除。',
 };

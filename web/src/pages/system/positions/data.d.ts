@@ -6,6 +6,8 @@ export interface Position {
   sort: number;
   status: API.Status;
   remark: string | null;
+  /** 在岗用户数（> 0 时不可删除） */
+  users_count: number;
   created_at: string;
 }
 

@@ -137,6 +137,8 @@ const Dashboard: React.FC = () => {
           colSpan={{ xs: 24, xl: 16 }}
           loading={isLoading}
           headerBordered
+          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
+          style={{ overflow: 'hidden' }}
         >
           <LoginTrendChart data={data?.login_trend ?? []} />
         </ProCard>
@@ -145,6 +147,8 @@ const Dashboard: React.FC = () => {
           colSpan={{ xs: 24, xl: 8 }}
           loading={isLoading}
           headerBordered
+          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
+          style={{ overflow: 'hidden' }}
         >
           <ArticleCategoryChart data={data?.articles_by_category ?? []} />
         </ProCard>
@@ -153,6 +157,8 @@ const Dashboard: React.FC = () => {
           colSpan={{ xs: 24, xl: 12 }}
           loading={isLoading}
           headerBordered
+          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
+          style={{ overflow: 'hidden' }}
         >
           <DepartmentUserChart data={data?.users_by_department ?? []} />
         </ProCard>

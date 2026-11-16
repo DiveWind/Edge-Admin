@@ -7,6 +7,9 @@ export interface Role {
   sort: number;
   status: API.Status;
   remark: string | null;
+  /** 已分配的用户数（> 0 时不可删除） */
+  users_count: number;
+  is_super_admin: boolean;
   created_at: string;
   updated_at: string;
 }

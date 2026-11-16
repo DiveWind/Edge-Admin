@@ -10,8 +10,8 @@ import { getScheduledTasks, runScheduledTask } from '../service';
 import useTaskLogStatusEnum from '../useTaskLogStatusEnum';
 
 interface ScheduledTaskTableProps {
-  /** 查看某个任务的执行日志 */
-  onViewLogs: (task: string) => void;
+  /** 查看某个任务的执行日志（日志的 task 字段是命令，不是 key） */
+  onViewLogs: (command: string) => void;
 }
 
 const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
@@ -23,8 +23,8 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
   const logStatusEnum = useTaskLogStatusEnum();
 
   const handleRun = async (task: ScheduledTask) => {
-    await runScheduledTask(task.key);
-    message.success(t('pages.monitor.tasks.queued'));
+    const result = await runScheduledTask(task.key);
+    message.success(result?.message || t('pages.monitor.tasks.queued'));
   };
 
   const columns: ProColumns<ScheduledTask>[] = [
@@ -54,6 +54,7 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
       title: t('pages.monitor.tasks.nextRunAt'),
       dataIndex: 'next_run_at',
       valueType: 'dateTime',
+      width: 170,
     },
     {
       title: t('pages.monitor.tasks.lastStatus'),
@@ -64,6 +65,7 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
       title: t('pages.monitor.tasks.lastRunAt'),
       dataIndex: ['last_log', 'started_at'],
       valueType: 'dateTime',
+      width: 170,
     },
     {
       title: t('common.actions'),
@@ -81,7 +83,7 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
             </Typography.Link>
           </Popconfirm>
         ),
-        <Typography.Link key="logs" onClick={() => onViewLogs(record.key)}>
+        <Typography.Link key="logs" onClick={() => onViewLogs(record.command)}>
           {t('pages.monitor.tasks.viewLogs')}
         </Typography.Link>,
       ],
