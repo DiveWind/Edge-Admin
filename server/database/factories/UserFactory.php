@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<User>
@@ -26,7 +27,7 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'username' => fake()->unique()->regexify('user_[a-z0-9]{8}'),
+            'username' => Str::slug(fake('en_US')->firstName(), '').fake()->unique()->numberBetween(10, 9999),
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'phone' => fake()->numerify('1##########'),
@@ -37,6 +38,17 @@ class UserFactory extends Factory
             'status' => Status::Active,
             'password' => static::$password ??= Hash::make('password'),
         ];
+    }
+
+    /**
+     * 最近登录过（带 last_login_at / last_login_ip）。
+     */
+    public function recentlyLoggedIn(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'last_login_at' => fake()->dateTimeBetween('-7 days'),
+            'last_login_ip' => fake()->ipv4(),
+        ]);
     }
 
     public function disabled(): static

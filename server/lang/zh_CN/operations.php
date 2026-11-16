@@ -12,6 +12,7 @@ return [
     'users.update' => '编辑用户',
     'users.destroy' => '删除用户',
     'users.password' => '重置用户密码',
+    'users.status' => '修改用户状态',
     'roles.store' => '新增角色',
     'roles.update' => '编辑角色',
     'roles.destroy' => '删除角色',

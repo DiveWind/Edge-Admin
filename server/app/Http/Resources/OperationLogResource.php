@@ -31,7 +31,7 @@ class OperationLogResource extends JsonResource
             'user_agent' => $this->user_agent,
             'status_code' => $this->status_code,
             'duration_ms' => $this->duration_ms,
-            'payload' => $this->payload,
+            'payload' => (object) ($this->payload ?? []),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

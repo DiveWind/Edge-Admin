@@ -3,6 +3,7 @@
 return [
     'user' => [
         'delete_self' => '不能删除自己。',
+        'disable_self' => '不能禁用自己。',
         'root_protected' => '初始超级管理员账号受保护。',
     ],
     'role' => [

@@ -47,7 +47,11 @@ test('operation logs can be listed, shown and cleared', function () {
     $this->getJson('/api/operation-logs?method=DELETE')
         ->assertOk()
         ->assertJsonPath('data.0.user', ['id' => $this->admin->id, 'name' => $this->admin->name]);
-    $this->getJson("/api/operation-logs/{$log->id}")->assertOk()->assertJsonPath('data.path', $log->path);
+    $this->getJson("/api/operation-logs/{$log->id}")
+        ->assertOk()
+        ->assertJsonPath('data.path', $log->path);
+
+    expect($this->getJson("/api/operation-logs/{$log->id}")->getContent())->toContain('"payload":{}');
     $this->deleteJson('/api/operation-logs')->assertNoContent();
 
     // 清空请求本身会在响应后被记录

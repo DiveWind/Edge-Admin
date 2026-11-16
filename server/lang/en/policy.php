@@ -3,6 +3,7 @@
 return [
     'user' => [
         'delete_self' => 'You cannot delete yourself.',
+        'disable_self' => 'You cannot disable yourself.',
         'root_protected' => 'The initial super administrator is protected.',
     ],
     'role' => [

@@ -156,6 +156,7 @@ CurrentUser：
 | GET | `/api/users/{id}` | `.view` | 含 department roles positions |
 | PUT | `/api/users/{id}` | `.update` | 同创建，无 password |
 | DELETE | `/api/users/{id}` | `.delete` | 不可删自己与 id=1（403）；软删除并吊销其 token |
+| PATCH | `/api/users/{id}/status` | `.update` | `{status}` → `{data: User}`；受数据权限约束；不能禁用自己（403）；id=1 不可禁用（422 `errors.status`）；禁用时吊销该用户全部 token |
 | PUT | `/api/users/{id}/password` | `.reset-password` | `{password, password_confirmation}` → 204（吊销该用户全部 token） |
 | GET | `/api/roles` | `system.role.view` | name code status；项含 `users_count`、`is_super_admin` |
 | POST/PUT | `/api/roles[/{id}]` | `.create`/`.update` | name code data_scope sort status remark? permission_ids[] department_ids[]（仅 custom 时生效） |
@@ -172,7 +173,7 @@ CurrentUser：
 |---|---|---|---|
 | GET | `/api/login-logs` | `monitor.login-log.view` | 过滤 username ip status created_from/to |
 | DELETE | `/api/login-logs/{id}` 、`/api/login-logs` | `.delete` | 单删 / 清空 |
-| GET | `/api/operation-logs[/{id}]` | `monitor.operation-log.view` | 过滤 username method path status_code created_from/to；含 user{id,name} |
+| GET | `/api/operation-logs[/{id}]` | `monitor.operation-log.view` | 过滤 username method path status_code created_from/to；含 user{id,name}；`payload` 恒为 JSON 对象（无内容时为 `{}`） |
 | DELETE | `/api/operation-logs/{id}` 、`/api/operation-logs` | `.delete` | 单删 / 清空 |
 | GET | `/api/scheduled-tasks` | `monitor.scheduled-task.view` | 读取 Laravel Schedule：`[{key, command, description, expression, next_run_at, last_log?}]`（不分页）；`key` 为命令的 slug（如 `model-prune`、`sanctum-prune-expired-hours-24`），`last_log` 为最近一条执行日志或 `null` |
 | POST | `/api/scheduled-tasks/{key}/run` | `.run` | 立即执行一次（入队），202 `{message}`；key 不存在 404 |
@@ -209,6 +210,7 @@ CurrentUser：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/options/departments` | 启用部门树 `[{id, name, parent_id, children}]` |
+| GET | `/api/options/permissions` | 权限树，形状同 `GET /api/permissions`；供角色授权表单使用（无需 `system.permission.view`） |
 | GET | `/api/options/roles` `/positions` `/article-categories` `/users` | 启用项 `[{id, name}]`（roles/positions 额外带 code） |
 | POST | `/api/uploads` | multipart `file`（图片，≤2MB，不含 svg）→ `201 {data:{url, path}}`，存 public 磁盘 |
 | GET | `/api/dashboard` | `dashboard.view`；见下 |

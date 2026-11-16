@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\Status;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
@@ -27,6 +28,18 @@ class UserPolicy
     public function resetPassword(User $actor, User $user): Response
     {
         return $this->update($actor, $user);
+    }
+
+    /**
+     * 启用 / 禁用：不能禁用自己；id=1 的保护由 Form Request 校验（422）。
+     */
+    public function updateStatus(User $actor, User $user, string $status): Response
+    {
+        if ($actor->is($user) && $status === Status::Disabled->value) {
+            return Response::deny(__('policy.user.disable_self'));
+        }
+
+        return $user->isVisibleTo($actor) ? Response::allow() : Response::deny();
     }
 
     public function delete(User $actor, User $user): Response

@@ -33,6 +33,17 @@ test('options only return active items and only require login', function () {
     $this->getJson('/api/options/users')->assertOk()->assertJsonStructure(['data' => [['id', 'name']]]);
 });
 
+test('permission tree option only requires login', function () {
+    $this->artisan('permission:sync');
+    actingAsUser(User::factory()->create());
+
+    $this->getJson('/api/options/permissions')
+        ->assertOk()
+        ->assertJsonPath('data.0.code', 'dashboard')
+        ->assertJsonStructure(['data' => [['id', 'parent_id', 'name', 'code', 'type', 'sort', 'children']]]);
+    $this->getJson('/api/permissions')->assertForbidden();
+});
+
 test('images can be uploaded to the public disk', function () {
     Storage::fake('public');
     actingAsUser(User::factory()->create());

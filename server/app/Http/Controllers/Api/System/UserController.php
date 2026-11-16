@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\System\ResetUserPasswordRequest;
 use App\Http\Requests\System\StoreUserRequest;
 use App\Http\Requests\System\UpdateUserRequest;
+use App\Http\Requests\System\UpdateUserStatusRequest;
 use App\Http\Requests\System\UserIndexRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -57,6 +58,22 @@ class UserController extends Controller
             $user->update(Arr::except($request->validated(), ['role_ids', 'position_ids']));
             $user->roles()->sync($request->validated('role_ids'));
             $user->positions()->sync($request->validated('position_ids'));
+        });
+
+        return new UserResource($user->load(['department', 'roles', 'positions']));
+    }
+
+    /**
+     * 启用 / 禁用用户；禁用时吊销其全部 token。
+     */
+    public function updateStatus(UpdateUserStatusRequest $request, User $user): UserResource
+    {
+        DB::transaction(function () use ($request, $user): void {
+            $user->update(['status' => $request->validated('status')]);
+
+            if (! $user->isActive()) {
+                $user->tokens()->delete();
+            }
         });
 
         return new UserResource($user->load(['department', 'roles', 'positions']));

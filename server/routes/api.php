@@ -50,6 +50,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     Route::put('users/{user}/password', [UserController::class, 'resetPassword'])
         ->middleware('can:system.user.reset-password')
         ->name('users.password');
+    Route::patch('users/{user}/status', [UserController::class, 'updateStatus'])
+        ->middleware('can:system.user.update')
+        ->name('users.status');
     Route::apiResource('users', UserController::class)
         ->middlewareFor(['index', 'show'], 'can:system.user.view')
         ->middlewareFor('store', 'can:system.user.create')
@@ -149,6 +152,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     // 公共
     Route::prefix('options')->name('options.')->controller(OptionController::class)->group(function (): void {
         Route::get('departments', 'departments')->name('departments');
+        Route::get('permissions', 'permissions')->name('permissions');
         Route::get('roles', 'roles')->name('roles');
         Route::get('positions', 'positions')->name('positions');
         Route::get('article-categories', 'articleCategories')->name('article-categories');

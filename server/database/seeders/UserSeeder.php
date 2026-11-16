@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\Position;
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
@@ -32,7 +33,13 @@ class UserSeeder extends Seeder
         ];
 
         foreach ($members as $department => $position) {
-            User::factory(2)->create(['department_id' => $departments[$department]])
+            User::factory()
+                ->count(2)
+                ->sequence(fn (Sequence $sequence): array => $sequence->index % 2 === 0 ? [
+                    'last_login_at' => now()->subHours(fake()->numberBetween(1, 72)),
+                    'last_login_ip' => fake()->ipv4(),
+                ] : [])
+                ->create(['department_id' => $departments[$department]])
                 ->each(function (User $user) use ($roles, $positions, $position): void {
                     $user->roles()->sync([$roles['viewer']]);
                     $user->positions()->sync([$positions[$position]]);
@@ -57,7 +64,7 @@ class UserSeeder extends Seeder
         Collection $roles,
         Collection $positions,
     ): User {
-        $user = User::factory()->create([
+        $user = User::factory()->recentlyLoggedIn()->create([
             'username' => $username,
             'name' => $name,
             'email' => "{$username}@example.com",

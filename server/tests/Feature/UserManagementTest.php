@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\DataScope;
 use App\Models\Department;
 use App\Models\Position;
 use App\Models\Role;
@@ -110,4 +111,44 @@ test('only super admins can assign the super admin role', function () {
         'username' => 'evil', 'name' => 'x', 'password' => 'password123', 'status' => 'active',
         'role_ids' => [$superRole->id], 'position_ids' => [],
     ])->assertUnprocessable()->assertJsonValidationErrors('role_ids.0');
+});
+
+test('user status can be toggled and disabling revokes tokens', function () {
+    $user = User::factory()->create();
+    $user->createToken('api');
+
+    $this->patchJson("/api/users/{$user->id}/status", ['status' => 'disabled'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'disabled')
+        ->assertJsonStructure(['data' => ['department', 'roles', 'positions']]);
+
+    expect($user->tokens()->count())->toBe(0);
+
+    $this->patchJson("/api/users/{$user->id}/status", ['status' => 'active'])->assertOk()->assertJsonPath('data.status', 'active');
+    $this->patchJson("/api/users/{$user->id}/status", ['status' => 'unknown'])->assertUnprocessable()->assertJsonValidationErrors('status');
+});
+
+test('users cannot disable themselves and the root user cannot be disabled', function () {
+    $this->patchJson("/api/users/{$this->admin->id}/status", ['status' => 'disabled'])
+        ->assertForbidden()
+        ->assertJsonPath('message', '不能禁用自己。');
+
+    actingAsUser(superAdmin());
+
+    $this->patchJson('/api/users/'.User::ROOT_ID.'/status', ['status' => 'disabled'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('status');
+});
+
+test('status updates require the update permission and respect data scope', function () {
+    $department = Department::factory()->create();
+    $inScope = User::factory()->create(['department_id' => $department->id]);
+    $outOfScope = User::factory()->create();
+
+    actingAsUser(userWithPermissions(['system.user.view']));
+    $this->patchJson("/api/users/{$inScope->id}/status", ['status' => 'disabled'])->assertForbidden();
+
+    actingAsUser(userWithPermissions(['system.user.update'], DataScope::Department, ['department_id' => $department->id]));
+    $this->patchJson("/api/users/{$outOfScope->id}/status", ['status' => 'disabled'])->assertForbidden();
+    $this->patchJson("/api/users/{$inScope->id}/status", ['status' => 'disabled'])->assertOk();
 });
