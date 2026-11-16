@@ -1,3 +1,4 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   ModalForm,
   ProForm,
@@ -6,8 +7,9 @@ import {
   ProFormText,
   ProFormTreeSelect,
 } from '@ant-design/pro-components';
-import { App, Col, Form } from 'antd';
+import { App, Col } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { ImageUpload } from '@/components';
 import { useStatusEnum } from '@/hooks/useValueEnums';
 import {
@@ -39,11 +41,12 @@ const UserForm: React.FC<UserFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = useStatusEnum();
-  const [form] = Form.useForm<UserFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<UserFormValues>>(undefined);
   const isEdit = Boolean(record);
 
   const handleFinish = (values: UserFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       // 清空下拉框得到 undefined，显式转成 null 才能提交"清空"
       const payload = {
         ...values,
@@ -63,7 +66,7 @@ const UserForm: React.FC<UserFormProps> = ({
       title={t(
         isEdit ? 'pages.system.users.edit' : 'pages.system.users.create',
       )}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}

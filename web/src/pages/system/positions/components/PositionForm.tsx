@@ -1,3 +1,4 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   ModalForm,
   ProFormDigit,
@@ -5,8 +6,9 @@ import {
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { useStatusEnum } from '@/hooks/useValueEnums';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
@@ -29,10 +31,11 @@ const PositionForm: React.FC<PositionFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = useStatusEnum();
-  const [form] = Form.useForm<PositionFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<PositionFormValues>>(undefined);
 
   const handleFinish = (values: PositionFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       if (record) {
         await updatePosition(record.id, values);
       } else {
@@ -50,7 +53,7 @@ const PositionForm: React.FC<PositionFormProps> = ({
           : 'pages.system.positions.create',
       )}
       width={520}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}

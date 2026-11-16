@@ -1,11 +1,13 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   ModalForm,
   ProFormRadio,
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
 import type { Announcement, AnnouncementFormValues } from '../data';
@@ -29,7 +31,8 @@ const AnnouncementForm: React.FC<AnnouncementFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const typeEnum = useAnnouncementTypeEnum();
-  const [form] = Form.useForm<AnnouncementFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<AnnouncementFormValues>>(undefined);
   const readonly = record?.status === 'published';
 
   const title = readonly
@@ -39,7 +42,7 @@ const AnnouncementForm: React.FC<AnnouncementFormProps> = ({
       : 'pages.message.announcements.create';
 
   const handleFinish = (values: AnnouncementFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       if (record) {
         await updateAnnouncement(record.id, values);
       } else {
@@ -53,7 +56,7 @@ const AnnouncementForm: React.FC<AnnouncementFormProps> = ({
     <ModalForm<AnnouncementFormValues>
       title={t(title)}
       width={640}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}

@@ -7,10 +7,10 @@ import { getFieldErrors, isRequestError } from './error';
  * 错误提示（message）由全局 errorHandler 负责，这里不重复提示。
  *
  * @example
- * onFinish={(values) => submitForm(form, () => createUser(values))}
+ * onFinish={(values) => submitForm(formRef.current, () => createUser(values))}
  */
 export async function submitForm(
-  form: FormInstance,
+  form: Pick<FormInstance, 'setFields'> | null | undefined,
   action: () => Promise<unknown>,
 ): Promise<boolean> {
   try {
@@ -20,7 +20,7 @@ export async function submitForm(
     // 非请求错误（代码缺陷）继续抛出，不吞掉
     if (!isRequestError(error)) throw error;
     const fieldErrors = getFieldErrors(error);
-    if (fieldErrors.length) form.setFields(fieldErrors);
+    if (fieldErrors.length) form?.setFields(fieldErrors);
     return false;
   }
 }

@@ -1,3 +1,4 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   DrawerForm,
   ProForm,
@@ -9,8 +10,9 @@ import {
   ProFormTextArea,
 } from '@ant-design/pro-components';
 import { useQuery } from '@tanstack/react-query';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { useDataScopeEnum, useStatusEnum } from '@/hooks/useValueEnums';
 import { getDepartmentOptions } from '@/services/options';
 import { getPermissionTree } from '@/services/permission';
@@ -48,7 +50,8 @@ const RoleForm: React.FC<RoleFormProps> = ({
   const { message } = App.useApp();
   const statusEnum = useStatusEnum();
   const dataScopeEnum = useDataScopeEnum();
-  const [form] = Form.useForm<RoleFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<RoleFormValues>>(undefined);
   const isSuperAdmin = record?.code === SUPER_ADMIN_CODE;
 
   const { data: permissions = [] } = useQuery({
@@ -63,7 +66,7 @@ const RoleForm: React.FC<RoleFormProps> = ({
   });
 
   const handleFinish = (values: RoleFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       const payload: RoleFormValues = {
         ...values,
         department_ids:
@@ -84,7 +87,7 @@ const RoleForm: React.FC<RoleFormProps> = ({
         record ? 'pages.system.roles.edit' : 'pages.system.roles.create',
       )}
       width={560}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}

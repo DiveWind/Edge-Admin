@@ -1,11 +1,13 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   ModalForm,
   ProFormDigit,
   ProFormRadio,
   ProFormText,
 } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { useStatusEnum } from '@/hooks/useValueEnums';
 import { submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
@@ -28,10 +30,11 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = useStatusEnum();
-  const [form] = Form.useForm<CategoryFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<CategoryFormValues>>(undefined);
 
   const handleFinish = (values: CategoryFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       if (record) {
         await updateCategory(record.id, values);
       } else {
@@ -49,7 +52,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
           : 'pages.content.categories.create',
       )}
       width={480}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}

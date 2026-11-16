@@ -1,6 +1,8 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import { ModalForm, ProFormText } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { sameAsRule, submitForm } from '@/utils/form';
 import { useT } from '@/utils/i18n';
 import type { ResetPasswordValues, User } from '../data';
@@ -17,7 +19,8 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
 }) => {
   const t = useT();
   const { message } = App.useApp();
-  const [form] = Form.useForm<ResetPasswordValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<ResetPasswordValues>>(undefined);
 
   return (
     <ModalForm<ResetPasswordValues>
@@ -25,13 +28,13 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
         name: record?.name ?? '',
       })}
       width={420}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={Boolean(record)}
       onOpenChange={(open) => !open && onClose()}
       modalProps={{ destroyOnHidden: true }}
       onFinish={(values) =>
-        submitForm(form, async () => {
+        submitForm(formRef.current, async () => {
           if (!record) return;
           await resetUserPassword(record.id, values);
           message.success(t('pages.system.users.resetPassword.success'));

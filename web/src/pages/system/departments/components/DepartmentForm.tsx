@@ -1,3 +1,4 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   ModalForm,
   ProFormDigit,
@@ -6,8 +7,9 @@ import {
   ProFormText,
   ProFormTreeSelect,
 } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { useStatusEnum } from '@/hooks/useValueEnums';
 import {
   getDepartmentOptions,
@@ -39,7 +41,8 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = useStatusEnum();
-  const [form] = Form.useForm<DepartmentFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<DepartmentFormValues>>(undefined);
   const editing = target?.mode === 'edit' ? target.record : undefined;
 
   const initialValues: Partial<DepartmentFormValues> = editing
@@ -57,7 +60,7 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
       };
 
   const handleFinish = (values: DepartmentFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       // 清空下拉框得到 undefined，显式转成 null 才能提交"清空"
       const payload = {
         ...values,
@@ -81,7 +84,7 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
           : 'pages.system.departments.create',
       )}
       width={520}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={Boolean(target)}
       onOpenChange={(open) => !open && onClose()}

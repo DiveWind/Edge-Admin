@@ -1,3 +1,4 @@
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   DrawerForm,
   ProForm,
@@ -6,8 +7,9 @@ import {
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-components';
-import { App, Form } from 'antd';
+import { App } from 'antd';
 import type React from 'react';
+import { useRef } from 'react';
 import { ImageUpload } from '@/components';
 import { usePublishStatusEnum } from '@/hooks/useValueEnums';
 import { getArticleCategoryOptions, toSelectOptions } from '@/services/options';
@@ -41,10 +43,11 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
   const t = useT();
   const { message } = App.useApp();
   const statusEnum = usePublishStatusEnum();
-  const [form] = Form.useForm<ArticleFormValues>();
+  // 不传 form 实例：表单 store 随弹层销毁，每次打开都是干净的
+  const formRef = useRef<ProFormInstance<ArticleFormValues>>(undefined);
 
   const handleFinish = (values: ArticleFormValues) =>
-    submitForm(form, async () => {
+    submitForm(formRef.current, async () => {
       if (record) {
         await updateArticle(record.id, values);
       } else {
@@ -62,7 +65,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
           : 'pages.content.articles.create',
       )}
       width={720}
-      form={form}
+      formRef={formRef}
       omitNil={false}
       open={open}
       onOpenChange={onOpenChange}
