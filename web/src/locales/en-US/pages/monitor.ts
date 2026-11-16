@@ -10,7 +10,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.monitor.loginLogs.loginAt': 'Login Time',
   'pages.monitor.operationLogs.detail': 'Operation Detail',
   'pages.monitor.operationLogs.user': 'Operator',
-  'pages.monitor.operationLogs.username': 'Operator Username',
+  'pages.monitor.operationLogs.username': 'Username',
   'pages.monitor.operationLogs.summary': 'Summary',
   'pages.monitor.operationLogs.method': 'Method',
   'pages.monitor.operationLogs.path': 'Path',

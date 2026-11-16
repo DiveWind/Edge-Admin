@@ -10,7 +10,7 @@ export default {
   // 操作日志
   'pages.monitor.operationLogs.detail': '操作详情',
   'pages.monitor.operationLogs.user': '操作人',
-  'pages.monitor.operationLogs.username': '操作人用户名',
+  'pages.monitor.operationLogs.username': '用户名',
   'pages.monitor.operationLogs.summary': '摘要',
   'pages.monitor.operationLogs.method': '请求方法',
   'pages.monitor.operationLogs.path': '请求路径',

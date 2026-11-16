@@ -71,13 +71,27 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
   直接在 `request` 里返回 `{ data, success: true }` 并设 `pagination={false}`。
 - **只对契约 5.7 白名单内的字段开 `sorter: true`**（非白名单后端返回 422）。
 - 日期区间搜索：隐藏列 `valueType: 'dateRange'` + `search: { transform: createdRangeTransform }`。
-- 删除用 `<DeleteAction onConfirm={() => deleteXxx(id)} onSuccess={reload} />`；状态用 `valueEnum`；`dateTime` 列给 `width: 170` 防止折行。
+- 删除用 `<DeleteAction onConfirm={() => deleteXxx(id)} onSuccess={reload} />`；状态用 `valueEnum`。
+- 列宽：`dateTime` 列 `width: 170`、人名列 `width: 120`，`ellipsis` 列必须给 `width`（否则会被挤没）。列多时用
+  `columnsState={{ defaultValue: { key: { show: false } } }}` 默认隐藏次要列（列需写 `key`），保证 1440 宽下常用列完整显示；
+  `scroll={{ x: 'max-content' }}` 只用在没有 `ellipsis` 列的表格上（它会让 ellipsis 列撑开）。
+- 后端树形数据的叶子节点带 `children: []`，交给树形表格前用 `pruneEmptyChildren` 去掉，否则叶子会显示展开图标。
 
 ### 表单弹窗
 
 - `ModalForm` / `DrawerForm` + `modalProps={{ destroyOnHidden: true }}`（或 `drawerProps`），**传 `formRef` 不传 `form`**——
   表单 store 随弹层销毁，每次打开都是干净的（传外部 `form` 会把上一次的值带进下一次）；编辑时用 `request` 拉详情回填。
 - `omitNil={false}`，可清空的下拉字段在提交时把 `undefined` 转成 `null`，否则"清空"不会提交到后端。
+
+### 落地页
+
+`/` 由 `src/pages/home` 处理：按 `config/routes.ts` 的菜单顺序跳到当前用户第一个有权限的页面（`findFirstMenuPath`），
+一个都没有时显示 403。登录成功且没有 `redirect` 参数时同样回到 `/`。新增菜单无需改这里。
+
+### 图表
+
+用 `@ant-design/plots`，图表放在 `ChartBox`（`pages/dashboard/components/Charts.tsx`）里：G2 的 `autoFit` 只监听 window resize，
+布局在挂载后才稳定时会按旧宽度绘制并溢出卡片，`ChartBox` 用 ResizeObserver 把容器宽度显式传给图表。栅格用 `Row`/`Col`。
 
 ### 权限
 

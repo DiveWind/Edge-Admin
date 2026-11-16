@@ -5,7 +5,7 @@ import type React from 'react';
 import { useState } from 'react';
 import { getPermissionTree } from '@/services/permission';
 import { useT } from '@/utils/i18n';
-import { collectParentIds } from '@/utils/tree';
+import { collectParentIds, pruneEmptyChildren } from '@/utils/tree';
 
 /** 权限点在后端配置中声明并同步，这里只读展示 */
 const PermissionList: React.FC = () => {
@@ -46,7 +46,7 @@ const PermissionList: React.FC = () => {
         request={async () => {
           const { data } = await getPermissionTree();
           setExpandedKeys(collectParentIds(data));
-          return { data, success: true };
+          return { data: pruneEmptyChildren(data), success: true };
         }}
       />
     </PageContainer>

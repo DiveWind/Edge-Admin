@@ -44,7 +44,7 @@ const ArticleList: React.FC = () => {
       title: t('pages.content.articles.title'),
       dataIndex: 'title',
       ellipsis: true,
-      width: 260,
+      width: 240,
     },
     {
       title: t('pages.content.articles.category'),
@@ -80,6 +80,7 @@ const ArticleList: React.FC = () => {
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
+      key: 'created_at',
       valueType: 'dateTime',
       width: 170,
       search: false,
@@ -88,7 +89,7 @@ const ArticleList: React.FC = () => {
     {
       title: t('common.actions'),
       valueType: 'option',
-      width: 140,
+      width: 120,
       render: (_, record) => [
         access.can('content.article.update') && (
           <Typography.Link key="edit" onClick={() => openForm(record)}>
@@ -113,6 +114,8 @@ const ArticleList: React.FC = () => {
         actionRef={actionRef}
         columns={columns}
         request={tableRequest(queryArticles)}
+        // 创建时间默认隐藏（列设置中可打开），保证常用列在常见宽度下完整显示
+        columnsState={{ defaultValue: { created_at: { show: false } } }}
         toolBarRender={() => [
           access.can('content.article.create') && (
             <Button

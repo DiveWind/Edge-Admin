@@ -15,7 +15,7 @@ import {
 } from '@ant-design/pro-components';
 import { useQuery } from '@tanstack/react-query';
 import { useModel } from '@umijs/max';
-import { Tag, theme } from 'antd';
+import { Col, Row, Tag, theme } from 'antd';
 import dayjs from 'dayjs';
 import type React from 'react';
 import type { MessageId } from '@/utils/i18n';
@@ -115,72 +115,68 @@ const Dashboard: React.FC = () => {
         name: initialState?.currentUser?.name ?? '',
       })}
     >
-      <ProCard ghost gutter={[16, 16]} wrap>
+      {/* 栅格用 Row/Col（纯 CSS 断点），首屏即是最终布局；图表宽度由 ChartBox 跟随容器 */}
+      <Row gutter={[16, 16]}>
         {TOTALS.map(({ key, title, icon }) => (
-          <StatisticCard
-            key={key}
-            colSpan={{ xs: 12, md: 8, xl: 4 }}
-            loading={isLoading}
-            statistic={{
-              title: t(title),
-              value: data?.totals[key] ?? 0,
-              icon: (
-                <span style={{ fontSize: 28, color: token.colorPrimary }}>
-                  {icon}
-                </span>
-              ),
-            }}
-          />
+          <Col key={key} xs={12} md={8} xl={4}>
+            <StatisticCard
+              loading={isLoading}
+              statistic={{
+                title: t(title),
+                value: data?.totals[key] ?? 0,
+                icon: (
+                  <span style={{ fontSize: 28, color: token.colorPrimary }}>
+                    {icon}
+                  </span>
+                ),
+              }}
+            />
+          </Col>
         ))}
-        <ProCard
-          title={t('pages.dashboard.loginTrend')}
-          colSpan={{ xs: 24, xl: 16 }}
-          loading={isLoading}
-          headerBordered
-          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
-          style={{ overflow: 'hidden' }}
-        >
-          <LoginTrendChart data={data?.login_trend ?? []} />
-        </ProCard>
-        <ProCard
-          title={t('pages.dashboard.articlesByCategory')}
-          colSpan={{ xs: 24, xl: 8 }}
-          loading={isLoading}
-          headerBordered
-          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
-          style={{ overflow: 'hidden' }}
-        >
-          <ArticleCategoryChart data={data?.articles_by_category ?? []} />
-        </ProCard>
-        <ProCard
-          title={t('pages.dashboard.usersByDepartment')}
-          colSpan={{ xs: 24, xl: 12 }}
-          loading={isLoading}
-          headerBordered
-          // G2 首次绘制时可能按旧宽度渲染，autoFit 生效前裁掉溢出部分
-          style={{ overflow: 'hidden' }}
-        >
-          <DepartmentUserChart data={data?.users_by_department ?? []} />
-        </ProCard>
-        <ProCard
-          title={t('pages.dashboard.recentOperations')}
-          colSpan={{ xs: 24, xl: 12 }}
-          headerBordered
-        >
-          <ProTable<RecentOperation>
-            rowKey="id"
-            ghost
-            size="small"
-            search={false}
-            options={false}
-            toolBarRender={false}
-            pagination={false}
+        <Col xs={24} xl={16}>
+          <ProCard
+            title={t('pages.dashboard.loginTrend')}
             loading={isLoading}
-            dataSource={data?.recent_operations ?? []}
-            columns={operationColumns}
-          />
-        </ProCard>
-      </ProCard>
+            headerBordered
+          >
+            <LoginTrendChart data={data?.login_trend ?? []} />
+          </ProCard>
+        </Col>
+        <Col xs={24} xl={8}>
+          <ProCard
+            title={t('pages.dashboard.articlesByCategory')}
+            loading={isLoading}
+            headerBordered
+          >
+            <ArticleCategoryChart data={data?.articles_by_category ?? []} />
+          </ProCard>
+        </Col>
+        <Col xs={24} xl={12}>
+          <ProCard
+            title={t('pages.dashboard.usersByDepartment')}
+            loading={isLoading}
+            headerBordered
+          >
+            <DepartmentUserChart data={data?.users_by_department ?? []} />
+          </ProCard>
+        </Col>
+        <Col xs={24} xl={12}>
+          <ProCard title={t('pages.dashboard.recentOperations')} headerBordered>
+            <ProTable<RecentOperation>
+              rowKey="id"
+              ghost
+              size="small"
+              search={false}
+              options={false}
+              toolBarRender={false}
+              pagination={false}
+              loading={isLoading}
+              dataSource={data?.recent_operations ?? []}
+              columns={operationColumns}
+            />
+          </ProCard>
+        </Col>
+      </Row>
     </PageContainer>
   );
 };

@@ -3,6 +3,7 @@ import {
   collectLeafIds,
   collectParentIds,
   disableSubtree,
+  pruneEmptyChildren,
   toTreeData,
 } from './tree';
 
@@ -26,6 +27,12 @@ describe('tree utils', () => {
   it('collects parent and leaf ids', () => {
     expect(collectParentIds(tree)).toEqual([1, 2]);
     expect(collectLeafIds(tree)).toEqual([3, 4, 5]);
+  });
+
+  it('prunes empty children arrays', () => {
+    expect(
+      pruneEmptyChildren([{ id: 1, children: [{ id: 2, children: [] }] }]),
+    ).toEqual([{ id: 1, children: [{ id: 2, children: undefined }] }]);
   });
 
   it('converts {id, name} nodes to antd tree data', () => {

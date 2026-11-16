@@ -40,6 +40,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.user'),
       dataIndex: ['user', 'name'],
       search: false,
+      width: 120,
     },
     {
       title: t('pages.monitor.operationLogs.username'),
@@ -57,6 +58,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.method'),
       dataIndex: 'method',
       valueType: 'select',
+      width: 100,
       valueEnum: Object.fromEntries(HTTP_METHODS.map((m) => [m, { text: m }])),
       render: (_, record) => (
         <Tag color={methodColor[record.method]}>{record.method}</Tag>
@@ -66,7 +68,7 @@ const OperationLogList: React.FC = () => {
       title: t('pages.monitor.operationLogs.path'),
       dataIndex: 'path',
       ellipsis: true,
-      width: 240,
+      width: 220,
     },
     {
       title: t('pages.monitor.operationLogs.statusCode'),
@@ -84,6 +86,7 @@ const OperationLogList: React.FC = () => {
     {
       title: t('pages.monitor.operationLogs.ip'),
       dataIndex: 'ip',
+      key: 'ip',
       search: false,
     },
     {
@@ -127,6 +130,8 @@ const OperationLogList: React.FC = () => {
         actionRef={actionRef}
         columns={columns}
         request={tableRequest(queryOperationLogs)}
+        // IP 默认隐藏（详情抽屉中可见，列设置中可打开）
+        columnsState={{ defaultValue: { ip: { show: false } } }}
         toolBarRender={() => [
           canDelete && (
             <Popconfirm

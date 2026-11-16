@@ -64,6 +64,7 @@ const AnnouncementList: React.FC = () => {
       title: t('pages.message.announcements.creator'),
       dataIndex: ['creator', 'name'],
       search: false,
+      width: 120,
     },
     {
       title: t('common.publishedAt'),

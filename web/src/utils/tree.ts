@@ -13,6 +13,17 @@ export function collectParentIds<T extends IdTreeNode>(nodes: T[]): API.Id[] {
   );
 }
 
+/** 去掉空的 `children: []`，否则树形表格会给叶子节点显示展开图标 */
+export function pruneEmptyChildren<T extends { children?: T[] }>(
+  nodes: T[],
+): T[] {
+  return nodes.map((node) =>
+    node.children?.length
+      ? { ...node, children: pruneEmptyChildren(node.children) }
+      : { ...node, children: undefined },
+  );
+}
+
 /** 所有叶子节点 id */
 export function collectLeafIds<T extends IdTreeNode>(nodes: T[]): API.Id[] {
   return nodes.flatMap((node) =>

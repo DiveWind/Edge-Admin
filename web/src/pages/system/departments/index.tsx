@@ -9,7 +9,7 @@ import { DeleteAction } from '@/components';
 import { useStatusEnum } from '@/hooks/useValueEnums';
 import { useT } from '@/utils/i18n';
 import { toListQuery } from '@/utils/table';
-import { collectParentIds } from '@/utils/tree';
+import { collectParentIds, pruneEmptyChildren } from '@/utils/tree';
 import type { DepartmentFormTarget } from './components/DepartmentForm';
 import DepartmentForm from './components/DepartmentForm';
 import type { Department } from './data';
@@ -95,7 +95,7 @@ const DepartmentList: React.FC = () => {
         request={async (params) => {
           const { data } = await queryDepartments(toListQuery(params));
           setExpandedKeys(collectParentIds(data));
-          return { data, success: true };
+          return { data: pruneEmptyChildren(data), success: true };
         }}
         toolBarRender={() => [
           access.can('system.department.create') && (

@@ -1,6 +1,7 @@
 import { Bar, Line, Pie } from '@ant-design/plots';
 import { Empty } from 'antd';
 import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useT } from '@/utils/i18n';
 import type { DashboardData } from '../data';
 
@@ -13,6 +14,31 @@ const EmptyChart: React.FC = () => (
   />
 );
 
+/**
+ * 图表容器：用 ResizeObserver 跟踪自身宽度，把宽度显式传给图表。
+ * G2 的 autoFit 只监听 window resize，布局（菜单、栅格）在挂载后才稳定时会按旧宽度绘制并溢出卡片。
+ */
+const ChartBox: React.FC<{ children: (width: number) => React.ReactNode }> = ({
+  children,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const observer = new ResizeObserver(([entry]) =>
+      setWidth(Math.floor(entry.contentRect.width)),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ height: CHART_HEIGHT }}>
+      {width > 0 && children(width)}
+    </div>
+  );
+};
+
 export const LoginTrendChart: React.FC<{
   data: DashboardData['login_trend'];
 }> = ({ data }) => {
@@ -24,15 +50,21 @@ export const LoginTrendChart: React.FC<{
   ]);
   if (!data.length) return <EmptyChart />;
   return (
-    <Line
-      data={series}
-      xField="date"
-      yField="value"
-      colorField="type"
-      height={CHART_HEIGHT}
-      point={{ shapeField: 'circle', sizeField: 3 }}
-      axis={{ x: { labelAutoRotate: false } }}
-    />
+    <ChartBox>
+      {(width) => (
+        <Line
+          data={series}
+          xField="date"
+          yField="value"
+          colorField="type"
+          height={CHART_HEIGHT}
+          point={{ shapeField: 'circle', sizeField: 3 }}
+          axis={{ x: { labelAutoRotate: false } }}
+          width={width}
+          autoFit={false}
+        />
+      )}
+    </ChartBox>
   );
 };
 
@@ -41,17 +73,23 @@ export const ArticleCategoryChart: React.FC<{
 }> = ({ data }) => {
   if (!data.length) return <EmptyChart />;
   return (
-    <Pie
-      data={data}
-      angleField="count"
-      colorField="category"
-      innerRadius={0.6}
-      height={CHART_HEIGHT}
-      label={{ text: 'count', style: { fontWeight: 'bold' } }}
-      legend={{
-        color: { position: 'bottom', layout: { justifyContent: 'center' } },
-      }}
-    />
+    <ChartBox>
+      {(width) => (
+        <Pie
+          data={data}
+          angleField="count"
+          colorField="category"
+          innerRadius={0.6}
+          height={CHART_HEIGHT}
+          label={{ text: 'count', style: { fontWeight: 'bold' } }}
+          legend={{
+            color: { position: 'bottom', layout: { justifyContent: 'center' } },
+          }}
+          width={width}
+          autoFit={false}
+        />
+      )}
+    </ChartBox>
   );
 };
 
@@ -66,13 +104,19 @@ export const DepartmentUserChart: React.FC<{
     .sort((a, b) => b.count - a.count)
     .slice(0, TOP_DEPARTMENTS);
   return (
-    <Bar
-      data={top}
-      xField="department"
-      yField="count"
-      height={CHART_HEIGHT}
-      label={{ text: 'count', position: 'right' }}
-      axis={{ y: { tickCount: 4 } }}
-    />
+    <ChartBox>
+      {(width) => (
+        <Bar
+          data={top}
+          xField="department"
+          yField="count"
+          height={CHART_HEIGHT}
+          label={{ text: 'count', position: 'inside' }}
+          axis={{ y: { tickCount: 4 } }}
+          width={width}
+          autoFit={false}
+        />
+      )}
+    </ChartBox>
   );
 };

@@ -31,11 +31,17 @@ const RoleList: React.FC = () => {
 
   const columns: ProColumns<Role>[] = [
     { title: t('pages.system.roles.name'), dataIndex: 'name' },
-    { title: t('pages.system.roles.code'), dataIndex: 'code', copyable: true },
+    {
+      title: t('pages.system.roles.code'),
+      dataIndex: 'code',
+      copyable: true,
+      width: 180,
+    },
     {
       title: t('pages.system.roles.dataScope'),
       dataIndex: 'data_scope',
       valueEnum: dataScopeEnum,
+      width: 140,
       search: false,
     },
     {
@@ -60,11 +66,11 @@ const RoleList: React.FC = () => {
       dataIndex: 'remark',
       search: false,
       ellipsis: true,
-      width: 200,
     },
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
+      key: 'created_at',
       valueType: 'dateTime',
       width: 170,
       search: false,
@@ -100,6 +106,7 @@ const RoleList: React.FC = () => {
         actionRef={actionRef}
         columns={columns}
         request={tableRequest(queryRoles)}
+        columnsState={{ defaultValue: { created_at: { show: false } } }}
         toolBarRender={() => [
           access.can('system.role.create') && (
             <Button

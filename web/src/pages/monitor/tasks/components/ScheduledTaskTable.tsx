@@ -46,6 +46,7 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
     {
       title: t('pages.monitor.tasks.expression'),
       dataIndex: 'expression',
+      width: 140,
       render: (_, record) => (
         <Typography.Text code>{record.expression}</Typography.Text>
       ),
@@ -59,6 +60,7 @@ const ScheduledTaskTable: React.FC<ScheduledTaskTableProps> = ({
     {
       title: t('pages.monitor.tasks.lastStatus'),
       dataIndex: ['last_log', 'status'],
+      width: 130,
       valueEnum: logStatusEnum,
     },
     {
