@@ -57,6 +57,22 @@ return [
         'parent_id' => [
             'cycle' => '上级部门不能是自己或自己的下级部门。',
         ],
+        'permission' => [
+            'parent' => '上级节点',
+            'path' => '路由地址',
+            'icon' => '图标',
+            'types' => ['directory' => '目录', 'menu' => '菜单', 'action' => '操作'],
+            'cycle' => '上级节点不能是自己或自己的下级节点。',
+            'parent_type' => ':parent下不能放:type。',
+            'action_parent' => '操作必须放在菜单下。',
+            'children_type' => '现有下级节点与该类型不兼容（目录下只能放目录 / 菜单，菜单下只能放操作，操作没有下级）。',
+            'code_format' => '权限码只能包含小写字母、数字、- 和 _，以 . 分段。',
+            'action_code' => '操作的权限码必须包含 .（如 system.user.view）。',
+            'external_path' => '外链地址必须是 http(s) 开头的 URL。',
+            'internal_path' => '路由地址必须以 / 开头且不含空格。',
+            'system_code' => '内置菜单不可修改权限码。',
+            'system_type' => '内置菜单不可修改类型。',
+        ],
         'setting' => [
             'system_key' => '内置参数不可修改键名。',
             'system_type' => '内置参数不可修改类型。',

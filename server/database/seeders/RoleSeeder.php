@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\DataScope;
+use App\Enums\PermissionType;
 use App\Models\Department;
 use App\Models\Permission;
 use App\Models\Role;
@@ -31,7 +32,7 @@ class RoleSeeder extends Seeder
             'dashboard', 'dashboard.view',
             'content', 'content.category', 'content.category.view',
             'content.article', 'content.article.view', 'content.article.create', 'content.article.update', 'content.article.delete',
-            'message', 'message.announcement', 'message.announcement.view',
+            'message', 'message.announcement', 'message.announcement.view', 'message.notification',
             'system', 'system.attachment', 'system.attachment.view',
         ])->pluck('id'));
 
@@ -43,7 +44,7 @@ class RoleSeeder extends Seeder
             'remark' => '只读访问，仅可见本人数据',
         ]);
         $viewer->permissions()->sync(Permission::query()
-            ->where(fn ($query) => $query->where('code', 'like', '%.view')->orWhere('type', 'menu'))
+            ->where(fn ($query) => $query->where('code', 'like', '%.view')->orWhereIn('type', [PermissionType::Directory, PermissionType::Menu]))
             ->pluck('id'));
 
         $marketing = Role::factory()->create([
@@ -54,7 +55,7 @@ class RoleSeeder extends Seeder
             'remark' => '自定义数据权限示例：可见市场部各区域',
         ]);
         $marketing->permissions()->sync(Permission::query()->whereIn('code', [
-            'dashboard', 'dashboard.view', 'content', 'content.article', 'content.article.view',
+            'dashboard', 'dashboard.view', 'content', 'content.article', 'content.article.view', 'message', 'message.notification',
         ])->pluck('id'));
         $marketing->departments()->sync(Department::query()->whereIn('name', ['市场部', '华东区', '华南区'])->pluck('id'));
     }

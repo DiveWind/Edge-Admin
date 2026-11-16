@@ -6,6 +6,7 @@ use App\Enums\DataScope;
 use App\Enums\Status;
 use App\Models\Concerns\HasDataScope;
 use App\Models\Concerns\StoresDatesInAppTimezone;
+use App\Services\PermissionRegistry;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -105,6 +106,7 @@ class User extends Authenticatable
 
     /**
      * 用户实际拥有的权限码全集（超级管理员为全部权限码），请求内缓存。
+     * 停用节点（含祖先停用）的权限码不生效，见 PermissionRegistry。
      *
      * @return array<int, string>
      */
@@ -114,18 +116,18 @@ class User extends Authenticatable
             return $this->cachedPermissionCodes;
         }
 
+        $registry = app(PermissionRegistry::class);
+
         if ($this->isSuperAdmin()) {
-            return $this->cachedPermissionCodes = Permission::query()
-                ->orderBy('id')
-                ->get(['id', 'code'])
-                ->map(fn (Permission $permission): string => $permission->code)
-                ->all();
+            return $this->cachedPermissionCodes = $registry->enabledCodes();
         }
 
         $this->loadMissing('roles.permissions');
 
         return $this->cachedPermissionCodes = $this->activeRoles()
-            ->flatMap(fn (Role $role) => $role->permissions->map(fn (Permission $permission): string => $permission->code))
+            ->flatMap(fn (Role $role) => $role->permissions)
+            ->filter(fn (Permission $permission): bool => $registry->isEnabled($permission->id))
+            ->map(fn (Permission $permission): string => $permission->code)
             ->unique()
             ->values()
             ->all();

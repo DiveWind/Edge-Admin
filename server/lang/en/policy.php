@@ -26,6 +26,10 @@ return [
     'dict_type' => [
         'has_items' => 'This dictionary has items and cannot be deleted.',
     ],
+    'permission' => [
+        'system' => 'Built-in menus cannot be deleted; disable or hide them instead.',
+        'has_children' => 'This node has child nodes and cannot be deleted.',
+    ],
     'setting' => [
         'system' => 'Built-in settings cannot be deleted.',
     ],

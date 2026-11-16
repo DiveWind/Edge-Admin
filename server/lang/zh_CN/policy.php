@@ -26,6 +26,10 @@ return [
     'dict_type' => [
         'has_items' => '该字典下存在字典项，不能删除。',
     ],
+    'permission' => [
+        'system' => '内置菜单不可删除，可以停用或隐藏。',
+        'has_children' => '该节点存在下级节点，不能删除。',
+    ],
     'setting' => [
         'system' => '内置参数不可删除。',
     ],

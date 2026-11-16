@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Auth\MenuController;
 use App\Http\Controllers\Api\Auth\PasswordController;
 use App\Http\Controllers\Api\Auth\ProfileController;
 use App\Http\Controllers\Api\Auth\TokenController;
@@ -69,6 +70,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::post('logout', [TokenController::class, 'destroy'])->name('logout');
         Route::get('me', [ProfileController::class, 'show'])->name('me');
+        Route::get('menus', MenuController::class)->name('menus');
         Route::put('profile', [ProfileController::class, 'update'])->name('profile');
         Route::put('password', [PasswordController::class, 'update'])->name('password');
     });
@@ -94,9 +96,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         ->middlewareFor('update', 'can:system.role.update')
         ->middlewareFor('destroy', 'can:system.role.delete');
 
-    Route::get('permissions', PermissionController::class)
-        ->middleware('can:system.permission.view')
-        ->name('permissions.index');
+    Route::apiResource('permissions', PermissionController::class)
+        ->middlewareFor(['index', 'show'], 'can:system.permission.view')
+        ->middlewareFor('store', 'can:system.permission.create')
+        ->middlewareFor('update', 'can:system.permission.update')
+        ->middlewareFor('destroy', 'can:system.permission.delete');
 
     Route::apiResource('departments', DepartmentController::class)
         ->middlewareFor(['index', 'show'], 'can:system.department.view')
