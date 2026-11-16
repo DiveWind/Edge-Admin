@@ -23,7 +23,10 @@ class {{ class }} extends Model
     {
         return [
 {{ fields.cast }}
-{{ casts.extras }}
+{{#if data_scope}}
+            'department_id' => 'integer',
+            'created_by' => 'integer',
+{{/if}}
         ];
     }
 {{ fields.relation }}

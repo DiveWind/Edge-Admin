@@ -1,1 +1,2 @@
+{{@import { useBooleanEnum } from '@/hooks/useValueEnums'}}
   const {{ field.camel }}Enum = useBooleanEnum();

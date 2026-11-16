@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,8 @@ use Laravel\Sanctum\PersonalAccessToken as SanctumPersonalAccessToken;
  */
 class PersonalAccessToken extends SanctumPersonalAccessToken
 {
+    use StoresDatesInAppTimezone;
+
     /**
      * 令牌所属用户（tokenable 为 User 时）。
      *

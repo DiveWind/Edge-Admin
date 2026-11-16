@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\SettingValue;
 use App\Enums\SettingType;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\SettingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Model;
 class Setting extends Model
 {
     /** @use HasFactory<SettingFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @var array<string, mixed>

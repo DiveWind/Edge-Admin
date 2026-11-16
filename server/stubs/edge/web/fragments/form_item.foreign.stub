@@ -1,7 +1,21 @@
+{{@import { ProFormSelect } from '@ant-design/pro-components'}}
+{{#if field.options_route}}
+{{@import { fetchSelectOptions } from '@/services/options'}}
+{{/if}}
       <ProFormSelect
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
-        showSearch
-        // TODO 接 {{ field.related }} 的选项接口（参考 src/services/options.ts：getXxxOptions().then(toSelectOptions)）
+{{#if field.options_route}}
+        request={() => fetchSelectOptions('{{ field.options_route }}')}
+{{else}}
+        // TODO 后端没有 /api/options/{{ field.related_route }}：为 {{ field.related }} 补选项接口（edge:make-module --with-options
+        // 或手写 Options 控制器）后改为 request={() => fetchSelectOptions('{{ field.related_route }}')}
         request={async () => []}
+{{/if}}
+{{#if field.required}}
+        rules={[{ required: true }]}
+{{/if}}
+{{#if field.nullable}}
+        transform={(value: unknown) => ({ {{ field.name }}: value ?? null })}
+{{/if}}
       />

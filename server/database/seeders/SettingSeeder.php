@@ -17,7 +17,7 @@ class SettingSeeder extends Seeder
             ['site', 'site.name', '站点名称', SettingType::String, config()->string('app.name'), true, '登录页、浏览器标题展示'],
             ['site', 'site.login_notice', '登录页公告', SettingType::String, '演示环境数据每日重置，请勿录入真实信息。', true, '为空时不展示'],
             ['site', 'site.icp', '备案号', SettingType::String, '', true, '页脚展示的 ICP 备案号，为空时不展示'],
-            ['security', 'security.login_max_attempts', '登录尝试次数', SettingType::Number, config()->integer('edge.auth.login_max_attempts'), false, '每分钟每个"用户名 + IP"允许的登录尝试次数'],
+            ['security', 'security.login_max_attempts', '登录尝试次数', SettingType::Number, config()->integer('edge.auth.login_max_attempts'), false, '每分钟每个"用户名 + IP"允许的登录失败次数（成功登录后清零）'],
             ['log', 'log.retention_days', '日志保留天数', SettingType::Number, config()->integer('edge.logs.retention_days'), false, '登录 / 操作 / 任务日志保留天数，由 model:prune 每日清理'],
         ];
 

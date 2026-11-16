@@ -4,6 +4,10 @@ const messages: Record<keyof typeof zh, string> = {
   '{{ web.locale_prefix }}.create': 'New {{ title }}',
   '{{ web.locale_prefix }}.edit': 'Edit {{ title }}',
 {{ fields.web.locale }}
+{{#if data_scope}}
+  '{{ web.locale_prefix }}.department': 'Department',
+  '{{ web.locale_prefix }}.creator': 'Creator',
+{{/if}}
   'permission.{{ permission }}': '{{ title_plural }}',
 };
 

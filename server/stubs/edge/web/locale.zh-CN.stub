@@ -3,6 +3,10 @@ export default {
   '{{ web.locale_prefix }}.create': '新建{{ title }}',
   '{{ web.locale_prefix }}.edit': '编辑{{ title }}',
 {{ fields.web.locale }}
+{{#if data_scope}}
+  '{{ web.locale_prefix }}.department': '部门',
+  '{{ web.locale_prefix }}.creator': '创建人',
+{{/if}}
   // 角色授权树 / 权限管理页中的菜单名称（操作名称使用通用文案 permission.action.*）
   'permission.{{ permission }}': '{{ title_plural }}',
 };

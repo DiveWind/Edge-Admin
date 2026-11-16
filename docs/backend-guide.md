@@ -93,10 +93,22 @@ $query = Position::query()->withCount('users')->filter($request->filters());
 return PositionResource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
 ```
 
-- 字符串过滤为模糊匹配，`status` / `*_id` 精确匹配，日期范围用 `created_from` / `created_to` + `whereDate()`；
+- 字符串过滤为模糊匹配，`status` / `*_id` 精确匹配，日期范围用 `created_from` / `created_to` + `whereDate()`（先 `asAppDateTime()` 换算，见下方"日期时间"）；
 - `per_page` 默认 15、上限 100（`EDGE_PER_PAGE` / `EDGE_MAX_PER_PAGE`），超出或排序字段不在白名单返回 422；
 - 排序总会追加 `id` 倒序作为稳定次级排序；需要的关联用 `with()` / `withCount()` 预加载（开发环境开启了 `Model::shouldBeStrict()`，懒加载会抛异常）；
 - 数据权限模型在 `filter()` 之前加 `->visibleTo($actor)`。
+
+### 日期时间
+
+契约（[architecture.md](architecture.md) 第 2 节）：带偏移的输入按偏移换算，不带偏移的按 `APP_TIMEZONE` 解释，输出带偏移的 ISO 8601。实现统一放在模型层：
+
+- 所有模型 `use App\Models\Concerns\StoresDatesInAppTimezone`（架构测试强制，生成器已自动添加）。它覆盖 Eloquent 的 `fromDateTime()`：
+  写入 `date` / `datetime` cast 与时间戳列之前先 `setTimezone(config('app.timezone'))`。Laravel 默认按输入自带的时区直接格式化，
+  `2026-11-16T10:30:00+00:00` 会被存成 `10:30` 并按 `+08:00` 读回（偏移丢失）。数据库里始终是应用时区的本地时间，与方言无关。
+- 校验用 `date` 规则即可（接受带偏移的 ISO 8601），`casts()` 照常写 `'datetime'`，不需要在 Request 中手工转换。
+- 时间范围过滤同样先换算：`$q->whereDate('created_at', '>=', $this->asAppDateTime($value))`（`asAppDateTime()` 由同一 trait 提供，
+  返回应用时区的 Carbon，`whereDate()` 再取日期部分）。
+- 输出：Resource 中 `?->toIso8601String()`（读出的 Carbon 已是应用时区）。
 
 ## 4. 错误规范
 
@@ -107,7 +119,7 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
 | 违反记录级业务规则 | 403 + `message` | Policy 返回 `Response::deny(__('policy.xxx'))`，控制器 `Gate::authorize()` 或 Form Request `authorize()` |
 | 字段级约束 | 422 + `errors` | Form Request 规则 / `after()` 钩子，文案放 `lang/*/validation.php` 的 `custom` |
 | 记录不存在 | 404 | 路由模型绑定 / `findOrFail()`；统一渲染为 `{message: "资源不存在。"}`，不暴露模型类名 |
-| 限流 | 429 | `throttle:api`（全局）/ `throttle:login`，带 `Retry-After` |
+| 限流 | 429 | `throttle:api`（全局）；登录在 `LoginRequest::authenticate()` 中用 `RateLimiter` 只累计失败、成功清零，均带 `Retry-After` |
 
 异常的 JSON 渲染集中在 `bootstrap/app.php`，`message` 按当前语言翻译（中文 JSON 文案见 `lang/zh_CN.json`）。
 不要在控制器里 `try/catch` 后手工拼错误响应。
@@ -119,7 +131,8 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
 - `DB::prohibitDestructiveCommands(isProduction())`：生产环境禁止 `migrate:fresh` / `db:wipe` 等；
 - `Password::defaults()`：生产环境至少 8 位且含字母与数字，其他环境至少 8 位；
 - `URL::forceHttps(config('edge.force_https'))`；`Sanctum::usePersonalAccessTokenModel(App\Models\PersonalAccessToken::class)`；
-- 限流器 `api`（`EDGE_API_RATE_LIMIT`）与 `login`（系统参数 `security.login_max_attempts`）；
+- 限流器 `api`（`EDGE_API_RATE_LIMIT`）；登录限流不走命名限流器，而是与官方 starter kit 一样在 `LoginRequest` 中
+  `RateLimiter::tooManyAttempts()` / `hit()` / `clear()`（次数取系统参数 `security.login_max_attempts`，只累计失败，成功后清零，超出 429 + `Retry-After`）；
 - JSON Resource 保持默认的 `data` 包裹（契约依赖它），不调用 `withoutWrapping()`。
 
 ## 6. 多语言

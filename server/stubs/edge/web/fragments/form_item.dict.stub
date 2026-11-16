@@ -1,5 +1,13 @@
+{{@import { ProFormSelect } from '@ant-design/pro-components'}}
       <ProFormSelect
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
         options={{{ field.camel }}Dict.options}
+        fieldProps={{ loading: {{ field.camel }}Dict.loading }}
+{{#if field.required}}
+        rules={[{ required: true }]}
+{{/if}}
+{{#if field.nullable}}
+        transform={(value: unknown) => ({ {{ field.name }}: value ?? null })}
+{{/if}}
       />

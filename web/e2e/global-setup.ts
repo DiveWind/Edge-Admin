@@ -4,7 +4,7 @@ import { AUTH_DIR, ROLE_USERS, storageStatePath } from './support';
 
 /**
  * 每个角色通过 API 登录一次，把 token 写成 storageState（localStorage），用例直接复用登录态。
- * 登录接口按"用户名 + IP"每分钟限流，避免在每个用例里重复登录。
+ * 登录接口按"用户名 + IP"只限制失败次数（成功登录不计数并清零），因此可以反复运行整套用例。
  */
 export default async function globalSetup() {
   const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:8001';

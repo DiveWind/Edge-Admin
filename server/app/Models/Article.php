@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PublishStatus;
 use App\Models\Concerns\HasDataScope;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\ArticleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Article extends Model
 {
     /** @use HasFactory<ArticleFactory> */
-    use HasDataScope, HasFactory, SoftDeletes;
+    use HasDataScope, HasFactory, SoftDeletes, StoresDatesInAppTimezone;
 
     /**
      * @var array<string, mixed>

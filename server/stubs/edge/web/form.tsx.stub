@@ -1,0 +1,66 @@
+{{@import type { ProFormInstance } from '@ant-design/pro-components'}}
+{{@import { ModalForm } from '@ant-design/pro-components'}}
+{{@import { App } from 'antd'}}
+{{@import type React from 'react'}}
+{{@import { useRef } from 'react'}}
+{{@import { clearFieldErrors, submitForm } from '@/utils/form'}}
+{{@import { useT } from '@/utils/i18n'}}
+{{@import type { {{ class }}, {{ class }}FormValues } from '../data'}}
+{{@import { create{{ class }}, get{{ class }}, update{{ class }} } from '../service'}}
+{{ imports }}
+
+interface {{ web.form_component }}Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  record?: {{ class }};
+  onSuccess: () => void;
+}
+
+/** 新建 / 编辑弹窗：传 formRef 不传 form，弹窗销毁后表单是干净的；编辑时拉详情回填 */
+const {{ web.form_component }}: React.FC<{{ web.form_component }}Props> = ({
+  open,
+  onOpenChange,
+  record,
+  onSuccess,
+}) => {
+  const t = useT();
+  const { message } = App.useApp();
+{{ fields.web.form_hook }}
+  const formRef = useRef<ProFormInstance<{{ class }}FormValues>>(undefined);
+
+  const handleFinish = (values: {{ class }}FormValues) =>
+    submitForm(formRef.current, async () => {
+      if (record) {
+        await update{{ class }}(record.id, values);
+      } else {
+        await create{{ class }}(values);
+      }
+      message.success(t(record ? 'common.updated' : 'common.created'));
+      onSuccess();
+    });
+
+  return (
+    <ModalForm<{{ class }}FormValues>
+      title={t(record ? '{{ web.locale_prefix }}.edit' : '{{ web.locale_prefix }}.create')}
+      width={560}
+      formRef={formRef}
+      omitNil={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      modalProps={{ destroyOnHidden: true }}
+      initialValues={{
+{{ fields.web.initial_value }}
+      }}
+      request={
+        record ? async () => (await get{{ class }}(record.id)).data : undefined
+      }
+      // 没有前端 rules 的字段输入时不会重新校验，手动清掉 422 回填的错误
+      onValuesChange={(changed) => clearFieldErrors(formRef.current, changed)}
+      onFinish={handleFinish}
+    >
+{{ fields.web.form_item }}
+    </ModalForm>
+  );
+};
+
+export default {{ web.form_component }};

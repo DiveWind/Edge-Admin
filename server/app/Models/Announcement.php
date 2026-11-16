@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AnnouncementType;
 use App\Enums\PublishStatus;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\AnnouncementFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Announcement extends Model
 {
     /** @use HasFactory<AnnouncementFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @var array<string, mixed>

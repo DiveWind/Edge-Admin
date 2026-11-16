@@ -87,6 +87,11 @@ arch('models')
     ->classes()
     ->toExtend('Illuminate\Database\Eloquent\Model');
 
+arch('models convert datetime input to the app timezone before storing it')
+    ->expect('App\Models')
+    ->classes()
+    ->toUseTrait('App\Models\Concerns\StoresDatesInAppTimezone');
+
 arch('validation rules')
     ->expect('App\Rules')
     ->toImplement('Illuminate\Contracts\Validation\ValidationRule');

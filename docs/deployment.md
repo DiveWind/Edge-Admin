@@ -154,7 +154,7 @@ Edge Admin 自定义变量（`config/edge.php`）：
 | `EDGE_API_RATE_LIMIT` | 120 | `/api/*` 每分钟请求上限 |
 | `EDGE_FORCE_HTTPS` | false | 强制生成 https 链接 |
 | `EDGE_TOKEN_TTL` | 10080 | 登录 token 有效期（分钟） |
-| `EDGE_LOGIN_MAX_ATTEMPTS` | 5 | 登录限流默认值（系统参数 `security.login_max_attempts` 优先） |
+| `EDGE_LOGIN_MAX_ATTEMPTS` | 5 | 每分钟每个"用户名 + IP"允许的登录失败次数默认值（成功登录不计数并清零；系统参数 `security.login_max_attempts` 优先） |
 | `EDGE_LOG_RETENTION_DAYS` | 90 | 日志保留天数默认值（系统参数 `log.retention_days` 优先） |
 | `EDGE_UPLOAD_DISK` | public | 附件磁盘（可换 s3 等） |
 | `EDGE_UPLOAD_MAX_SIZE` | 2048 | 单文件上限（KB） |

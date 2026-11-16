@@ -10,6 +10,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -22,6 +23,7 @@ use RuntimeException;
     {--fields= : 字段定义 name:type[:参数][:rules]，逗号分隔}
     {--data-scope : 接入数据权限（HasDataScope，增加 department_id / created_by）}
     {--soft-deletes : 启用软删除}
+    {--with-options : 同时生成选项接口 GET /api/options/<路由>（启用项 [{id, name}]，需要 name 字段）}
     {--no-web : 不生成前端代码}
     {--force : 覆盖已存在的文件}
     {--dry-run : 只打印将要创建 / 修改的文件，不写入}')]
@@ -68,8 +70,10 @@ class MakeModuleCommand extends Command
                 fields: FieldParser::parse((string) $this->option('fields')),
                 dataScope: (bool) $this->option('data-scope'),
                 softDeletes: (bool) $this->option('soft-deletes'),
+                withOptions: (bool) $this->option('with-options'),
             );
 
+            $this->resolveOptionRoutes();
             $this->planBackend();
             $this->planWeb();
         } catch (InvalidArgumentException|RuntimeException $e) {
@@ -91,6 +95,7 @@ class MakeModuleCommand extends Command
             $this->files->put($path, $content);
         }
 
+        $this->formatWebFiles();
         $this->nextSteps();
 
         return self::SUCCESS;
@@ -114,7 +119,57 @@ class MakeModuleCommand extends Command
 
         $this->registerPermissions($variables);
         $this->registerRoutes($variables);
+        $this->registerOptionRoute($variables);
         $this->registerOperations($variables);
+    }
+
+    /**
+     * foreign 字段的选项接口：本模块（--with-options）或 routes/api.php 中已有的 `/api/options/<关联表>` 才可用，
+     * 否则前端下拉生成 TODO 占位。
+     */
+    protected function resolveOptionRoutes(): void
+    {
+        $routesPath = $this->basePath('routes/api.php');
+        $routes = $this->files->exists($routesPath) ? $this->files->get($routesPath) : '';
+
+        foreach ($this->blueprint->fields as $field) {
+            $route = $field->relatedRoute();
+
+            if ($route === null) {
+                continue;
+            }
+
+            $own = $this->blueprint->withOptions && $field->argument === $this->blueprint->table();
+
+            if ($own || preg_match('/Route::get\(\''.preg_quote($route, '/').'\',\s*\w+OptionController::class\)/', $routes) === 1) {
+                $field->optionsRoute = $route;
+
+                continue;
+            }
+
+            $this->notes[] = [
+                "外键 {$field->name} 没有可用的选项接口 /api/options/{$route}，前端下拉生成了 TODO 占位："
+                ."可对 {$field->relatedModel()} 使用 --with-options 生成，或手写 Options 控制器后改为 fetchSelectOptions('{$route}')。",
+                null,
+            ];
+        }
+    }
+
+    /**
+     * @param  array<string, string|null>  $variables
+     */
+    protected function registerOptionRoute(array $variables): void
+    {
+        if (! $this->blueprint->withOptions) {
+            return;
+        }
+
+        $path = $this->basePath('routes/api.php');
+        $controller = "App\\Http\\Controllers\\Api\\Options\\{$this->blueprint->class}OptionController";
+
+        if ($this->insert($path, "{$this->blueprint->class}OptionController::class)", ['// edge:options' => $this->stubs->snippet('option_route', $variables)])) {
+            $this->changes[$path][1] = TextInserter::addImport($this->changes[$path][1], $controller);
+        }
     }
 
     /**
@@ -304,15 +359,50 @@ class MakeModuleCommand extends Command
         }
     }
 
+    /**
+     * 用前端项目自己的 Biome 格式化生成 / 修改的 TS 文件（导入已由模板去重，这里只做格式化与导入排序）。
+     * 前端未安装依赖或执行失败时只给出提示，不影响生成结果。
+     */
+    protected function formatWebFiles(): void
+    {
+        $web = rtrim(config()->string('edge.generator.web_path'), '/');
+        $files = array_values(array_filter(
+            array_keys($this->changes),
+            fn (string $path): bool => str_starts_with($path, "{$web}/") && preg_match('/\.tsx?$/', $path) === 1,
+        ));
+
+        if ($files === []) {
+            return;
+        }
+
+        $relative = array_map(fn (string $path): string => substr($path, strlen($web) + 1), $files);
+        $command = 'npx biome check --write '.implode(' ', $relative);
+
+        if (! is_file("{$web}/node_modules/.bin/biome")) {
+            $this->components->warn("前端未安装依赖，未格式化生成的前端文件；安装后可在 web 目录执行：{$command}");
+
+            return;
+        }
+
+        $result = Process::path($web)->timeout(120)->run(["{$web}/node_modules/.bin/biome", 'check', '--write', ...$relative]);
+
+        if ($result->failed()) {
+            $this->components->warn("Biome 格式化前端文件失败（生成的文件已写入），请在 web 目录检查：{$command}");
+            $this->line(trim($result->output()."\n".$result->errorOutput()));
+
+            return;
+        }
+
+        $this->components->info('已用 Biome 格式化生成的前端文件。');
+    }
+
     protected function nextSteps(): void
     {
         $this->components->info("模块 {$this->blueprint->class} 已生成，接下来：");
         $this->components->bulletList([
-            'php artisan migrate',
-            'php artisan permission:sync',
+            'php artisan permission:sync && php artisan migrate',
             "php artisan test --filter={$this->blueprint->class}Test",
-            'composer lint && composer analyse',
-            '在 docs/architecture.md 中补充接口契约',
+            '在 docs/architecture.md 中补充接口契约，按需补充 Policy 规则、Seeder 与中文文案',
         ]);
     }
 

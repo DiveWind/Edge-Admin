@@ -39,14 +39,19 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 - 列表查询参数：`page`、`per_page`（默认 15，上限 100，超出返回 422）、`sort`（如 `-created_at`、`sort`，仅允许白名单字段，
   非白名单返回 422；各列表白名单见 5.7）、
   其余为过滤字段（下表 "过滤" 列）。字符串过滤为模糊匹配，`status`/`*_id` 为精确匹配，
-  时间范围用 `created_from` / `created_to`（日期）。
+  时间范围用 `created_from` / `created_to`（日期，见下方"时间"）。
 - 状态字段 `status` 统一为字符串枚举，通用启停为 `active` / `disabled`。
 - **多语言**：请求头 `Accept-Language` 决定接口文案语言（`message`、`errors`、操作日志摘要），支持 `zh-CN` / `zh_CN` / `zh`
   → 中文，`en-US` / `en` → 英文；未携带或不支持时使用后端 `APP_LOCALE`（默认 `zh_CN`）。响应头 `Content-Language`
   返回实际语言（`zh-CN` / `en`）。**前端应按当前界面语言显式发送该请求头**（浏览器默认的 Accept-Language 可能与界面语言不一致）。
   字典项 `label`、系统参数、权限点 / 菜单的 `name` 等**数据**不做多语言，菜单与权限点名称由前端按 `code` 做 i18n 展示（`name` 为中文兜底）。
 - **限流**：全部 `/api/*` 每分钟 120 次（`EDGE_API_RATE_LIMIT`，已登录按用户、未登录按 IP），登录接口另有独立限流（见 5.1）。
-- 时间字段为带时区偏移的 ISO 8601（如 `2026-01-01T08:00:00+08:00`，时区由 `APP_TIMEZONE` 决定，默认 `Asia/Shanghai`）。
+- **时间**：输出的时间字段一律为带时区偏移的 ISO 8601（如 `2026-01-01T08:00:00+08:00`，时区由 `APP_TIMEZONE` 决定，默认 `Asia/Shanghai`）。
+  输入的日期时间（表单字段、`created_from` / `created_to` 等过滤参数）：
+  - **推荐发送带偏移的 ISO 8601**（如 `2026-11-16T10:30:00+00:00`、`2026-11-16T10:30:00Z`），后端按偏移换算到 `APP_TIMEZONE` 后保存 / 比较，
+    返回 `2026-11-16T18:30:00+08:00`；前端日期时间控件统一这样提交，与浏览器所在时区无关；
+  - 不带偏移的值（`2026-11-16 18:30:00`、`2026-11-16T18:30:00`）按 `APP_TIMEZONE` 解释；
+  - 纯日期（`date` 字段、`created_from` / `created_to`）是 `APP_TIMEZONE` 下的日历日；传带偏移的时间时先换算再取日期。
 - 资源对象除本文列出的字段外，通常还带 `*_id` 外键、`created_at`、`updated_at` 等字段（只增不减，前端可忽略）。
 
 ## 3. 权限模型
@@ -139,7 +144,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/auth/login` | `{username, password}` → `{data:{token, token_type:"Bearer", expires_at}}`；限流（每分钟每 用户名+IP 次数取系统参数 `security.login_max_attempts`，默认 5，超出 429）；写登录日志，token 记录 ip / user_agent。账号或密码错误、账号被禁用均返回 `422`，错误在 `errors.username` |
+| POST | `/api/auth/login` | `{username, password}` → `{data:{token, token_type:"Bearer", expires_at}}`；限流：按 用户名+IP **只累计失败**（密码错误、账号禁用），每分钟允许的失败次数取系统参数 `security.login_max_attempts`（默认 5），超出后返回 429（带 `Retry-After`，`message` 提示剩余秒数），**登录成功后计数清零**；写登录日志，token 记录 ip / user_agent。账号或密码错误、账号被禁用均返回 `422`，错误在 `errors.username` |
 | POST | `/api/auth/logout` | 吊销当前 token，204 |
 | GET | `/api/auth/me` | 见下方 CurrentUser |
 | PUT | `/api/auth/profile` | `{name, email?, phone?, avatar?}` → CurrentUser |
@@ -276,6 +281,7 @@ SystemInfo（不含主机、账号、密钥等敏感配置；无法获取的指�
 | GET | `/api/options/departments` | 启用部门树 `[{id, name, parent_id, children}]` |
 | GET | `/api/options/permissions` | 权限树，形状同 `GET /api/permissions`；供角色授权表单使用（无需 `system.permission.view`） |
 | GET | `/api/options/roles` `/positions` `/article-categories` `/users` | 启用项 `[{id, name}]`（roles/positions 额外带 code） |
+| GET | `/api/options/<资源>`（生成器 `--with-options`） | 代码生成器生成的业务模块选项，形状同上 `[{id, name}]`（有 `status` 时仅启用项）；具体资源在各模块契约中登记 |
 | GET | `/api/options/dicts?codes=a,b` | `{data: {"a": [{label, value, color}], "b": [...]}}`：仅启用字典的启用项，按 sort；不存在 / 已禁用的 code 返回 `[]`；`codes` 必填（422）；后端缓存，字典变更即失效 |
 | GET | `/api/options/settings` | **无需登录**。所有 `is_public` 参数 `{data: {"site.name": "Edge Admin", ...}}`（值已按 type 转换）；登录页用于站点名称、登录页公告、备案号 |
 | POST | `/api/uploads` | multipart `file` → `201 {data: Attachment}`（含原有 `url`、`path`，新增 `id` `name` `mime` `size` 等），同时登记为附件。默认允许 jpg jpeg png gif webp pdf doc docx xls xlsx ppt pptx txt csv zip，≤2MB（`EDGE_UPLOAD_EXTENSIONS` / `EDGE_UPLOAD_MAX_SIZE` 可配，不允许 svg / html），超出 422 |

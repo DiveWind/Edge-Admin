@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Collections\TreeCollection;
 use App\Enums\PermissionType;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\PermissionFactory;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Permission extends Model
 {
     /** @use HasFactory<PermissionFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

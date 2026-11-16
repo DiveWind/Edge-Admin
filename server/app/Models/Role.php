@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DataScope;
 use App\Enums\Status;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\RoleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Role extends Model
 {
     /** @use HasFactory<RoleFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * 超级管理员角色编码：拥有全部权限，不可删除 / 禁用 / 改码。

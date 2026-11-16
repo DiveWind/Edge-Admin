@@ -21,7 +21,10 @@ class {{ class }}Resource extends JsonResource
         return [
             'id' => $this->id,
 {{ fields.resource }}
-{{ resource.extras }}
+{{#if data_scope}}
+            'department_id' => $this->department_id,
+            'created_by' => $this->created_by,
+{{/if}}
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

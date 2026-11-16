@@ -1,3 +1,4 @@
+{{@import { booleanTransform } from '@/utils/table'}}
     {
       title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
       dataIndex: '{{ field.name }}',

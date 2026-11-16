@@ -1,1 +1,2 @@
+{{@import { useStatusEnum } from '@/hooks/useValueEnums'}}
   const {{ field.camel }}Enum = useStatusEnum();

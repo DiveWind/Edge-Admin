@@ -25,6 +25,7 @@ class ModuleBlueprint
         public readonly array $fields,
         public readonly bool $dataScope = false,
         public readonly bool $softDeletes = false,
+        public readonly bool $withOptions = false,
     ) {
         if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $name) !== 1) {
             throw new InvalidArgumentException("模块名 [{$name}] 只能包含字母和数字，且以字母开头（如 Tag、ArticleTag）。");
@@ -38,8 +39,20 @@ class ModuleBlueprint
             throw new InvalidArgumentException('请通过 --fields 至少声明一个字段。');
         }
 
+        if ($withOptions && ! collect($fields)->contains(fn (Field $field): bool => $field->name === 'name')) {
+            throw new InvalidArgumentException('--with-options 需要模块包含 name 字段（选项接口返回 [{id, name}]）。');
+        }
+
         $this->class = Str::studly(Str::singular($name));
         $this->module = $module;
+    }
+
+    /**
+     * 第一个 status 类型字段（选项接口只返回启用项），没有则为 null。
+     */
+    public function statusField(): ?string
+    {
+        return collect($this->fields)->first(fn (Field $field): bool => $field->type === 'status')?->name;
     }
 
     /** Tags */
@@ -100,7 +113,7 @@ class ModuleBlueprint
             fn (Field $field): string => "'{$field->name}'",
             array_values(array_filter($this->fields, fn (Field $field): bool => in_array($field->type, ['integer', 'decimal', 'date', 'datetime'], true))),
         ), "'created_at'"];
-        $traits = ['HasFactory', ...($this->dataScope ? ['HasDataScope'] : []), ...($this->softDeletes ? ['SoftDeletes'] : [])];
+        $traits = ['HasFactory', 'StoresDatesInAppTimezone', ...($this->dataScope ? ['HasDataScope'] : []), ...($this->softDeletes ? ['SoftDeletes'] : [])];
         sort($traits);
 
         return [
@@ -124,6 +137,9 @@ class ModuleBlueprint
             'traits' => implode(', ', $traits),
             'data_scope' => $this->dataScope ? 'true' : '',
             'soft_deletes' => $this->softDeletes ? 'true' : '',
+            'with_options' => $this->withOptions ? 'true' : '',
+            'status_field' => $this->statusField() ?? '',
+            'sort_field' => collect($this->fields)->contains(fn (Field $field): bool => $field->name === 'sort' && $field->type === 'integer') ? 'sort' : '',
             'migration.extras' => $this->dataScope
                 ? "            \$table->foreignId('department_id')->nullable()->index();\n            \$table->foreignId('created_by')->nullable()->index();"
                 : '',
@@ -135,6 +151,7 @@ class ModuleBlueprint
             'web.path' => "/{$this->module}/{$this->route()}",
             'web.page_dir' => "{$this->module}/{$this->route()}",
             'web.component' => "{$this->class}List",
+            'web.form_component' => "{$this->class}Form",
             'web.locale_prefix' => "pages.{$this->module}.{$this->route()}",
             'web.menu_module' => "menu.{$this->module}",
             'web.menu_key' => "menu.{$this->module}.{$this->route()}",
@@ -151,6 +168,7 @@ class ModuleBlueprint
     public function modelImports(): array
     {
         return [
+            'App\\Models\\Concerns\\StoresDatesInAppTimezone',
             ...($this->dataScope ? ['App\\Models\\Concerns\\HasDataScope'] : []),
             ...($this->softDeletes ? ['Illuminate\\Database\\Eloquent\\SoftDeletes'] : []),
         ];
@@ -175,6 +193,7 @@ class ModuleBlueprint
             'policy' => "app/Policies/{$this->class}Policy.php",
             'controller' => "app/Http/Controllers/Api/{$module}/{$this->class}Controller.php",
             'test' => "tests/Feature/{$this->class}Test.php",
+            ...($this->withOptions ? ['option_controller' => "app/Http/Controllers/Api/Options/{$this->class}OptionController.php"] : []),
         ];
     }
 
@@ -191,6 +210,7 @@ class ModuleBlueprint
             'web/index.tsx' => "{$directory}/index.tsx",
             'web/service.ts' => "{$directory}/service.ts",
             'web/data.d.ts' => "{$directory}/data.d.ts",
+            'web/form.tsx' => "{$directory}/components/{$this->class}Form.tsx",
         ];
     }
 }

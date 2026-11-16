@@ -2,6 +2,10 @@
 export interface {{ class }} {
   id: API.Id;
 {{ fields.web.type }}
+{{#if data_scope}}
+  department_id: API.Id | null;
+  created_by: API.Id | null;
+{{/if}}
   created_at: string;
   updated_at: string;
 }

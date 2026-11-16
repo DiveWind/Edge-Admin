@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Status;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\PositionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Position extends Model
 {
     /** @use HasFactory<PositionFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

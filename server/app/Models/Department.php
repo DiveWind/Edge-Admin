@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Collections\TreeCollection;
 use App\Enums\Status;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\DepartmentFactory;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

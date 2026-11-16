@@ -55,13 +55,11 @@ use Illuminate\Support\Facades\Route;
 | 控制器只保留资源方法（index/show/store/update/destroy）或 __invoke，
 | 非资源动作拆为单动作控制器（见 tests/Arch）。路由名是操作日志摘要的键。
 |
-| `// edge:routes` 为 `php artisan edge:make-module` 的插入锚点，请保留。
+| `// edge:routes`、`// edge:options` 为 `php artisan edge:make-module` 的插入锚点，请保留。
 |
 */
 
-Route::post('auth/login', [TokenController::class, 'store'])
-    ->middleware('throttle:login')
-    ->name('auth.login');
+Route::post('auth/login', [TokenController::class, 'store'])->name('auth.login');
 
 // 登录页需要的公开参数（站点名称等）
 Route::get('options/settings', SettingOptionController::class)->name('options.settings');
@@ -224,6 +222,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::get('article-categories', ArticleCategoryOptionController::class)->name('article-categories');
         Route::get('users', UserOptionController::class)->name('users');
         Route::get('dicts', DictOptionController::class)->name('dicts');
+        // edge:options
     });
 
     Route::post('uploads', UploadController::class)->name('uploads.store');

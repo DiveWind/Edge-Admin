@@ -20,7 +20,10 @@ class {{ class }}Factory extends Factory
     {
         return [
 {{ fields.factory }}
-{{ factory.extras }}
+{{#if data_scope}}
+            'department_id' => null,
+            'created_by' => null,
+{{/if}}
         ];
     }
 }

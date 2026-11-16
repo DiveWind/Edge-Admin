@@ -1,107 +1,25 @@
-import { PlusOutlined } from '@ant-design/icons';
-import type {
-  ActionType,
-  ProColumns,
-  ProFormInstance,
-} from '@ant-design/pro-components';
-import {
-  ModalForm,
-  PageContainer,
-  ProFormDatePicker,
-  ProFormDateTimePicker,
-  ProFormDigit,
-  ProFormRadio,
-  ProFormSelect,
-  ProFormSwitch,
-  ProFormText,
-  ProFormTextArea,
-  ProTable,
-} from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
-import { App, Button, Typography } from 'antd';
-import type React from 'react';
-import { useRef, useState } from 'react';
-import { DeleteAction, DictTag } from '@/components';
-import { useDict } from '@/hooks/useDict';
-import { useBooleanEnum, useStatusEnum } from '@/hooks/useValueEnums';
-import {
-  clearFieldErrors,
-  jsonRule,
-  parseJson,
-  stringifyJson,
-  submitForm,
-} from '@/utils/form';
-import { useT } from '@/utils/i18n';
-import { booleanTransform, tableRequest } from '@/utils/table';
-import type { {{ class }}, {{ class }}FormValues } from './data';
-import {
-  create{{ class }},
-  delete{{ class }},
-  get{{ class }},
-  query{{ class_plural }},
-  update{{ class }},
-} from './service';
+{{@import { PlusOutlined } from '@ant-design/icons'}}
+{{@import type { ActionType, ProColumns } from '@ant-design/pro-components'}}
+{{@import { PageContainer, ProTable } from '@ant-design/pro-components'}}
+{{@import { useAccess } from '@umijs/max'}}
+{{@import { Button, Typography } from 'antd'}}
+{{@import type React from 'react'}}
+{{@import { useRef, useState } from 'react'}}
+{{@import { DeleteAction } from '@/components'}}
+{{@import { useT } from '@/utils/i18n'}}
+{{@import { tableRequest } from '@/utils/table'}}
+{{@import {{ web.form_component }} from './components/{{ web.form_component }}'}}
+{{@import type { {{ class }} } from './data'}}
+{{@import { delete{{ class }}, query{{ class_plural }} } from './service'}}
+{{#if data_scope}}
+{{@import { fetchSelectOptions } from '@/services/options'}}
+{{/if}}
+{{ imports }}
 
 /*
- * {{ title_plural }}：由 edge:make-module 生成，生成后请按 docs/generator.md 第 6 节检查：
- * - 执行 `npx biome check --write --unsafe <本目录> src/locales`（去掉未用到的导入并格式化）；
- * - 补充前端校验（必填、长度等，后端 422 已会回填到字段）、外键下拉的选项接口、中文文案。
+ * {{ title_plural }}：由 edge:make-module 生成（docs/generator.md）。字段名文案默认为英文，请在 locales 中改为中文；
+ * 列宽 / 默认隐藏列按 docs/frontend-guide.md 的列表规范按需调整。
  */
-
-interface {{ class }}FormProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  record?: {{ class }};
-  onSuccess: () => void;
-}
-
-/** 新建 / 编辑弹窗：传 formRef 不传 form，弹窗销毁后表单是干净的；编辑时拉详情回填 */
-const {{ class }}Form: React.FC<{{ class }}FormProps> = ({
-  open,
-  onOpenChange,
-  record,
-  onSuccess,
-}) => {
-  const t = useT();
-  const { message } = App.useApp();
-{{ fields.web.form_hook }}
-  const formRef = useRef<ProFormInstance<{{ class }}FormValues>>(undefined);
-
-  const handleFinish = (values: {{ class }}FormValues) =>
-    submitForm(formRef.current, async () => {
-      if (record) {
-        await update{{ class }}(record.id, values);
-      } else {
-        await create{{ class }}(values);
-      }
-      message.success(t(record ? 'common.updated' : 'common.created'));
-      onSuccess();
-    });
-
-  return (
-    <ModalForm<{{ class }}FormValues>
-      title={t(record ? '{{ web.locale_prefix }}.edit' : '{{ web.locale_prefix }}.create')}
-      width={560}
-      formRef={formRef}
-      omitNil={false}
-      open={open}
-      onOpenChange={onOpenChange}
-      modalProps={{ destroyOnHidden: true }}
-      initialValues={{
-{{ fields.web.initial_value }}
-      }}
-      request={
-        record ? async () => (await get{{ class }}(record.id)).data : undefined
-      }
-      // 没有前端 rules 的字段输入时不会重新校验，手动清掉 422 回填的错误
-      onValuesChange={(changed) => clearFieldErrors(formRef.current, changed)}
-      onFinish={handleFinish}
-    >
-{{ fields.web.form_item }}
-    </ModalForm>
-  );
-};
-
 const {{ web.component }}: React.FC = () => {
   const t = useT();
   const access = useAccess();
@@ -126,6 +44,26 @@ const {{ web.component }}: React.FC = () => {
       width: 80,
     },
 {{ fields.web.column }}
+{{#if data_scope}}
+    {
+      title: t('{{ web.locale_prefix }}.department'),
+      dataIndex: 'department_id',
+      key: 'department_id',
+      valueType: 'select',
+      request: () => fetchSelectOptions('departments'),
+      search: false,
+      width: 120,
+    },
+    {
+      title: t('{{ web.locale_prefix }}.creator'),
+      dataIndex: 'created_by',
+      key: 'created_by',
+      valueType: 'select',
+      request: () => fetchSelectOptions('users'),
+      search: false,
+      width: 120,
+    },
+{{/if}}
     {
       title: t('common.createdAt'),
       dataIndex: 'created_at',
@@ -163,10 +101,14 @@ const {{ web.component }}: React.FC = () => {
         actionRef={actionRef}
         columns={columns}
         request={tableRequest(query{{ class_plural }})}
-        // 长文本 / JSON 列默认隐藏（列设置中可打开），保证常用列在常见宽度下完整显示
+        // 长文本 / JSON{{#if data_scope}} / 部门 / 创建人{{/if}}列默认隐藏（列设置中可打开），保证常用列在常见宽度下完整显示
         columnsState={{
           defaultValue: {
 {{ fields.web.column_state }}
+{{#if data_scope}}
+            department_id: { show: false },
+            created_by: { show: false },
+{{/if}}
           },
         }}
         toolBarRender={() => [
@@ -182,7 +124,7 @@ const {{ web.component }}: React.FC = () => {
           ),
         ]}
       />
-      <{{ class }}Form
+      <{{ web.form_component }}
         open={formOpen}
         onOpenChange={setFormOpen}
         record={editing}

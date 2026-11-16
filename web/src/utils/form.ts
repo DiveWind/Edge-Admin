@@ -1,4 +1,5 @@
 import type { FormInstance, FormRule } from 'antd';
+import dayjs from 'dayjs';
 import { getFieldErrors, isRequestError } from './error';
 
 /**
@@ -89,4 +90,20 @@ export function parseJson(text: unknown): unknown {
   } catch {
     return text;
   }
+}
+
+/**
+ * 表单提交：日期时间 → 带时区偏移的 ISO 8601（契约第 2 节），如 `2026-11-16T18:30:00+08:00`，
+ * 后端据此换算到服务器时区，浏览器与服务器不在同一时区时也不会偏差。用在 `ProFormDateTimePicker` 的 `transform` 中：
+ * ProForm 先把 dayjs 值格式化成本地时间字符串（`YYYY-MM-DD HH:mm:ss`）再交给 transform，这里按浏览器时区补上偏移。
+ * 空值为 null，无法解析的值原样提交（交给后端 422）。
+ *
+ * @example
+ * transform={(value: unknown) => ({ published_at: toOffsetDateTime(value) })}
+ */
+export function toOffsetDateTime(value: unknown): unknown {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' && !dayjs.isDayjs(value)) return value;
+  const date = dayjs(value);
+  return date.isValid() ? date.format() : value;
 }

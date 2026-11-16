@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\AttachmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Storage;
 class Attachment extends Model
 {
     /** @use HasFactory<AttachmentFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>
@@ -61,7 +62,7 @@ class Attachment extends Model
             ->when($filters['name'] ?? null, fn (Builder $q, string $value) => $q->whereLike('name', "%{$value}%"))
             ->when($filters['mime'] ?? null, fn (Builder $q, string $value) => $q->whereLike('mime', "%{$value}%"))
             ->when($filters['uploaded_by'] ?? null, fn (Builder $q, int|string $value) => $q->where('uploaded_by', $value))
-            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $value))
-            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $value));
+            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $this->asAppDateTime($value)))
+            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $this->asAppDateTime($value)));
     }
 }

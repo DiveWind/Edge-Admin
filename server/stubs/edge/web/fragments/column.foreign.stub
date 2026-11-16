@@ -1,8 +1,16 @@
+{{#if field.options_route}}
+{{@import { fetchSelectOptions } from '@/services/options'}}
+{{/if}}
     {
       title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
       dataIndex: '{{ field.name }}',
       valueType: 'select',
-      // TODO 接 {{ field.related }} 的选项接口（参考 src/services/options.ts：getXxxOptions().then(toSelectOptions)），
-      // 列表与搜索下拉会按选项显示名称；未接入前显示 id
+{{#if field.options_route}}
+      // 列表按选项显示名称，搜索为下拉
+      request: () => fetchSelectOptions('{{ field.options_route }}'),
+{{else}}
+      // TODO 后端没有 /api/options/{{ field.related_route }}：补选项接口后改为
+      // request: () => fetchSelectOptions('{{ field.related_route }}')（未接入前显示 id）
       request: async () => [],
+{{/if}}
     },

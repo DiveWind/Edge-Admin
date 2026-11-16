@@ -1,0 +1,2 @@
+        // 带偏移的输入按偏移换算到应用时区，输出带偏移的 ISO 8601
+        ->assertJsonPath('data.{{ field.name }}', CarbonImmutable::parse({{ field.test_value }})->setTimezone(config()->string('app.timezone'))->toIso8601String())

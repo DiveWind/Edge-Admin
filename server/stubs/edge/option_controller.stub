@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Http\Controllers\Api\Options;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\OptionResource;
+use App\Models\{{ class }};
+{{#if status_field}}
+use App\Enums\Status;
+{{/if}}
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+
+/**
+ * {{ title_plural }} 下拉选项 `[{id, name}]`{{#if status_field}}（仅启用项）{{/if}}，登录即可访问。
+ */
+class {{ class }}OptionController extends Controller
+{
+    public function __invoke(): AnonymousResourceCollection
+    {
+        return OptionResource::collection(
+            {{ class }}::query()
+{{#if status_field}}
+                ->where('{{ status_field }}', Status::Active)
+{{/if}}
+{{#if sort_field}}
+                ->orderBy('{{ sort_field }}')
+{{/if}}
+                ->orderBy('id')
+                ->get(['id', 'name']),
+        );
+    }
+}

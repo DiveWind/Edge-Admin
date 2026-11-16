@@ -1,1 +1,2 @@
+{{@import { useDict } from '@/hooks/useDict'}}
   const {{ field.camel }}Dict = useDict('{{ field.dict }}');

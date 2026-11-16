@@ -38,14 +38,56 @@ test('disabled user cannot login', function () {
         ->assertJsonValidationErrors('username');
 });
 
-test('login is rate limited', function () {
+test('failed logins are rate limited per username and ip', function () {
     User::factory()->create(['username' => 'alice']);
 
     foreach (range(1, config()->integer('edge.auth.login_max_attempts')) as $attempt) {
+        $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'wrong'])->assertUnprocessable();
+    }
+
+    $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'password'])
+        ->assertTooManyRequests()
+        ->assertHeader('Retry-After')
+        ->assertJsonPath('message', fn (string $message): bool => str_starts_with($message, '登录尝试过于频繁'));
+
+    // 计数按"用户名 + IP"区分，其他账号不受影响
+    User::factory()->create(['username' => 'bob']);
+    $this->postJson('/api/auth/login', ['username' => 'bob', 'password' => 'password'])->assertOk();
+});
+
+test('successful logins do not count towards the login rate limit', function () {
+    User::factory()->create(['username' => 'alice']);
+
+    foreach (range(1, config()->integer('edge.auth.login_max_attempts') + 1) as $attempt) {
+        $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'password'])->assertOk();
+    }
+});
+
+test('a successful login clears earlier failed attempts', function () {
+    User::factory()->create(['username' => 'alice']);
+    $failures = config()->integer('edge.auth.login_max_attempts') - 1;
+
+    foreach (range(1, $failures) as $attempt) {
         $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'wrong']);
     }
 
-    $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'wrong'])->assertTooManyRequests();
+    $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'password'])->assertOk();
+
+    foreach (range(1, $failures) as $attempt) {
+        $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'wrong'])->assertUnprocessable();
+    }
+
+    $this->postJson('/api/auth/login', ['username' => 'alice', 'password' => 'password'])->assertOk();
+});
+
+test('the login rate limit message is localized', function () {
+    config(['edge.auth.login_max_attempts' => 1]);
+
+    $this->postJson('/api/auth/login', ['username' => 'nobody', 'password' => 'wrong'])->assertUnprocessable();
+    $this->withHeader('Accept-Language', 'en')
+        ->postJson('/api/auth/login', ['username' => 'nobody', 'password' => 'wrong'])
+        ->assertTooManyRequests()
+        ->assertJsonPath('message', fn (string $message): bool => str_starts_with($message, 'Too many login attempts.'));
 });
 
 test('guests receive 401', function () {

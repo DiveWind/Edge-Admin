@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Status;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\ArticleCategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ArticleCategory extends Model
 {
     /** @use HasFactory<ArticleCategoryFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\DataScope;
 use App\Enums\Status;
 use App\Models\Concerns\HasDataScope;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -27,7 +28,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasDataScope, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasDataScope, HasFactory, Notifiable, SoftDeletes, StoresDatesInAppTimezone;
 
     /**
      * 受保护的初始超级管理员账号 id。

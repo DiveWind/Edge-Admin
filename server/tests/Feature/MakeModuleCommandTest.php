@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Generator\FieldParser;
+use App\Console\Generator\StubRenderer;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 
@@ -86,7 +87,7 @@ test('it generates a complete backend and frontend module', function () {
         ->toContain('$table->softDeletes();');
 
     expect($files['server/app/Models/Ticket.php'])
-        ->toContain('use HasDataScope, HasFactory, SoftDeletes;')
+        ->toContain('use HasDataScope, HasFactory, SoftDeletes, StoresDatesInAppTimezone;')
         ->toContain("'status' => Status::class,")
         ->toContain("'meta' => 'array',")
         ->toContain('public function category(): BelongsTo')
@@ -118,7 +119,35 @@ test('it generates a complete backend and frontend module', function () {
     expect($files['web/src/access.ts'])->toContain("| 'crm.ticket.delete'");
     expect($files['web/src/locales/zh-CN/menu.ts'])->toContain("'menu.crm': 'Crm',")->toContain("'menu.crm.tickets': 'Tickets',");
     expect($files['web/src/locales/en-US.ts'])->toContain("import crmTickets from './en-US/pages/crm-tickets';")->toContain('...crmTickets,');
-    expect($files['web/src/pages/crm/tickets/data.d.ts'])->toContain('starts_on: string | null;')->toContain('status: API.Status;');
+    expect($files['web/src/pages/crm/tickets/data.d.ts'])
+        ->toContain('starts_on: string | null;')
+        ->toContain('status: API.Status;')
+        ->toContain('department_id: API.Id | null;');
+
+    // 前端：表单拆到 components/，导入按实际使用的控件生成（无未使用导入），字段规则下发为前端校验
+    $index = $files['web/src/pages/crm/tickets/index.tsx'];
+    $form = $files['web/src/pages/crm/tickets/components/TicketForm.tsx'];
+    expect($index)
+        ->toContain("import TicketForm from './components/TicketForm';")
+        ->toContain("import { booleanTransform, tableRequest } from '@/utils/table';")
+        ->toContain("request: () => fetchSelectOptions('article-categories'),")
+        ->toContain("dataIndex: 'department_id',")
+        ->not->toContain('ProFormText')
+        ->not->toContain('{{@import')
+        ->not->toContain('{{ imports }}');
+    expect($form)
+        ->toContain("import type { Ticket, TicketFormValues } from '../data';")
+        ->toContain('toOffsetDateTime,')
+        ->toContain("fieldProps={{ maxLength: 100 }}\n        rules={[{ required: true }]}")
+        ->toContain("request={() => fetchSelectOptions('article-categories')}")
+        ->toContain('transform={(value: unknown) => ({ starts_on: value ?? null })}')
+        ->not->toContain('PageContainer')
+        ->not->toContain('booleanTransform');
+    expect(substr_count($form, "from '@ant-design/pro-components';"))->toBe(2);
+
+    expect($files['server/tests/Feature/TicketTest.php'])
+        ->toContain("->assertJsonPath('data.published_at', CarbonImmutable::parse('2026-01-01T08:00:00+00:00')")
+        ->toContain("\$this->assertSoftDeleted('tickets', ['id' => \$id]);");
 
     foreach ($files as $path => $content) {
         if (str_ends_with($path, '.php')) {
@@ -127,6 +156,67 @@ test('it generates a complete backend and frontend module', function () {
 
         expect($content)->not->toMatch('/\{\{\s*[a-z_.]+\s*\}\}/');
     }
+});
+
+test('--with-options generates an option endpoint and foreign fields without one get a TODO', function () {
+    $this->artisan('edge:make-module', ['name' => 'Tag', '--module' => 'content', '--fields' => 'name:string,sort:integer,status:status', '--with-options' => true])
+        ->assertSuccessful();
+    $this->artisan('edge:make-module', ['name' => 'Ticket', '--module' => 'crm', '--fields' => 'name:string,tag_id:foreign:tags,owner_id:foreign:accounts:nullable'])
+        ->expectsOutputToContain('外键 owner_id 没有可用的选项接口 /api/options/accounts')
+        ->assertSuccessful();
+
+    $files = generatedFiles($this->root);
+
+    expect($files['server/app/Http/Controllers/Api/Options/TagOptionController.php'])
+        ->toContain("->where('status', Status::Active)")
+        ->toContain("->orderBy('sort')")
+        ->toContain('use App\Enums\Status;');
+    expect($files['server/routes/api.php'])
+        ->toContain("Route::get('tags', TagOptionController::class)->name('tags');\n        // edge:options")
+        ->toContain('use App\Http\Controllers\Api\Options\TagOptionController;');
+    expect($files['server/tests/Feature/TagTest.php'])->toContain("test('tag options can be listed by any user'");
+
+    expect($files['web/src/pages/crm/tickets/components/TicketForm.tsx'])
+        ->toContain("request={() => fetchSelectOptions('tags')}")
+        ->toContain('// TODO 后端没有 /api/options/accounts')
+        ->toContain('request={async () => []}');
+    expect($files['web/src/locales/en-US/pages/crm-tickets.ts'])->toContain("'pages.crm.tickets.ownerId': 'Owner',");
+});
+
+test('--with-options requires a name field', function () {
+    $this->artisan('edge:make-module', ['name' => 'Tag', '--module' => 'content', '--fields' => 'title:string', '--with-options' => true])
+        ->expectsOutputToContain('--with-options 需要模块包含 name 字段')
+        ->assertFailed();
+});
+
+test('conditional blocks are evaluated from the inside out and drop standalone tag lines', function () {
+    $template = "a\n{{#if outer}}\nb {{#unless inner}}c{{else}}d{{/unless}}\n{{/if}}\n{{#if missing}}\ne\n{{/if}}\nf";
+
+    expect(StubRenderer::conditionals($template, ['outer' => 'true', 'inner' => '']))->toBe("a\nb c\nf")
+        ->and(StubRenderer::conditionals($template, ['outer' => 'true', 'inner' => 'true']))->toBe("a\nb d\nf")
+        ->and(StubRenderer::conditionals($template, ['outer' => null]))->toBe("a\nf");
+});
+
+test('typescript import directives are merged, deduplicated and sorted', function () {
+    $output = StubRenderer::organizeTsImports(implode("\n", [
+        "{{@import { useState } from 'react'}}",
+        "{{@import type React from 'react'}}",
+        '{{ imports }}',
+        '',
+        "{{@import { b } from './local'}}",
+        "{{@import { useRef, useState } from 'react'}}",
+        "{{@import { z } from '@/utils/z'}}",
+        'const x = 1;',
+    ]));
+
+    expect($output)->toBe(implode("\n", [
+        "import type React from 'react';",
+        "import { useRef, useState } from 'react';",
+        "import { z } from '@/utils/z';",
+        "import { b } from './local';",
+        '',
+        'const x = 1;',
+    ]));
 });
 
 test('running the generator twice does not duplicate anything', function () {

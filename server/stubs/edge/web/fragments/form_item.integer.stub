@@ -1,5 +1,12 @@
+{{@import { ProFormDigit } from '@ant-design/pro-components'}}
       <ProFormDigit
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
+{{#if field.max}}
+        max={{{ field.max }}}
+{{/if}}
         fieldProps={{ precision: 0 }}
+{{#if field.required}}
+        rules={[{ required: true }]}
+{{/if}}
       />

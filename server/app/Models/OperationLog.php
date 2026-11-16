@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\OperationLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class OperationLog extends Model
 {
     /** @use HasFactory<OperationLogFactory> */
-    use HasFactory, MassPrunable;
+    use HasFactory, MassPrunable, StoresDatesInAppTimezone;
 
     public const UPDATED_AT = null;
 
@@ -65,7 +66,7 @@ class OperationLog extends Model
             ->when($filters['method'] ?? null, fn (Builder $q, string $value) => $q->where('method', strtoupper($value)))
             ->when($filters['path'] ?? null, fn (Builder $q, string $value) => $q->whereLike('path', "%{$value}%"))
             ->when($filters['status_code'] ?? null, fn (Builder $q, int|string $value) => $q->where('status_code', $value))
-            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $value))
-            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $value));
+            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $this->asAppDateTime($value)))
+            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $this->asAppDateTime($value)));
     }
 }

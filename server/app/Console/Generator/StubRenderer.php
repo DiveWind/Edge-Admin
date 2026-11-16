@@ -12,7 +12,12 @@ use RuntimeException;
  *   （不存在时用 `fragments/<片段>.stub`，都不存在则跳过该字段），结果以换行连接；
  *   `{{ fields.web.<片段> }}` 对应 `web/fragments/<片段>[.<字段类型>].stub`；
  *   片段中可用全部模块变量与 `{{ field.* }}`，引用的 `field.*` 值为 null 时跳过该字段。
+ * - `{{#if name}} … {{else}} … {{/if}}` / `{{#unless name}} … {{/unless}}`：条件块，可嵌套；`name` 为模块变量或片段中的
+ *   `field.*`，值为 null / 空串 / 不存在时为假。条件标签独占一行时整行删除。条件先于占位符替换执行，
+ *   因此片段中只出现在假分支里的 `field.*` 不会导致该字段被跳过。
  * - `{{ uses }}`：替换为本模板中各片段需要的 use 导入；PHP 文件最终会对顶层 use 去重并排序。
+ * - `{{@import … from '…'}}`（独占一行，可写在模板与片段中）：声明 TS 导入；渲染后收集所有实际输出的声明，
+ *   按来源合并、去重、排序后输出到 `{{ imports }}` 所在行（没有该占位符时放在文件开头），因此生成的 TSX 不含未使用的导入。
  * - 可选内容为空后留下的多余空行会被清理（见 tidy()）。
  * - 模板变体：`resolve('controller', ['data_scope'])` 依次查找 `controller.data_scope.stub`、`controller.stub`。
  *
@@ -21,6 +26,21 @@ use RuntimeException;
 class StubRenderer
 {
     protected const string PLACEHOLDER = '/\{\{\s*([a-z_][a-z0-9_.\-]*)\s*\}\}/i';
+
+    /**
+     * 最内层的条件块（内容中不含其他开始标签）：1 = if / unless，2 = 变量名，3 = 内容。
+     */
+    protected const string CONDITION = '/\{\{#(if|unless)\s+([a-z_][a-z0-9_.\-]*)\s*\}\}((?:(?!\{\{#(?:if|unless)\s).)*?)\{\{\/\1\}\}/is';
+
+    /**
+     * 独占一行的条件标签（连同行首缩进与换行一起删除）。
+     */
+    protected const string CONDITION_LINE = '/^[ \t]*(\{\{(?:#(?:if|unless)\s+[a-z0-9_.\-]+\s*|else|\/(?:if|unless))\}\})[ \t]*\n/im';
+
+    /**
+     * TS 导入声明 `{{@import … from '…'}}`（独占一行）。
+     */
+    protected const string IMPORT_DIRECTIVE = '/^[ \t]*\{\{@import\s+(.+?)\}\}[ \t]*(?:\n|$)/m';
 
     /**
      * @param  list<string>  $paths
@@ -73,7 +93,7 @@ class StubRenderer
      */
     public function render(string $name, array $variables, array $fields = [], array $imports = []): string
     {
-        $template = $this->load($name);
+        $template = self::conditionals($this->load($name), $variables);
 
         preg_match_all('/\{\{\s*fields\.([a-z_]+(?:\.[a-z_]+)?)\s*\}\}/', $template, $matches);
 
@@ -91,7 +111,7 @@ class StubRenderer
         sort($imports);
         $variables['uses'] = implode("\n", array_map(fn (string $class): string => "use {$class};", $imports));
 
-        $output = self::tidy($this->substitute($template, $variables));
+        $output = self::tidy(self::organizeTsImports($this->substitute($template, $variables)));
 
         return str_ends_with($name, '.php') || str_starts_with(ltrim($output), '<?php') ? self::sortImports($output) : $output;
     }
@@ -103,7 +123,7 @@ class StubRenderer
      */
     public function snippet(string $name, array $variables): string
     {
-        return $this->substitute($this->load($name), $variables);
+        return $this->substitute(self::conditionals($this->load($name), $variables), $variables);
     }
 
     /**
@@ -127,7 +147,8 @@ class StubRenderer
                 $fieldVariables["field.{$key}"] = $value;
             }
 
-            $template = rtrim($this->load($fragment), "\n");
+            $scope = [...$variables, ...$fieldVariables];
+            $template = rtrim(self::conditionals($this->load($fragment), $scope), "\n");
 
             preg_match_all('/\{\{\s*(field\.[a-z_]+)\s*\}\}/', $template, $used);
 
@@ -137,7 +158,7 @@ class StubRenderer
                 }
             }
 
-            $rendered[] = $this->substitute($template, [...$variables, ...$fieldVariables]);
+            $rendered[] = $this->substitute($template, $scope);
         }
 
         return implode("\n", $rendered);
@@ -182,6 +203,93 @@ class StubRenderer
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * 展开条件块：由内向外逐层求值，`{{else}}` 之前为真分支、之后为假分支。
+     *
+     * @param  array<string, string|null>  $variables
+     */
+    public static function conditionals(string $template, array $variables): string
+    {
+        if (! str_contains($template, '{{#')) {
+            return $template;
+        }
+
+        $template = (string) preg_replace(self::CONDITION_LINE, '$1', $template);
+
+        do {
+            $template = (string) preg_replace_callback(self::CONDITION, function (array $block) use ($variables): string {
+                $truthy = ($variables[$block[2]] ?? '') !== '';
+                [$then, $else] = array_pad(explode('{{else}}', $block[3], 2), 2, '');
+
+                return ($block[1] === 'if') === $truthy ? $then : $else;
+            }, $template, -1, $count);
+        } while ($count > 0);
+
+        return $template;
+    }
+
+    /**
+     * 收集 `{{@import …}}` 声明，按来源合并去重后输出到 `{{ imports }}`。
+     * 顺序与 Biome 的 organizeImports 一致：npm 包 → `@/` 别名 → 相对路径，同组按来源排序，同一来源 `import type` 在前。
+     */
+    public static function organizeTsImports(string $output): string
+    {
+        $placeholder = '/^\{\{\s*imports\s*\}\}$/m';
+
+        if (preg_match_all(self::IMPORT_DIRECTIVE, $output, $matches) === 0) {
+            return (string) preg_replace('/^\{\{\s*imports\s*\}\}\n/m', '', $output);
+        }
+
+        /** @var array<string, array{source: string, type: bool, default: string|null, named: list<string>}> $imports */
+        $imports = [];
+
+        foreach ($matches[1] as $declaration) {
+            $declaration = 'import '.rtrim(trim($declaration), ';');
+
+            if (preg_match('/^import\s+(type\s+)?([A-Za-z_$][\w$]*)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s+\'([^\']+)\'$/', $declaration, $parts) !== 1) {
+                throw new RuntimeException("无法解析导入声明 [{$declaration}]，格式：{{@import [type] [默认导入][, ]{ 命名导入 } from '来源'}}。");
+            }
+
+            $key = ($parts[1] !== '' ? 'type:' : 'value:').$parts[4];
+            $imports[$key] ??= ['source' => $parts[4], 'type' => $parts[1] !== '', 'default' => null, 'named' => []];
+            $imports[$key]['default'] = $parts[2] !== '' ? $parts[2] : $imports[$key]['default'];
+            $named = array_filter(array_map(trim(...), explode(',', $parts[3])), fn (string $name): bool => $name !== '');
+            $imports[$key]['named'] = array_values(array_unique([...$imports[$key]['named'], ...$named]));
+        }
+
+        $group = fn (string $source): int => match (true) {
+            str_starts_with($source, '.') => 2,
+            str_starts_with($source, '@/') => 1,
+            default => 0,
+        };
+
+        usort($imports, fn (array $a, array $b): int => [$group($a['source']), $a['source'], ! $a['type']] <=> [$group($b['source']), $b['source'], ! $b['type']]);
+
+        $lines = array_map(function (array $import): string {
+            $named = $import['named'];
+            usort($named, strnatcmp(...));
+            $prefix = 'import '.($import['type'] ? 'type ' : '');
+            $default = $import['default'] ?? '';
+            $suffix = " from '{$import['source']}';";
+
+            if ($named === []) {
+                return $prefix.$default.$suffix;
+            }
+
+            $head = $prefix.($default !== '' ? "{$default}, " : '');
+            $line = $head.'{ '.implode(', ', $named).' }'.$suffix;
+
+            return strlen($line) <= 80 ? $line : $head."{\n".implode('', array_map(fn (string $name): string => "  {$name},\n", $named)).'}'.$suffix;
+        }, $imports);
+
+        $output = (string) preg_replace(self::IMPORT_DIRECTIVE, '', $output);
+        $block = implode("\n", $lines);
+
+        return preg_match($placeholder, $output) === 1
+            ? (string) preg_replace_callback($placeholder, fn (): string => $block, $output, 1)
+            : $block."\n".$output;
     }
 
     /**

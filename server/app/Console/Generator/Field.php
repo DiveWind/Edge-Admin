@@ -25,9 +25,47 @@ class Field
         public readonly array $rules = [],
     ) {}
 
+    /**
+     * foreign 字段可用的选项接口路由段（`/api/options/<optionsRoute>`），由生成命令按 routes/api.php 检测后设置；
+     * 为 null 时前端下拉生成 TODO 占位。
+     */
+    public ?string $optionsRoute = null;
+
     public function isNullable(): bool
     {
         return in_array('nullable', $this->rules, true);
+    }
+
+    /**
+     * 是否必填：声明了 required，或未声明任何存在性规则（默认 required）。
+     */
+    public function isRequired(): bool
+    {
+        $presence = array_intersect($this->rules, self::PRESENCE_RULES);
+
+        return $presence === [] || in_array('required', $presence, true);
+    }
+
+    /**
+     * 生效的 max 规则值（字符串未声明时为默认的 255），无则 null。
+     */
+    public function maxRule(): ?int
+    {
+        foreach ($this->rules as $rule) {
+            if (preg_match('/^max:(\d+)$/', $rule, $matches) === 1) {
+                return (int) $matches[1];
+            }
+        }
+
+        return $this->type === 'string' ? 255 : null;
+    }
+
+    /**
+     * foreign 关联表对应的选项接口路由段（article_categories → article-categories）。
+     */
+    public function relatedRoute(): ?string
+    {
+        return $this->type === 'foreign' && $this->argument !== null ? str_replace('_', '-', $this->argument) : null;
     }
 
     /**
@@ -61,7 +99,8 @@ class Field
     }
 
     /**
-     * 片段中可用的 `{{ field.* }}` 变量。
+     * 片段中可用的 `{{ field.* }}` 变量。布尔值为 `'true'` / `''`（用于 `{{#if field.required}}`），
+     * 不适用的值为 null（片段直接引用时跳过该字段）。
      *
      * @return array<string, string|null>
      */
@@ -70,12 +109,17 @@ class Field
         return [
             'name' => $this->name,
             'camel' => Str::camel($this->name),
-            'label' => Str::headline($this->name),
+            'label' => Str::headline($this->type === 'foreign' ? Str::beforeLast($this->name, '_id') : $this->name),
             'type' => $this->type,
             'argument' => $this->argument,
             'dict' => $this->type === 'dict' ? $this->argument : null,
             'related' => $this->relatedModel(),
             'relation' => $this->relationName(),
+            'related_route' => $this->relatedRoute(),
+            'options_route' => $this->optionsRoute,
+            'required' => $this->isRequired() ? 'true' : '',
+            'nullable' => $this->isNullable() ? 'true' : '',
+            'max' => $this->maxRule() === null ? null : (string) $this->maxRule(),
             'migration' => $this->migration(),
             'cast' => $this->cast(),
             'rules' => $this->validationRules(),
@@ -112,6 +156,7 @@ class Field
             'relation' => $model === [] ? [] : [...$model, 'Illuminate\\Database\\Eloquent\\Relations\\BelongsTo'],
             'test_payload' => $model,
             'test_setup' => $this->type === 'dict' ? ['App\\Models\\DictItem', 'App\\Models\\DictType'] : [],
+            'test_assertion' => $this->type === 'datetime' ? ['Carbon\\CarbonImmutable'] : [],
             default => [],
         };
     }
@@ -210,7 +255,7 @@ class Field
             'dict', 'status' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->where('{$this->name}', \$value));",
             'integer', 'foreign' => "\$query->when({$key} ?? null, fn (Builder \$q, int|string \$value) => \$q->where('{$this->name}', \$value));",
             'boolean' => "\$query->when(isset({$key}), fn (Builder \$q) => \$q->where('{$this->name}', filter_var({$key}, FILTER_VALIDATE_BOOLEAN)));",
-            'date' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->whereDate('{$this->name}', \$value));",
+            'date' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->whereDate('{$this->name}', \$this->asAppDateTime(\$value)));",
             default => null,
         };
     }
@@ -266,7 +311,7 @@ class Field
             'decimal' => "'9.99'",
             'boolean' => 'true',
             'date' => "'2026-01-01'",
-            'datetime' => "'2026-01-01 08:00:00'",
+            'datetime' => "'2026-01-01T08:00:00+00:00'",
             'json' => "['key' => 'value']",
             'status' => "'active'",
             'foreign' => $this->relatedModel().'::factory()->create()->id',

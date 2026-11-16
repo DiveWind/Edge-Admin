@@ -1,5 +1,12 @@
+import dayjs from 'dayjs';
 import { describe, expect, it, vi } from 'vitest';
-import { clearFieldErrors, jsonRule, parseJson, stringifyJson } from './form';
+import {
+  clearFieldErrors,
+  jsonRule,
+  parseJson,
+  stringifyJson,
+  toOffsetDateTime,
+} from './form';
 
 type Validator = (rule: object, value: unknown) => Promise<void>;
 
@@ -47,5 +54,31 @@ describe('clearFieldErrors', () => {
       { name: 'name', errors: [] },
       { name: 'meta', errors: [] },
     ]);
+  });
+});
+
+describe('toOffsetDateTime', () => {
+  it('adds the browser offset to local date times', () => {
+    const result = toOffsetDateTime('2026-11-16 18:30:00');
+
+    expect(result).toMatch(/^2026-11-16T18:30:00[+-]\d{2}:\d{2}$/);
+    expect(new Date(result as string).getTime()).toBe(
+      new Date(2026, 10, 16, 18, 30).getTime(),
+    );
+    expect(toOffsetDateTime(dayjs('2026-11-16 18:30:00'))).toBe(result);
+  });
+
+  it('keeps the instant of values that already carry an offset', () => {
+    const result = toOffsetDateTime('2026-11-16T10:30:00Z');
+
+    expect(new Date(result as string).toISOString()).toBe(
+      '2026-11-16T10:30:00.000Z',
+    );
+  });
+
+  it('turns empty values into null and leaves unparsable values alone', () => {
+    expect(toOffsetDateTime(undefined)).toBeNull();
+    expect(toOffsetDateTime('')).toBeNull();
+    expect(toOffsetDateTime('not a date')).toBe('not a date');
   });
 });

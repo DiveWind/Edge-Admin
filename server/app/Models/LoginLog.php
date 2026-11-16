@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LoginStatus;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\LoginLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class LoginLog extends Model
 {
     /** @use HasFactory<LoginLogFactory> */
-    use HasFactory, MassPrunable;
+    use HasFactory, MassPrunable, StoresDatesInAppTimezone;
 
     public const UPDATED_AT = null;
 
@@ -60,7 +61,7 @@ class LoginLog extends Model
             ->when($filters['username'] ?? null, fn (Builder $q, string $value) => $q->whereLike('username', "%{$value}%"))
             ->when($filters['ip'] ?? null, fn (Builder $q, string $value) => $q->whereLike('ip', "%{$value}%"))
             ->when($filters['status'] ?? null, fn (Builder $q, string $value) => $q->where('status', $value))
-            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $value))
-            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $value));
+            ->when($filters['created_from'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '>=', $this->asAppDateTime($value)))
+            ->when($filters['created_to'] ?? null, fn (Builder $q, string $value) => $q->whereDate('created_at', '<=', $this->asAppDateTime($value)));
     }
 }

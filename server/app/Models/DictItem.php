@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Status;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Dictionary;
 use Database\Factories\DictItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class DictItem extends Model
 {
     /** @use HasFactory<DictItemFactory> */
-    use HasFactory;
+    use HasFactory, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

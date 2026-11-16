@@ -179,7 +179,8 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - **多步写入或带副作用**（同步关联、吊销 token、派发 Job、读写文件）的用例放 `app/Actions/<模块>/`：单一 `handle()`、构造器注入、
   事务在 Action 内、入参为 `$request->validated()`（`array<string, mixed>`，PHPDoc 注明来源 Request）或明确的模型 / 标量；Actions 不依赖 HTTP 层。
 - 模型：`#[Fillable]` / `#[Hidden]` 属性、`casts()` 中用 `app/Enums` 的枚举、`#[Scope]` 局部作用域（列表过滤统一叫 `filter(array $filters)`）。
-  开发环境开启 `Model::shouldBeStrict()`，Factory 需给出全部字段；日期为 `CarbonImmutable`。
+  开发环境开启 `Model::shouldBeStrict()`，Factory 需给出全部字段；日期为 `CarbonImmutable`。所有模型 `use StoresDatesInAppTimezone`
+  （带偏移的日期时间输入换算到 `APP_TIMEZONE` 后写库，架构测试强制），时间范围过滤用 `$this->asAppDateTime($value)`。
 - 树形数据（部门、权限）用 `#[CollectedBy(App\Collections\TreeCollection::class)]` + `->toTree()` 在 PHP 侧组装，不写递归 SQL。
 - 列表请求继承 `App\Http\Requests\ListRequest`：声明 `filterRules()`、`$sortable`、`$defaultSort`；控制器 `->filter($request->filters())`、
   `$request->applySort($query)->paginate($request->perPage())->withQueryString()`。
@@ -197,7 +198,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## 新增业务模块
 
-优先用生成器：`php artisan edge:make-module <Name> --module=<模块> --fields="..." [--data-scope] [--soft-deletes]`（见 `../docs/generator.md`），
+优先用生成器：`php artisan edge:make-module <Name> --module=<模块> --fields="..." [--data-scope] [--soft-deletes] [--with-options]`（见 `../docs/generator.md`），
 再按规范补充 Action / Policy 规则 / Seeder / 中文文案。手工方式参照文章模块（`Article*`）：`make:model -mfs --policy` → 迁移 / 模型 / Factory / Seeder →
 `config/permissions.php` 加权限点并 `permission:sync` → `make:request`（`*IndexRequest` 继承 `ListRequest`）→ `make:resource` → Policy →
 `make:controller Api/<模块>/<Name>Controller --api` → `routes/api.php` 注册并挂 `can:` → `lang/*/operations.php` 摘要 → `make:test --pest` →

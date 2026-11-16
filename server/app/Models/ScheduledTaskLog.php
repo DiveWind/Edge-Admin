@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\TaskStatus;
+use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\ScheduledTaskLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 class ScheduledTaskLog extends Model
 {
     /** @use HasFactory<ScheduledTaskLogFactory> */
-    use HasFactory, MassPrunable;
+    use HasFactory, MassPrunable, StoresDatesInAppTimezone;
 
     /**
      * @return array<string, string>

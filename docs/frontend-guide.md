@@ -133,6 +133,11 @@ const formRef = useRef<ProFormInstance<XxxFormValues>>(undefined);
 - 回填的错误只在字段重新校验时消失；没有前端 `rules` 的字段输入时不会校验，用 `clearFieldErrors` 清除。
 - 可清空的下拉在提交时把 `undefined` 转成 `null`，否则"清空"不会提交到后端。
 - JSON 字段：`ProFormTextArea` + `rules={[jsonRule(t('common.jsonInvalid'))]}` + `convertValue={stringifyJson}` + `transform`（`parseJson`）。
+- **日期时间**：提交带时区偏移的 ISO 8601（契约第 2 节），`ProFormDateTimePicker` 加 `transform={(value: unknown) => ({ field: toOffsetDateTime(value) })}`
+  （`utils/form.ts`）；显示仍是浏览器本地时间（`valueType: 'dateTime'` 列、日期控件按 dayjs 解析带偏移的值）。纯日期（`date` 字段、
+  `created_from` / `created_to`）按日历日提交 `YYYY-MM-DD`。
+- 外键下拉：`request={() => fetchSelectOptions('article-categories')}`（`services/options.ts`，通用的 `GET /api/options/<资源>` → `{label, value}`，
+  树形选项展开）；已有专用函数时也可 `getXxxOptions().then(toSelectOptions)`。
 - 上传：`ImageUpload`（单图，值为 url）；`uploadFile()` 返回完整 `Attachment`（`id`、`name`、`mime`、`size`、`url`……），上传的文件会出现在附件管理中。
 
 ## 8. i18n
@@ -166,14 +171,14 @@ const formRef = useRef<ProFormInstance<XxxFormValues>>(undefined);
 ### 10.2 用生成器
 
 ```bash
-cd server && php artisan edge:make-module Tag --module=content \
+cd server && php artisan edge:make-module Tag --module=content --with-options \
   --fields="name:string:required|max:50,color:string:nullable,sort:integer,status:status"
-php artisan migrate && php artisan permission:sync
-cd ../web && npx biome check --write --unsafe src/pages/content/tags src/locales src/access.ts config/routes.ts
+php artisan permission:sync && php artisan migrate
 ```
 
-生成器写好页面、service、类型、双语文案，并登记路由、菜单、权限码。生成后的手工调整（外键下拉、前端校验、中文文案、列宽……）
-与模板定制方法见 [generator.md](generator.md) 第 6 节。
+生成器写好列表页、`components/<Class>Form.tsx`、service、类型、双语文案（导入按需生成、带与后端一致的必填 / 长度校验、外键下拉接入选项接口、
+日期时间按上面的约定提交），登记路由、菜单、权限码，并在 `node_modules` 存在时用 Biome 格式化，生成后直接通过 lint / build。
+之后的完善（中文文案、列宽、e2e 冒烟）与模板定制方法见 [generator.md](generator.md) 第 6 节。
 
 ## 11. 测试
 
@@ -192,7 +197,7 @@ cd web && npm run e2e        # 未运行 dev server 时自动启动；E2E_BASE_U
 
 - 覆盖：登录 / 登出与 redirect、各角色菜单收敛与 403、每个模块冒烟、岗位完整 CRUD（含 422 回填）、公告 → 通知流程、
   字典（含缓存失效）、系统参数、附件、在线会话、系统信息、文章来源、工作台、暗色主题、英文界面下的后端文案与权限名称。
-- `global-setup.ts` 用 API 为每个角色登录一次并保存 `storageState`（登录接口按"用户名 + IP"每分钟限流，用例里不要反复登录）。
+- `global-setup.ts` 用 API 为每个角色登录一次并保存 `storageState`（复用登录态，用例更快；登录接口按"用户名 + IP"只限制失败次数，成功登录不计数）。
 - 用例写入的数据带随机后缀并在用例内清理；建议每次运行前 `migrate:fresh --seed`。浏览器使用预装的 Chromium（`PLAYWRIGHT_BROWSERS_PATH`），
   `@playwright/test` 版本需与之匹配，不要随意升级或执行 `playwright install`。
 - 开发服务器运行时执行 `npm run build` 可能让开发服务器开始返回 HTML 代替脚本（utoopack 缓存冲突），遇到时停掉所有 dev 进程后重启。

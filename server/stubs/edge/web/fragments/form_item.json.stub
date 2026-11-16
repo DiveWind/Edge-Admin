@@ -1,8 +1,14 @@
+{{@import { ProFormTextArea } from '@ant-design/pro-components'}}
+{{@import { jsonRule, parseJson, stringifyJson } from '@/utils/form'}}
       <ProFormTextArea
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
         fieldProps={{ rows: 4 }}
+{{#if field.required}}
+        rules={[{ required: true }, jsonRule(t('common.jsonInvalid'))]}
+{{else}}
         rules={[jsonRule(t('common.jsonInvalid'))]}
+{{/if}}
         // 以格式化的 JSON 文本编辑，提交时解析回对象 / 数组
         convertValue={stringifyJson}
         transform={(value: unknown) => ({ {{ field.name }}: parseJson(value) })}

@@ -138,14 +138,19 @@ test.describe('articles', () => {
       'source',
       '转载',
     );
-    await page.getByRole('button', { name: /查\s*询/ }).click();
-    await page.waitForLoadState('networkidle');
+    // 等筛选后的列表响应返回并渲染，再数行（否则可能数到筛选前的行）
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/articles?') &&
+          response.url().includes('source=reprint'),
+      ),
+      page.getByRole('button', { name: /查\s*询/ }).click(),
+    ]);
     const rows = tableRows(page);
-    const count = await rows.count();
-    expect(count).toBeGreaterThan(0);
-    for (let index = 0; index < count; index += 1) {
-      await expect(rows.nth(index)).toContainText('转载');
-    }
+    // 自动重试的断言：表格重新渲染完成后，所有行都是"转载"
+    await expect(rows.filter({ hasNotText: '转载' })).toHaveCount(0);
+    expect(await rows.count()).toBeGreaterThan(0);
   });
 });
 

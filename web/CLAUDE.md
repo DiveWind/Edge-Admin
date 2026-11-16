@@ -88,6 +88,8 @@ Tailwind（仅在不得已时做少量布局适配）。不写全局 Less（`src
 - `omitNil={false}`，可清空的下拉字段在提交时把 `undefined` 转成 `null`，否则"清空"不会提交到后端。
 - 有不带 `rules` 的字段时加 `onValuesChange={(changed) => clearFieldErrors(formRef.current, changed)}`：没有 rules 的字段输入时不校验，
   422 回填的错误会一直留着。JSON 字段用 `jsonRule` + `convertValue={stringifyJson}` + `transform`（`parseJson`）。
+- 日期时间提交带偏移的 ISO 8601：`ProFormDateTimePicker` 加 `transform={(value: unknown) => ({ field: toOffsetDateTime(value) })}`（`@/utils/form`），
+  显示保持浏览器本地时间。外键下拉用 `request={() => fetchSelectOptions('<资源>')}`（`@/services/options`，`GET /api/options/<资源>`）。
 
 ### 字典与系统参数
 

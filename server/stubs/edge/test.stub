@@ -31,13 +31,20 @@ test('{{ variable_plural }} can be listed', function () {
 test('{{ variable_plural }} can be created, shown, updated and deleted', function () {
     actingAsUser(userWithPermissions(['{{ permission }}.view', '{{ permission }}.create', '{{ permission }}.update', '{{ permission }}.delete']));
 
-    $id = $this->postJson('/api/{{ route }}', {{ variable }}Payload())->assertCreated()->json('data.id');
+    $id = $this->postJson('/api/{{ route }}', {{ variable }}Payload())
+        ->assertCreated()
+{{ fields.test_assertion }}
+        ->json('data.id');
 
     $this->getJson("/api/{{ route }}/{$id}")->assertOk()->assertJsonPath('data.id', $id);
     $this->putJson("/api/{{ route }}/{$id}", {{ variable }}Payload())->assertOk();
     $this->deleteJson("/api/{{ route }}/{$id}")->assertNoContent();
 
+{{#if soft_deletes}}
+    $this->assertSoftDeleted('{{ table }}', ['id' => $id]);
+{{else}}
     expect({{ class }}::query()->find($id))->toBeNull();
+{{/if}}
 });
 
 test('{{ variable }} input is validated', function () {
@@ -46,6 +53,20 @@ test('{{ variable }} input is validated', function () {
     $this->postJson('/api/{{ route }}', [])->assertUnprocessable();
 });
 
+{{#if with_options}}
+test('{{ variable }} options can be listed by any user', function () {
+    actingAsUser(User::factory()->create());
+    ${{ variable }} = {{ class }}::factory()->create();
+{{#if status_field}}
+    {{ class }}::factory()->create(['{{ status_field }}' => 'disabled']);
+{{/if}}
+
+    $this->getJson('/api/options/{{ route }}')
+        ->assertOk()
+        ->assertJsonPath('data', [['id' => ${{ variable }}->id, 'name' => ${{ variable }}->name]]);
+});
+
+{{/if}}
 test('{{ variable_plural }} require permissions', function () {
     actingAsUser(User::factory()->create());
     ${{ variable }} = {{ class }}::factory()->create();

@@ -22,3 +22,14 @@
 - 多语言：按 `Accept-Language` 返回中文 / 英文提示，统一的 401 / 403 / 404 / 405 / 422 / 429 JSON 错误。
 - 代码生成器 `php artisan edge:make-module`：字段 DSL、可定制 stub、幂等登记权限点 / 路由 / 操作日志 / 前端路由与文案。
 - 工程化：Pest 架构测试、Larastan level 8、Pint、GitHub Actions CI、可选的 Laravel Sail、完整中文文档。
+- 代码生成器：字段规则变量（`field.required` / `field.nullable` / `field.max` 等）与前端校验、条件块 `{{#if}} … {{else}} … {{/if}}`、
+  TS 导入声明 `{{@import …}}`（按实际使用汇总去重，生成的 TSX 无未使用导入）、生成后自动用前端的 Biome 格式化、
+  表单拆到 `components/<Class>Form.tsx`、`--with-options` 生成 `GET /api/options/<资源>`、外键下拉自动接入已有选项接口
+  （前端通用函数 `fetchSelectOptions()`）、`--data-scope` 时前端类型与部门 / 创建人列、datetime 字段的时区断言测试。
+
+### Fixed
+
+- 带时区偏移的日期时间输入（如 `2026-11-16T10:30:00+00:00`）不再丢失偏移：所有模型使用 `StoresDatesInAppTimezone`
+  在写库前换算到 `APP_TIMEZONE`，`created_from` / `created_to` 等时间范围过滤同样换算；前端日期时间控件改为提交带偏移的 ISO 8601（`toOffsetDateTime()`）。
+- 登录限流改为与官方 starter kit 一致：只累计失败次数、登录成功后清零（`LoginRequest::authenticate()`），仍返回 429 + `Retry-After`，
+  次数仍由系统参数 `security.login_max_attempts` 控制。

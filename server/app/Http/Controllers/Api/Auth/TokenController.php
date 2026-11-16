@@ -16,16 +16,11 @@ use Illuminate\Http\Response;
 class TokenController extends Controller
 {
     /**
-     * 账号密码登录，签发 Bearer Token。
+     * 账号密码登录，签发 Bearer Token（失败次数限流见 LoginRequest）。
      */
     public function store(LoginRequest $request, AttemptLogin $attemptLogin): JsonResponse
     {
-        $token = $attemptLogin->handle(
-            $request->string('username')->toString(),
-            $request->string('password')->toString(),
-            $request->ip(),
-            $request->userAgent(),
-        );
+        $token = $request->authenticate($attemptLogin);
 
         return response()->json([
             'data' => [

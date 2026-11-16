@@ -1,5 +1,9 @@
+{{@import { ProFormRadio } from '@ant-design/pro-components'}}
       <ProFormRadio.Group
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
         valueEnum={{{ field.camel }}Enum}
+{{#if field.required}}
+        rules={[{ required: true }]}
+{{/if}}
       />

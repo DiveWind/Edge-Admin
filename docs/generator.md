@@ -5,18 +5,15 @@
 
 ```bash
 cd server
-php artisan edge:make-module Tag --module=content \
+php artisan edge:make-module Tag --module=content --with-options \
   --fields="name:string:required|max:50,color:string:nullable,sort:integer,status:status"
 
-php artisan migrate
-php artisan permission:sync
-php artisan test --filter=TagTest
-composer lint && composer analyse
-
-cd ../web   # 前端收尾，见 6.3
-npx biome check --write --unsafe src/pages/content/tags src/locales src/access.ts config/routes.ts
-npm run lint && npx antd lint ./src && npm run build
+php artisan permission:sync && php artisan migrate     # 完成
 ```
+
+生成物无需手工清理即可通过两端全部检查：后端 `composer lint && composer analyse && composer test`（含生成的 `TagTest`），
+前端 `npm run lint && npx antd lint ./src && npm run build`（`web/node_modules` 存在时生成器会自动用 Biome 格式化生成 / 修改的前端文件）。
+之后按需补充契约、Policy 业务规则、Seeder 与中文文案（见第 3 节末尾）。
 
 ## 1. 参数
 
@@ -26,7 +23,8 @@ npm run lint && npx antd lint ./src && npm run build
 | `--module=` | **必填**。所属模块（小写字母、数字、`-`），决定权限码前缀、控制器 / 请求命名空间、前端菜单分组，如 `content` |
 | `--fields=` | **必填**。字段定义，见第 2 节 |
 | `--data-scope` | 接入数据权限：模型 `use HasDataScope`，迁移加 `department_id` / `created_by`，控制器 `visibleTo()`，Policy `isVisibleTo()` |
-| `--soft-deletes` | 迁移 `softDeletes()`，模型 `use SoftDeletes` |
+| `--soft-deletes` | 迁移 `softDeletes()`，模型 `use SoftDeletes`，生成的测试断言软删除 |
+| `--with-options` | 同时生成选项接口 `GET /api/options/<路由>`（`Options/<Class>OptionController`，返回 `[{id, name}]`；有 `status` 字段时只返回启用项，有 `sort` 字段时按其排序）。要求声明 `name` 字段 |
 | `--no-web` | 不生成前端代码 |
 | `--force` | 覆盖已存在的文件（登记类修改始终幂等，不会重复） |
 | `--dry-run` | 只打印将要创建 / 修改的文件与需手动处理的事项，不写入 |
@@ -38,6 +36,7 @@ npm run lint && npx antd lint ./src && npm run build
 - `rules` 用 `|` 分隔，原样透传给 Laravel 校验，可以包含 `:` 和 `,`（如 `in:low,high`）；只有"逗号后紧跟 `字段名:`"才会被当作新字段。
 - 未声明 `required` / `nullable` / `sometimes` / `present` / `filled` 时默认 `required`；声明了 `nullable` 时迁移列可空。
 - `string` 的 `max:N`（≤255）同时决定迁移列长度；未声明时追加 `max:255`。
+- 必填 / 可空 / `max` 同时下发给前端：表单控件生成 `rules={[{ required: true }]}`、`fieldProps={{ maxLength: N }}`（数字为 `max={N}`），见 6.2。
 - `id`、`created_at`、`updated_at`、`deleted_at`、`department_id`、`created_by` 由生成器维护，不能声明。
 
 | type | 迁移 | cast | 校验（类型部分） | 列表过滤 | TS 类型 / valueType |
@@ -48,13 +47,14 @@ npm run lint && npx antd lint ./src && npm run build
 | `decimal` | `decimal(10,2)` | `decimal:2` | `numeric` | — | `string` / `digit` |
 | `boolean` | `boolean` 默认 false | `boolean` | `boolean` | 精确 | `boolean` / `switch` |
 | `date` | `date` | `date` | `date` | 按日 | `string` / `date` |
-| `datetime` | `dateTime` | `datetime` | `date` | — | `string` / `dateTime` |
+| `datetime` | `dateTime` | `datetime` | `date`（接受带偏移的 ISO 8601，见 6.2） | — | `string` / `dateTime` |
 | `json` | `json` | `array` | `array` | — | `Record<string, unknown>` / `jsonCode` |
 | `status` | `string(20)` 默认 active | `Status::class` | `Rule::enum(Status::class)` | 精确 | `API.Status` / `select` |
 | `foreign:<表>` | `foreignId()->constrained('<表>')` | `integer` | `integer` `Rule::exists('<表>', 'id')` | 精确 | `number` / `digit` |
 | `dict:<编码>` | `string(64)` 带索引 | — | `string` `new InDict('<编码>')` | 精确 | `string` / `text` |
 
 `foreign:<表>` 会按表名推导关联模型（`article_categories` → `ArticleCategory`），生成 `belongsTo` 关系与 Factory 关联；模型需已存在。
+前端下拉的选项来源见 6.4。字段文案取去掉 `_id` 的名称（`tag_id` → `Tag`）。
 `dict:<编码>` 生成的测试会自动准备该字典与一个值为 `sample` 的字典项。
 
 ## 3. 生成内容
@@ -67,16 +67,19 @@ npm run lint && npx antd lint ./src && npm run build
 | 模型 / 工厂 | `app/Models/Tag.php`（`#[Fillable]`、`casts()`、关系、`#[Scope] filter()`）、`database/factories/TagFactory.php` |
 | 请求 | `app/Http/Requests/Content/{TagIndexRequest,StoreTagRequest,UpdateTagRequest}.php`（Index 继承 `ListRequest`；Update 在 `authorize()` 中 `Gate::inspect('update')`） |
 | 资源 / 授权 | `app/Http/Resources/TagResource.php`、`app/Policies/TagPolicy.php` |
-| 控制器 | `app/Http/Controllers/Api/Content/TagController.php`（单表 CRUD，不含 Action） |
-| 测试 | `tests/Feature/TagTest.php`：列表、CRUD、校验、无权限 403 |
-| 登记（修改） | `config/permissions.php`：`content.tag` 节点（view/create/update/delete）；`routes/api.php`：`apiResource('tags')` + `can:` 中间件 + `use`；`lang/*/operations.php`：`tags.store/update/destroy` 摘要 |
-| 前端 | `web/src/pages/content/tags/{index.tsx,service.ts,data.d.ts}`（列表 + 新建 / 编辑弹窗 + 删除，见第 6 节）、`web/src/locales/{zh-CN,en-US}/pages/content-tags.ts`；修改 `config/routes.ts`、`src/locales/{zh-CN,en-US}/menu.ts`、`src/locales/{zh-CN,en-US}.ts`、`src/access.ts` |
+| 控制器 | `app/Http/Controllers/Api/Content/TagController.php`（单表 CRUD，不含 Action）；`--with-options` 时另有 `app/Http/Controllers/Api/Options/TagOptionController.php` |
+| 测试 | `tests/Feature/TagTest.php`：列表、CRUD（datetime 字段断言时区换算、软删除断言 `assertSoftDeleted`）、校验、无权限 403；`--with-options` 时含选项接口 |
+| 登记（修改） | `config/permissions.php`：`content.tag` 节点（view/create/update/delete）；`routes/api.php`：`apiResource('tags')` + `can:` 中间件 + `use`（`--with-options` 时另在 `options` 分组登记 `Route::get('tags', TagOptionController::class)`）；`lang/*/operations.php`：`tags.store/update/destroy` 摘要 |
+| 前端 | `web/src/pages/content/tags/{index.tsx,service.ts,data.d.ts,components/TagForm.tsx}`（列表 + 删除、新建 / 编辑弹窗，见第 6 节）、`web/src/locales/{zh-CN,en-US}/pages/content-tags.ts`；修改 `config/routes.ts`、`src/locales/{zh-CN,en-US}/menu.ts`、`src/locales/{zh-CN,en-US}.ts`、`src/access.ts` |
 
 命名推导：类 `Tag` → 复数 `Tags`、表 `tags`、路由 / URL `tags`、路由参数 `tag`、权限码 `content.tag`、前端路径 `/content/tags`、
 文案前缀 `pages.content.tags`、菜单键 `menu.content.tags`。
 
-生成后请补充：`docs/architecture.md` 中的契约、Policy 中的业务规则（如"被引用时不可删"）、Seeder、更合适的中文名称
-（权限点 `name`、`operations.php`、前端文案默认用英文 Headline），并完成第 6.3 节的前端收尾步骤。
+生成的模型与手写模型一样 `use StoresDatesInAppTimezone`（日期时间输入换算到应用时区，见 [backend-guide.md](backend-guide.md) 3 节"日期时间"）。
+
+生成后请补充：`docs/architecture.md` 中的契约（含 `--with-options` 的选项接口）、Policy 中的业务规则（如"被引用时不可删"——
+被外键 `restrictOnDelete()` 引用的记录直接删除会触发数据库约束错误）、Seeder、更合适的中文名称
+（权限点 `name`、`operations.php`、前端文案默认用英文 Headline），见 6.3。
 
 ## 4. 模板（stub）
 
@@ -90,10 +93,11 @@ npm run lint && npx antd lint ./src && npm run build
 | `migration` `model` `factory` `index_request` `store_request` `update_request` `resource` `policy` `controller` `test` | 后端文件 |
 | `policy.data_scope` `controller.data_scope` | `--data-scope` 时的变体（`<名称>.<变体>.stub` 优先于 `<名称>.stub`） |
 | `routes` | 插入 `routes/api.php` 的路由块 |
+| `option_controller` / `option_route` | `--with-options` 的选项控制器 / 插入 `routes/api.php` `options` 分组的路由 |
 | `permission` / `permission_group` | 插入 `config/permissions.php` 的权限节点 / 新模块分组 |
 | `operations.<locale>` / `operations` | 插入 `lang/<locale>/operations.php` 的摘要（`operations.zh_CN.stub`，其余语言用 `operations.stub`） |
 | `fragments/<片段>[.<字段类型>]` | 后端按字段重复的片段，见 4.3 |
-| `web/index.tsx` `web/service.ts` `web/data.d.ts` | 前端页面文件（见第 6 节） |
+| `web/index.tsx` `web/form.tsx` `web/service.ts` `web/data.d.ts` | 前端页面文件（`form.tsx` → `components/<Class>Form.tsx`，见第 6 节） |
 | `web/locale.<locale>` / `web/locale` | 页面文案文件（`web/locale.zh-CN.stub`，其余语言用 `web/locale.stub`） |
 | `web/route` / `web/route_group` | 插入 `config/routes.ts` 的路由 / 新模块分组 |
 | `web/menu_module` `web/menu_item`（可加 `.<locale>`） | 插入 `menu.ts` 的模块与菜单文案 |
@@ -116,11 +120,13 @@ npm run lint && npx antd lint ./src && npm run build
 | `permission` | `content.tag` | `controller_namespace` | `App\Http\Controllers\Api\Content` |
 | `request_namespace` | `App\Http\Requests\Content` | `fillable` | `'name', 'color', 'sort', 'status'` |
 | `sortable` | `'id', 'sort', 'created_at'` | `traits` | `HasFactory`（含 `HasDataScope` / `SoftDeletes`） |
-| `data_scope` / `soft_deletes` | `true` 或空 | `uses` | 本模板中各片段所需的 `use` 导入 |
-| `migration.extras` | 数据权限列 | `migration.soft_deletes` | `$table->softDeletes();` |
-| `casts.extras` `factory.extras` `resource.extras` | 数据权限字段 | `locale` | 仅语言相关模板：`zh-CN` / `en-US` |
+| `data_scope` / `soft_deletes` / `with_options` | `true` 或空（用于条件块，见 4.4） | `uses` | 本模板中各片段所需的 `use` 导入 |
+| `status_field` | 第一个 `status` 字段名，没有为空 | `sort_field` | 有 `sort:integer` 字段时为 `sort`，否则为空 |
+| `migration.extras` | 数据权限列（兼容旧模板；内置模板已改用条件块） | `migration.soft_deletes` | `$table->softDeletes();`（同上） |
+| `casts.extras` `factory.extras` `resource.extras` | 数据权限字段（同上） | `locale` | 仅语言相关模板：`zh-CN` / `en-US` |
 | `web.path` | `/content/tags` | `web.page_dir` | `content/tags` |
-| `web.component` | `TagList` | `web.locale_prefix` | `pages.content.tags` |
+| `web.component` | `TagList` | `web.form_component` | `TagForm` |
+| `web.locale_prefix` | `pages.content.tags` | `imports` | 仅前端模板：汇总后的 TS 导入，见 4.5 |
 | `web.menu_module` | `menu.content` | `web.menu_key` | `menu.content.tags` |
 | `web.locale_file` | `content-tags` | `web.locale_module` | `contentTags` |
 | `permission_node` | 仅 `permission_group`：已渲染的权限节点 | `route_node` | 仅 `web/route_group`：已渲染的路由 |
@@ -131,18 +137,21 @@ npm run lint && npx antd lint ./src && npm run build
 
 - 后端片段：`fragments/<片段>.<字段类型>.stub` → 不存在时 `fragments/<片段>.stub` → 都不存在则该字段跳过；
 - 前端片段：`{{ fields.web.<片段> }}` 对应 `web/fragments/<片段>[.<字段类型>].stub`；
-- 片段可使用全部模块变量与下方 `field.*` 变量；**片段引用的任一 `field.*` 值为 null 时，该字段在此片段中跳过**
-  （例如 `string` 没有 cast，`cast` 片段自然不会输出它）；
+- 片段可使用全部模块变量与下方 `field.*` 变量；**片段（条件块求值之后）引用的任一 `field.*` 值为 null 时，该字段在此片段中跳过**
+  （例如 `string` 没有 cast，`cast` 片段自然不会输出它；只出现在 `{{#if field.max}}` 假分支里的 `{{ field.max }}` 不会导致跳过）；
 - 想为某种类型单独定制，新建 `<片段>.<类型>.stub` 即可（如 `web/fragments/column.status.stub`）。
 
-现有片段：后端 `migration` `cast` `rules` `filter_rule` `filter_scope` `factory` `resource` `relation.foreign` `test_payload` `test_setup.dict`；
+现有片段：后端 `migration` `cast` `rules` `filter_rule` `filter_scope` `factory` `resource` `relation.foreign` `test_payload` `test_setup.dict` `test_assertion.datetime`；
 前端 `web.type` `web.locale` `web.column` `web.column_state` `web.hook` `web.form_hook` `web.initial_value` `web.form_item`（清单见 6.2）。
 
 | `field.*` 变量 | 说明（以 `name:string:required\|max:50` 为例） |
 |---|---|
-| `field.name` / `field.camel` / `field.label` | `name` / `name` / `Name` |
+| `field.name` / `field.camel` / `field.label` | `name` / `name` / `Name`（foreign 去掉 `_id`：`tag_id` → `Tag`） |
 | `field.type` / `field.argument` | `string` / foreign 的表名或 dict 的编码 |
+| `field.required` / `field.nullable` | `true` / 空：是否必填（声明了 `required` 或未声明存在性规则）/ 是否声明了 `nullable`；用于条件块 |
+| `field.max` | `50`：生效的 `max:N`（`string` 未声明时为 `255`），没有为 null |
 | `field.dict` / `field.related` / `field.relation` | 字典编码 / 关联模型类 / 关联方法名（非对应类型为 null） |
+| `field.related_route` / `field.options_route` | foreign：关联表的选项路由段（`article_categories` → `article-categories`）/ 可用的选项接口路由段（见 6.4，不可用为 null） |
 | `field.migration` | `$table->string('name', 50)` |
 | `field.cast` | cast 表达式，无则 null |
 | `field.rules` | `['required', 'string', 'max:50']` |
@@ -150,11 +159,39 @@ npm run lint && npx antd lint ./src && npm run build
 | `field.factory` / `field.resource` / `field.test_value` | Factory 表达式 / Resource 取值表达式 / 测试提交值 |
 | `field.ts_type` / `field.value_type` / `field.web_search` | `string` / `text` / 不可过滤时为 `, search: false` |
 
-### 4.4 渲染规则
+### 4.4 条件块
+
+```text
+{{#if data_scope}} … {{/if}}
+{{#if field.required}} … {{else}} … {{/if}}
+{{#unless field.nullable}} … {{/unless}}
+```
+
+- 条件为模块变量或片段中的 `field.*`；值为 null、空串或不存在时为假（布尔变量用 `true` / 空表示）。可嵌套，由内向外求值。
+- 标签独占一行时连同该行一起删除（不会留下空行），也可以写在行内：`// 长文本{{#if data_scope}} / 部门{{/if}}列默认隐藏`。
+- 条件块先于占位符替换执行，适用于所有模板、片段与登记片段。
+
+### 4.5 TS 导入声明
+
+前端模板与片段用 `{{@import … from '…'}}`（独占一行，语法同 TS 的 `import`，支持 `type`、默认导入与命名导入）声明自己需要的导入：
+
+```text
+{{@import { ProFormText } from '@ant-design/pro-components'}}
+      <ProFormText name="{{ field.name }}" … />
+```
+
+渲染后收集**实际输出**的声明（被跳过的片段、条件块假分支中的声明不计入），按来源合并、去重、排序，输出到 `{{ imports }}` 所在行
+（没有该占位符时放在文件开头）。顺序与 Biome organizeImports 一致：npm 包 → `@/` 别名 → 相对路径，同一来源 `import type` 在前。
+因此生成的 TSX 不含未使用的导入，直接通过 `npm run lint`。
+
+### 4.6 渲染规则
 
 - 独占一行的占位符渲染为空时，整行删除；随后清理紧跟 `{` `[` `(` 之后、紧挨 `}` `]` `)` 之前的空行与连续空行。
 - PHP 文件最终会对顶层 `use` 去重、去掉同命名空间的导入并按字母排序（与 Pint 一致），因此模板里的导入顺序无需关心。
 - 未识别的占位符原样保留（TSX 中的 `{{ ... }}` 对象字面量不受影响）。
+- 写入文件后，若前端目录存在 `node_modules/.bin/biome`，生成器对本次生成 / 修改的 `.ts` / `.tsx` 执行 `biome check --write`
+  （只做格式化与导入排序，不加 `--unsafe`）；未安装依赖或执行失败时只打印提示与可手动执行的命令，不影响生成结果。
+  未经格式化的生成物同样能通过 `npm run lint`（Biome lint + tsc），只是个别长行 / 空对象的排版与 Biome 不同。
 
 ## 5. 锚点与幂等
 
@@ -167,6 +204,7 @@ npm run lint && npx antd lint ./src && npm run build
 | `server/config/permissions.php` | `// edge:permissions:<模块>`（模块 children 末尾） | 权限节点 |
 | 同上 | `// edge:permissions`（顶层数组末尾） | 模块不存在时：新模块分组（自带 `// edge:permissions:<模块>`） |
 | `server/routes/api.php` | `// edge:routes`（`auth:sanctum` 分组内） | `apiResource` 路由块；同时在 `use` 区按序添加控制器导入 |
+| 同上 | `// edge:options`（`options` 分组末尾） | `--with-options`：`Route::get('<路由>', <Class>OptionController::class)` + 导入 |
 | `server/lang/<locale>/operations.php` | `// edge:operations`（数组末尾） | 三条操作日志摘要 |
 | `web/config/routes.ts` | `// edge:routes:<模块>`（该模块分组的 `routes` 数组末尾） | 路由对象 |
 | 同上 | `// edge:routes`（顶层路由数组中） | 模块分组不存在时：新分组（自带 `// edge:routes:<模块>`） |
@@ -204,25 +242,23 @@ export type PermissionCode =
 
 ## 6. 前端模板
 
-生成的页面与手写页面遵循同一套规范（[frontend-guide.md](frontend-guide.md)）：`PageContainer` + `ProTable`（搜索、分页、
-排序、列设置，`tableRequest`）+ 新建 / 编辑 `ModalForm`（`formRef`、`destroyOnHidden`、编辑时 `request` 拉详情、422 字段回填）
-+ `DeleteAction` + `access.can()` 按钮级权限 + 完整的 `service.ts` / `data.d.ts` + 双语文案。
-因为生成器只渲染 `index.tsx` / `service.ts` / `data.d.ts` 三个页面文件，表单组件 `<Class>Form` 与列表放在同一个 `index.tsx` 中
-（手写页面放在 `components/`，二者等价，需要时可自行拆出）。
+生成的页面与手写页面遵循同一套规范（[frontend-guide.md](frontend-guide.md)）：`index.tsx` 为 `PageContainer` + `ProTable`（搜索、分页、
+排序、列设置，`tableRequest`）+ `DeleteAction` + `access.can()` 按钮级权限；`components/<Class>Form.tsx` 为新建 / 编辑 `ModalForm`
+（`formRef`、`destroyOnHidden`、编辑时 `request` 拉详情、422 字段回填、与后端规则一致的前端校验）；外加完整的 `service.ts` / `data.d.ts` 与双语文案。
 
 ### 6.1 页面模板与占位符
 
 | 模板 | 用到的片段 / 变量 |
 |---|---|
-| `web/index.tsx` | `web.form_hook` `web.initial_value` `web.form_item`（表单组件）；`web.hook` `web.column` `web.column_state`（列表）；`web.component` `web.locale_prefix` `permission` `class` `class_plural` |
+| `web/index.tsx` | `web.hook` `web.column` `web.column_state`；`web.component` `web.form_component` `web.locale_prefix` `permission` `class` `class_plural`；`{{#if data_scope}}` 部门 / 创建人列 |
+| `web/form.tsx` | `web.form_hook` `web.initial_value` `web.form_item`；`web.form_component` `web.locale_prefix` `class` |
 | `web/service.ts` | `query<Classes>` / `get<Class>` / `create<Class>` / `update<Class>` / `delete<Class>`，路径 `/api/{{ route }}` |
-| `web/data.d.ts` | `web.type`（实体与 `FormValues` 共用） |
-| `web/locale.zh-CN` / `web/locale` | `web.locale`；另含 `<prefix>.create` / `<prefix>.edit` 与 `permission.<权限码>`（角色授权树中的菜单名，操作名走通用的 `permission.action.*`） |
+| `web/data.d.ts` | `web.type`（实体与 `FormValues` 共用）；`{{#if data_scope}}` 时实体追加 `department_id` / `created_by` |
+| `web/locale.zh-CN` / `web/locale` | `web.locale`；另含 `<prefix>.create` / `<prefix>.edit`、`--data-scope` 时的 `<prefix>.department` / `<prefix>.creator` 与 `permission.<权限码>`（角色授权树中的菜单名，操作名走通用的 `permission.action.*`） |
 | `web/permission_codes` | 四个权限码（`\| '<权限码>.view'` …） |
 | `web/route` / `web/route_group` / `web/menu_*` / `web/locale_import` / `web/locale_spread` | 见第 5 节 |
 
-页面模板一次性导入所有字段类型可能用到的控件（`ProFormText`、`ProFormDigit`、`useDict`、`DictTag`……），
-未用到的导入由生成后的 `biome check --write --unsafe` 删除（见 6.3）。
+页面模板与各片段用 `{{@import …}}` 声明自己用到的导入（4.5），生成结果只包含实际用到的导入。
 
 ### 6.2 字段片段（`web/fragments/`）
 
@@ -237,66 +273,72 @@ export type PermissionCode =
 | `initial_value` | 新建时的默认值 | `status`（`'active'`）、`boolean`（`false`） |
 | `form_item` | 表单控件 | 全部类型各一个 |
 
+表单控件按字段规则生成前端校验（`field.required` / `field.nullable` / `field.max`）：
+
+- 必填（`required` 或未声明存在性规则）→ `rules={[{ required: true }]}`（`boolean` 除外，开关恒有值；`json` 与 `jsonRule` 合并）；
+- `string` / `text` 的 `max` → `fieldProps={{ maxLength: N }}`（`string` 未声明时为 255）；`integer` / `decimal` 的 `max` → `max={N}`；
+- 可空的 `date` / `dict` / `foreign` → `transform` 把清空后的 `undefined` 转成 `null`，保证"清空"会提交到后端；
+- `datetime` → `transform` 中 `toOffsetDateTime()`：以浏览器本地时间显示与编辑，提交带时区偏移的 ISO 8601（契约第 2 节），与浏览器时区无关。
+
 各类型生成的列与控件：
 
 | type | 列 | 搜索 | 排序 | 表单控件 |
 |---|---|---|---|---|
-| `string` | 文本 | 模糊 | — | `ProFormText` |
-| `text` | `ellipsis`，默认隐藏 | — | — | `ProFormTextArea` |
-| `integer` | `digit` | 精确 | ✓ | `ProFormDigit`（precision 0） |
-| `decimal` | `digit` | — | ✓ | `ProFormDigit`（precision 2） |
+| `string` | 文本 | 模糊 | — | `ProFormText`（`maxLength`） |
+| `text` | `ellipsis`，默认隐藏 | — | — | `ProFormTextArea`（声明 `max` 时 `maxLength` + `showCount`） |
+| `integer` | `digit` | 精确 | ✓ | `ProFormDigit`（precision 0，`max`） |
+| `decimal` | `digit` | — | ✓ | `ProFormDigit`（precision 2，`max`） |
 | `boolean` | `useBooleanEnum()` 是 / 否 | 下拉，`booleanTransform` 转 1 / 0 | — | `ProFormSwitch`（默认 false） |
 | `date` | `date` | 按日 | ✓ | `ProFormDatePicker` |
-| `datetime` | `dateTime` | — | ✓ | `ProFormDateTimePicker` |
+| `datetime` | `dateTime`（浏览器本地时间） | — | ✓ | `ProFormDateTimePicker` + `toOffsetDateTime` |
 | `json` | `JSON.stringify` + `ellipsis`，默认隐藏 | — | — | `ProFormTextArea` + `jsonRule`，`convertValue={stringifyJson}`、`transform` 中 `parseJson` |
 | `status` | `useStatusEnum()` | 下拉 | — | `ProFormRadio.Group`（默认 active） |
-| `foreign:<表>` | `select` + 占位 `request: async () => []`（TODO 注释） | 下拉 | — | `ProFormSelect` + 占位 `request`（TODO 注释） |
+| `foreign:<表>` | `select` + `request: () => fetchSelectOptions('<路由>')`，按名称显示 | 下拉 | — | `ProFormSelect` + 同一 `request`（无选项接口时为 TODO 占位，见 6.4） |
 | `dict:<编码>` | `valueEnum: xxxDict.valueEnum` + `DictTag` 渲染 | 下拉 | — | `ProFormSelect options={xxxDict.options}` |
 
 排序只对后端 `sortable`（`id`、integer / decimal / date / datetime 字段、`created_at`）开启，与生成的 `IndexRequest` 一致；
-`id`、`created_at` 列与操作列由页面模板固定输出。
+`id`、`created_at` 列与操作列由页面模板固定输出。`--data-scope` 时另有"部门""创建人"两列（`fetchSelectOptions('departments')` /
+`fetchSelectOptions('users')` 按名称显示，默认隐藏，可在列设置中打开）。
 
 **定制**：直接修改 `server/stubs/edge/web/**`；只想改某种类型时新建 / 修改 `web/fragments/<片段>.<类型>.stub`；
 新增片段时在页面模板写 `{{ fields.web.<片段名> }}` 即可（没有对应类型模板、也没有通用模板的字段自动跳过）。
 也可以把自己的模板目录放到 `config('edge.generator.stub_paths')` 前面，只覆盖个别文件。
 
-### 6.3 生成后的前端收尾
+### 6.3 生成后
 
 ```bash
-cd web
-npx biome check --write --unsafe src/pages/<模块>/<路由> src/locales src/access.ts config/routes.ts  # 去掉未用到的导入 + 格式化 + 导入排序
-npm run lint && npx antd lint ./src && npm test && npm run build
+cd server && php artisan permission:sync && php artisan migrate     # 完成：两端检查均可直接通过
 ```
 
-还需要手工调整：
+按需继续完善（都不是通过检查的前提）：
 
-1. **外键下拉**：`foreign` 字段的列与表单中有 `TODO`，把占位的 `async () => []` 换成选项接口，
-   如 `getArticleCategoryOptions().then(toSelectOptions)`（没有现成接口时先在契约与后端补 `/api/options/*`）。
-2. **前端校验**：生成的控件不带 `rules`（模板拿不到字段是否必填 / 长度，见 6.4），提交后由后端 422 回填到字段；
-   需要即时校验时自行加 `rules={[{ required: true }, { max: 50 }]}`。表单已用 `clearFieldErrors` 在修改时清除回填的错误。
-3. **文案**：`zh-CN` 的字段名默认为英文 Headline，改成中文；菜单名在 `menu.ts`，角色授权树里的菜单名在页面文案的 `permission.<权限码>`。
+1. **契约**：在 `docs/architecture.md` 补接口、权限码、排序白名单（`--with-options` 时还有 `/api/options/<路由>`）。
+2. **文案**：`zh-CN` 的字段名默认为英文 Headline，改成中文；菜单名在 `menu.ts`，角色授权树里的菜单名在页面文案的 `permission.<权限码>`。
    新模块分组的 `permission.<模块>` 未生成，缺失时回退后端 `name`。
+3. **业务规则**：Policy（如"被引用时不可删"）、Seeder、多步写入 / 副作用改用 Action。
 4. **列宽 / 默认隐藏列**：字段多时按 [frontend-guide.md](frontend-guide.md) 的列表规范调整 `width`、`columnsState`，保证 1440 宽下常用列完整显示。
-5. **数据权限**：`--data-scope` 时后端资源额外返回 `department_id`、`created_by`，`data.d.ts` 不会自动包含，需要展示时自行补充。
-6. **日期时间**：`ProFormDateTimePicker` 提交的是不带时区的本地时间（`YYYY-MM-DD HH:mm:ss`），按服务器 `APP_TIMEZONE` 解释；
-   浏览器与服务器不在同一时区时会有偏差（后端目前也会丢弃带时区偏移的输入，见遗留问题）。
-7. 契约：在 `docs/architecture.md` 补接口、权限码、排序白名单。
+5. 冒烟用例：在 `web/e2e/smoke.spec.ts` 中加上新页面。
 
-### 6.4 已知的引擎限制
+### 6.4 外键下拉的选项接口
 
-前端模板目前受以下限制（改引擎前用上面的收尾步骤绕过）：
+前端统一调用 `src/services/options.ts` 的 `fetchSelectOptions('<路由>')`（`GET /api/options/<路由>` → `{label, value}[]`，
+树形选项会展开）。生成器按以下顺序决定 `foreign:<表>` 字段的 `field.options_route`：
 
-- **没有 TS 导入去重**：PHP 文件会整理 `use`，TSX 不会；同一类型出现多次时无法按字段渲染不重复的 import，
-  因此模板导入全集，再由 `biome --unsafe` 清理。若引擎提供按片段收集并去重的 `{{ web.imports }}`，可以去掉这一步。
-- **字段变量缺少前端需要的信息**：没有 `field.required` / `field.nullable` / `field.max` 这类原始值（只有 PHP 形式的 `field.rules`），
-  模板无法生成与后端一致的 `rules`、`required` 星号与 `maxLength`。
-- **没有条件块 / 前端模块变量**：`data_scope`、`soft_deletes` 只能整行删除，无法让 `data.d.ts` 按 `--data-scope` 追加
-  `department_id` / `created_by`（后端有 `resource.extras` 等专用变量，前端没有对应的 `web.*.extras`）。
-- **页面文件固定为三个**：无法生成 `components/<Class>Form.tsx`，表单只能与列表同文件。
-- **`foreign` 只有表名**：没有对应的 options 接口信息，只能生成占位 `request`。
+1. 本次 `--with-options` 且关联的就是本模块的表（自关联）→ 本模块的选项接口；
+2. `routes/api.php` 中已有 `Route::get('<表名 kebab>', XxxOptionController::class)`（如 `article-categories`、`users`、`departments`、
+   `roles`、`positions`，或之前用 `--with-options` 生成的模块）→ 直接使用；
+3. 都没有 → 生成器打印提示，前端列与控件生成 `request: async () => []` 占位与 TODO 注释。为关联模块执行
+   `edge:make-module <关联模型> … --with-options --force`（或手写 Options 控制器并在契约中登记）后，把占位改为 `fetchSelectOptions('<路由>')`，
+   或对本模块 `--force` 重新生成前端文件。
+
+### 6.5 已知限制
+
+- 选项接口只支持 `[{id, name}]`（要求 `name` 字段）；需要按其他字段显示、按条件过滤或远程搜索时请手写。
+- 列表不生成 `datetime` 与数据权限字段的搜索条件；`json` / `text` 只用于展示与编辑。
+- 表单只有一列布局，字段多时可自行改为 `Row` / `Col` 或 `StepsForm`。
 
 ## 7. 测试
 
 生成器自身的测试见 `server/tests/Feature/MakeModuleCommandTest.php`：在临时目录中复制含锚点的真实文件，覆盖全部字段类型、
-`--data-scope` / `--soft-deletes`、重复执行不重复、`--force`、`--dry-run`、`--no-web` 与前端目录缺失、锚点缺失时的提示、
-自定义 stub 目录优先，以及各类错误输入。
+`--data-scope` / `--soft-deletes` / `--with-options`、前端导入去重与字段校验、外键选项接口检测、条件块与导入声明的渲染、
+重复执行不重复、`--force`、`--dry-run`、`--no-web` 与前端目录缺失、锚点缺失时的提示、自定义 stub 目录优先，以及各类错误输入。

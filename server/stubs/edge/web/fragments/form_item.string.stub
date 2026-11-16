@@ -1,4 +1,11 @@
+{{@import { ProFormText } from '@ant-design/pro-components'}}
       <ProFormText
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}
+{{#if field.max}}
+        fieldProps={{ maxLength: {{ field.max }} }}
+{{/if}}
+{{#if field.required}}
+        rules={[{ required: true }]}
+{{/if}}
       />
