@@ -1,108 +1,72 @@
-﻿import type { RequestOptions } from '@@/plugin-request/request';
-import type { RequestConfig } from '@umijs/max';
-import { getIntl } from '@umijs/max';
-import { message, notification } from 'antd';
-
-// 错误处理方案： 错误类型
-enum ErrorShowType {
-  SILENT = 0,
-  WARN_MESSAGE = 1,
-  ERROR_MESSAGE = 2,
-  NOTIFICATION = 3,
-  REDIRECT = 9,
-}
-// 与后端约定的响应数据格式
-interface ResponseStructure {
-  success: boolean;
-  data: unknown;
-  errorCode?: number;
-  errorMessage?: string;
-  showType?: ErrorShowType;
-}
+import type { RequestConfig, RequestOptions } from '@umijs/max';
+import { message } from 'antd';
+import { clearToken, getToken, redirectToLogin } from '@/utils/auth';
+import { isRequestError, toHttpError } from '@/utils/error';
+import { t } from '@/utils/i18n';
 
 /**
- * @name 错误处理
- * pro 自带的错误处理， 可以在这里做自己的改动
+ * 适配 Laravel 标准响应的请求配置
+ * - 成功：HTTP 2xx，响应体为 API Resource（`{data}`）或 204 无内容
+ * - 失败：HTTP 状态码 + `{message, errors?}`
+ *
+ * 单个请求可传 `skipErrorHandler: true` 自行处理错误（错误会原样抛出）。
+ * 表单 422 字段回填见 `@/utils/form#submitForm`。
  * @doc https://umijs.org/docs/max/request#配置
  */
 export const errorConfig: RequestConfig = {
-  // 错误处理： umi@3 的错误处理方案。
   errorConfig: {
-    // 错误抛出
-    errorThrower: (res) => {
-      const { success, data, errorCode, errorMessage, showType } =
-        res as unknown as ResponseStructure;
-      if (!success) {
-        const error: any = new Error(errorMessage);
-        error.name = 'BizError';
-        error.info = { errorCode, errorMessage, showType, data };
-        throw error; // 抛出自制的错误
-      }
-    },
-    // 错误接收及处理
-    errorHandler: (error: any, opts: any) => {
+    errorHandler: (error, opts) => {
       if (opts?.skipErrorHandler) throw error;
-      // 我们的 errorThrower 抛出的错误。
-      if (error.name === 'BizError') {
-        const errorInfo: ResponseStructure | undefined = error.info;
-        if (errorInfo) {
-          const { errorMessage, errorCode } = errorInfo;
-          switch (errorInfo.showType) {
-            case ErrorShowType.SILENT:
-              // do nothing
-              break;
-            case ErrorShowType.WARN_MESSAGE:
-              message.warning(errorMessage);
-              break;
-            case ErrorShowType.ERROR_MESSAGE:
-              message.error(errorMessage);
-              break;
-            case ErrorShowType.NOTIFICATION:
-              notification.open({
-                title: errorCode,
-                description: errorMessage,
-              });
-              break;
-            case ErrorShowType.REDIRECT:
-              window.location.href = '/user/login';
-              break;
-            default:
-              message.error(errorMessage);
-          }
+
+      const httpError = toHttpError(error);
+      if (httpError) {
+        const serverMessage = httpError.body?.message;
+        switch (httpError.status) {
+          case 401:
+            clearToken();
+            // 并发请求同时 401 时只提示一次
+            message.warning({ key: 'unauthorized', content: t('app.request.401') });
+            redirectToLogin();
+            break;
+          case 403:
+            message.error(serverMessage || t('app.request.403'));
+            break;
+          case 422:
+            message.error(serverMessage || t('app.request.422'));
+            break;
+          case 429:
+            message.error(serverMessage || t('app.request.429'));
+            break;
+          default:
+            message.error(
+              serverMessage ||
+                t('app.request.status', { status: httpError.status }),
+            );
         }
-      } else if (error.response) {
-        // Axios 的错误
-        // 请求成功发出且服务器也响应了状态码，但状态代码超出了 2xx 的范围
-        message.error(`Response status:${error.response.status}`);
-      } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        message.error(
-          getIntl().formatMessage({
-            id: 'app.request.offline',
-            defaultMessage:
-              'Network unavailable. Please check your connection and try again.',
-          }),
-        );
-      } else if (error.request) {
-        message.error('None response! Please retry.');
+        return;
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        message.error(t('app.request.offline'));
+      } else if (isRequestError(error)) {
+        message.error(t('app.request.noResponse'));
       } else {
-        message.error('Request error, please retry.');
+        message.error(t('app.request.unknown'));
       }
     },
   },
 
-  // 请求拦截器
   requestInterceptors: [
     (config: RequestOptions) => {
-      // 拦截请求配置，进行个性化处理。
-      // 示例：为请求附加 token（按需启用）
-      // const token = localStorage.getItem('token');
-      // if (token) {
-      //   config.headers = { ...config.headers, Authorization: `Bearer ${token}` };
-      // }
-      return config;
+      const token = getToken();
+      return {
+        ...config,
+        headers: {
+          ...config.headers,
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      };
     },
   ],
-
-  // 响应拦截器
-  responseInterceptors: [],
 };

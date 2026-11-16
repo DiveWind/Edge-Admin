@@ -1,101 +1,56 @@
-import {
-  LogoutOutlined,
-  SettingOutlined,
-  SkinOutlined,
-} from '@ant-design/icons';
+import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
-import React, { startTransition } from 'react';
-import { outLogin } from '@/services/ant-design-pro/api';
+import type React from 'react';
+import { logout } from '@/services/auth';
+import { clearToken, LOGIN_PATH } from '@/utils/auth';
+import { useT } from '@/utils/i18n';
 import HeaderDropdown from '../HeaderDropdown';
 
-type GlobalHeaderRightProps = {
-  children?: React.ReactNode;
-};
-
-const menuItems: MenuProps['items'] = [
-  {
-    key: 'settings',
-    icon: <SettingOutlined />,
-    label: '个人设置',
-  },
-  {
-    key: 'theme',
-    icon: <SkinOutlined />,
-    label: '主题设置',
-  },
-  {
-    type: 'divider' as const,
-  },
-  {
-    key: 'logout',
-    icon: <LogoutOutlined />,
-    label: '退出登录',
-  },
-];
-
-const loginOut = async () => {
-  try {
-    await outLogin();
-  } catch {
-    // Local logout has already cleared user state; redirect should still proceed.
-  }
-  const { search, pathname } = window.location;
-  const urlParams = new URL(window.location.href).searchParams;
-  const searchParams = new URLSearchParams({
-    redirect: pathname + search,
-  });
-  const redirect = urlParams.get('redirect');
-  if (window.location.pathname !== '/user/login' && !redirect) {
-    history.replace({
-      pathname: '/user/login',
-      search: searchParams.toString(),
-    });
-  }
-};
-
-export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
+export const AvatarDropdown: React.FC<{ children?: React.ReactNode }> = ({
   children,
 }) => {
+  const t = useT();
   const { initialState, setInitialState } = useModel('@@initialState');
 
-  const onMenuClick: MenuProps['onClick'] = (event) => {
-    const { key } = event;
-    if (key === 'logout') {
-      startTransition(() => {
-        setInitialState((s) => ({ ...s, currentUser: undefined }));
-      });
-      loginOut();
-      return;
+  if (!initialState?.currentUser) {
+    return <Spin size="small" />;
+  }
+
+  const handleLogout = async () => {
+    try {
+      // 吊销服务端 token；失败（如 token 已失效）不影响本地退出
+      await logout({ skipErrorHandler: true });
+    } finally {
+      clearToken();
+      setInitialState((state) =>
+        state ? { ...state, currentUser: undefined } : state,
+      );
+      history.replace(LOGIN_PATH);
     }
-    if (key === 'theme') {
-      setInitialState((s) => ({ ...s, settingDrawerOpen: true }));
-      return;
-    }
-    history.push(`/account/${key}`);
   };
 
-  if (!initialState) {
-    return <Spin size="small" />;
-  }
+  const items: MenuProps['items'] = [
+    {
+      key: 'settings',
+      icon: <UserOutlined />,
+      label: t('app.header.accountSettings'),
+    },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: t('app.header.logout') },
+  ];
 
-  const { currentUser } = initialState;
-
-  if (!currentUser) {
-    return <Spin size="small" />;
-  }
+  const onClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'logout') {
+      handleLogout();
+      return;
+    }
+    history.push('/account/settings');
+  };
 
   return (
-    <HeaderDropdown
-      placement="bottomRight"
-      menu={{
-        selectedKeys: [],
-        onClick: onMenuClick,
-        items: menuItems,
-      }}
-      arrow
-    >
+    <HeaderDropdown menu={{ selectedKeys: [], onClick, items }}>
       {children}
     </HeaderDropdown>
   );

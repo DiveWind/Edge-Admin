@@ -1,63 +1,45 @@
-import { CheckOutlined, GlobalOutlined } from '@ant-design/icons';
-import { getAllLocales, getLocale, setLocale } from '@umijs/max';
+import { GlobalOutlined } from '@ant-design/icons';
+import { getLocale, setLocale } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Button } from 'antd';
-import { useMemo } from 'react';
+import type React from 'react';
+import { useT } from '@/utils/i18n';
 import HeaderDropdown from '../HeaderDropdown';
 import useHeaderActionStyles from './style';
 
-const localeLabelMap: Record<string, { emoji: string; label: string }> = {
-  'zh-CN': { emoji: '🇨🇳', label: '简体中文' },
-  'zh-TW': { emoji: '🇭🇰', label: '繁體中文' },
-  'en-US': { emoji: '🇺🇸', label: 'English' },
-  'ja-JP': { emoji: '🇯🇵', label: '日本語' },
-  'pt-BR': { emoji: '🇧🇷', label: 'Português' },
-  'id-ID': { emoji: '🇮🇩', label: 'Bahasa Indonesia' },
-  'fa-IR': { emoji: '🇮🇷', label: 'فارسی' },
-  'bn-BD': { emoji: '🇧🇩', label: 'বাংলা' },
-};
+/** 支持的语言，与 src/locales 下的文件一一对应 */
+const LOCALES = [
+  { key: 'zh-CN', label: '简体中文' },
+  { key: 'en-US', label: 'English' },
+];
 
-const onLangClick: MenuProps['onClick'] = ({ key }) => {
-  if (key.startsWith('lang-')) {
-    setLocale(key.replace('lang-', ''), false);
-  }
-};
+export const LangDropdown: React.FC<{ className?: string }> = ({
+  className,
+}) => {
+  const t = useT();
+  const { styles, cx } = useHeaderActionStyles();
+  const current = getLocale();
 
-export const LangDropdown: React.FC = () => {
-  const { styles } = useHeaderActionStyles();
-  const allLocales = useMemo(() => getAllLocales(), []);
-  const currentLocale = getLocale();
-  const supportLocales = allLocales.filter((l) => l in localeLabelMap);
-
-  if (supportLocales.length <= 1) {
-    return null;
-  }
-
-  const langItems: MenuProps['items'] = supportLocales.map((locale) => ({
-    key: `lang-${locale}`,
-    icon:
-      locale === currentLocale ? (
-        <CheckOutlined style={{ color: '#52c41a' }} />
-      ) : (
-        <span style={{ display: 'inline-block', width: 14 }} />
-      ),
-    label: `${localeLabelMap[locale]?.emoji ?? ''} ${localeLabelMap[locale]?.label ?? locale}`,
+  const items: MenuProps['items'] = LOCALES.map(({ key, label }) => ({
+    key,
+    label,
   }));
 
   return (
     <HeaderDropdown
-      placement="bottomRight"
-      arrow
       menu={{
-        selectedKeys: [`lang-${currentLocale}`],
-        onClick: onLangClick,
-        items: langItems,
-        style: { minWidth: 180 },
+        selectable: true,
+        selectedKeys: [current],
+        items,
+        onClick: ({ key }) => setLocale(key, false),
       }}
     >
-      <Button type="text" className={styles.action} aria-label="语言切换">
-        <GlobalOutlined />
-      </Button>
+      <Button
+        type="text"
+        className={cx(styles.action, className)}
+        icon={<GlobalOutlined />}
+        aria-label={t('app.header.language')}
+      />
     </HeaderDropdown>
   );
 };

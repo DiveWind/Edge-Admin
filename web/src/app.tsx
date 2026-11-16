@@ -1,196 +1,94 @@
-import { LinkOutlined } from '@ant-design/icons';
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
-import { SettingDrawer } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import React from 'react';
-
-// Initialize dayjs plugins globally
-dayjs.extend(relativeTime);
-
+import type React from 'react';
 import {
   AvatarDropdown,
-  DocLink,
   ErrorBoundary,
   Footer,
   LangDropdown,
+  NoticeBell,
   OfflineBanner,
-  VersionDropdown,
 } from '@/components';
-import { currentUser as queryCurrentUser } from '@/services/ant-design-pro/api';
+import Forbidden from '@/pages/exception/403';
+import { getCurrentUser } from '@/services/auth';
+import { clearToken, getToken, LOGIN_PATH, redirectToLogin } from '@/utils/auth';
+import { toHttpError } from '@/utils/error';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
-const isDev = process.env.NODE_ENV === 'development';
-const loginPath = '/user/login';
-
-/**
- * @see https://umijs.org/docs/api/runtime-config#getinitialstate
- * */
-export async function getInitialState(): Promise<{
-  settings?: Partial<LayoutSettings>;
+export interface InitialState {
+  settings: Partial<LayoutSettings>;
   currentUser?: API.CurrentUser;
-  loading?: boolean;
-  fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
-  settingDrawerOpen?: boolean;
-}> {
-  const fetchUserInfo = async () => {
-    try {
-      const msg = await queryCurrentUser({
-        skipErrorHandler: true,
-      });
-      return msg.data;
-    } catch (_error) {
-      const { pathname, search, hash } = history.location;
-      history.replace(
-        `${loginPath}?redirect=${encodeURIComponent(pathname + search + hash)}`,
-      );
-    }
-    return undefined;
-  };
-  // 如果不是登录页面，执行
-  const { location } = history;
-  if (
-    ![loginPath, '/user/register', '/user/register-result'].includes(
-      location.pathname,
-    )
-  ) {
-    const currentUser = await fetchUserInfo();
-    return {
-      fetchUserInfo,
-      currentUser,
-      settings: defaultSettings as Partial<LayoutSettings>,
-      settingDrawerOpen: false,
-    };
-  }
-  return {
-    fetchUserInfo,
-    settings: defaultSettings as Partial<LayoutSettings>,
-    settingDrawerOpen: false,
-  };
+  /** 重新拉取当前用户（登录后、修改资料后调用） */
+  fetchUserInfo: () => Promise<API.CurrentUser | undefined>;
 }
 
-// ProLayout 支持的api https://procomponents.ant.design/components/layout
-export const layout: RunTimeLayoutConfig = ({
-  initialState,
-  setInitialState,
-}) => {
-  return {
-    menuItemRender: (item, dom) => {
-      if (item.path) {
-        return (
-          <Link to={item.path} prefetch>
-            {dom}
-          </Link>
-        );
-      }
-      return dom;
-    },
-    actionsRender: () => {
-      // `locale: false` opts out of the language switcher. ProLayout's own
-      // `locale` prop is a locale string, so narrow to the boolean toggle here.
-      const localeEnabled =
-        (initialState?.settings as { locale?: boolean })?.locale !== false;
-      return [
-        <DocLink key="doc" />,
-        <VersionDropdown key="version" />,
-        localeEnabled && <LangDropdown key="lang" />,
-      ].filter(Boolean);
-    },
-    avatarProps: {
-      src: initialState?.currentUser?.avatar,
-      title: 'ProUser',
-      render: (_, avatarChildren) => (
-        <AvatarDropdown>{avatarChildren}</AvatarDropdown>
-      ),
-    },
-    // waterMarkProps: {
-    //   content: initialState?.currentUser?.name,
-    // },
-    footerRender: () => <Footer />,
-    onPageChange: () => {
-      const { location } = history;
-      // 如果没有登录，重定向到 login
-      if (!initialState?.currentUser && location.pathname !== loginPath) {
-        history.replace(
-          `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
-        );
-      }
-    },
-    bgLayoutImgList: [
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/D2LWSqNny4sAAAAAAAAAAAAAFl94AQBr',
-        left: 85,
-        bottom: 100,
-        height: '303px',
-      },
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/C2TWRpJpiC0AAAAAAAAAAAAAFl94AQBr',
-        bottom: -68,
-        right: -45,
-        height: '303px',
-      },
-      {
-        src: 'https://mdn.alipayobjects.com/yuyan_qk0oxh/afts/img/F6vSTbj8KpYAAAAAAAAAAAAAFl94AQBr',
-        bottom: 0,
-        left: 0,
-        width: '331px',
-      },
-    ],
-    links: isDev
-      ? [
-          <Link key="openapi" to="/umi/plugin/openapi" target="_blank">
-            <LinkOutlined />
-            <span>OpenAPI 文档</span>
-          </Link>,
-        ]
-      : [],
-    // Replace ProLayout's default ErrorBoundary with our offline-aware version,
-    // so chunk load errors show friendly messages instead of "Something went wrong."
-    ErrorBoundary,
-    menuHeaderRender: undefined,
-    // 自定义 403 页面
-    // unAccessible: <div>unAccessible</div>,
-    // 增加一个 loading 的状态
-    childrenRender: (children) => {
-      // if (initialState?.loading) return <PageLoading />;
-      return (
-        <>
-          {children}
-          <SettingDrawer
-            disableUrlParams
-            enableDarkTheme
-            collapse={initialState?.settingDrawerOpen}
-            onCollapseChange={(open) => {
-              setInitialState((s) => ({
-                ...s,
-                settingDrawerOpen: open,
-              }));
-            }}
-            settings={initialState?.settings}
-            onSettingChange={(settings) => {
-              setInitialState((s) => ({
-                ...s,
-                settings,
-              }));
-            }}
-          />
-        </>
-      );
-    },
-    ...initialState?.settings,
-  };
-};
+async function fetchUserInfo(): Promise<API.CurrentUser | undefined> {
+  if (!getToken()) return undefined;
+  try {
+    const { data } = await getCurrentUser({ skipErrorHandler: true });
+    return data;
+  } catch (error) {
+    if (toHttpError(error)?.status === 401) clearToken();
+    return undefined;
+  }
+}
 
 /**
- * @name request 配置，可以配置错误处理
- * 它基于 axios 提供了一套统一的网络请求和错误处理方案。
+ * 全局初始状态：当前用户（`GET /api/auth/me`）
+ * @see https://umijs.org/docs/api/runtime-config#getinitialstate
+ */
+export async function getInitialState(): Promise<InitialState> {
+  const state: InitialState = {
+    settings: defaultSettings,
+    fetchUserInfo,
+  };
+  if (history.location.pathname === LOGIN_PATH) return state;
+
+  const currentUser = await fetchUserInfo();
+  if (!currentUser) redirectToLogin();
+  return { ...state, currentUser };
+}
+
+/** @see https://procomponents.ant.design/components/layout */
+export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
+  menuItemRender: (item, dom) =>
+    item.path ? (
+      <Link to={item.path} prefetch>
+        {dom}
+      </Link>
+    ) : (
+      dom
+    ),
+  actionsRender: () => [
+    <NoticeBell key="notice" />,
+    <LangDropdown key="lang" />,
+  ],
+  avatarProps: {
+    src: initialState?.currentUser?.avatar || undefined,
+    title: initialState?.currentUser?.name,
+    size: 'small',
+    render: (_, avatarChildren) => (
+      <AvatarDropdown>{avatarChildren}</AvatarDropdown>
+    ),
+  },
+  footerRender: () => <Footer />,
+  onPageChange: () => {
+    if (!initialState?.currentUser) redirectToLogin();
+  },
+  // 无权限访问路由时渲染（菜单已由 access 隐藏）
+  unAccessible: <Forbidden />,
+  ErrorBoundary,
+  ...initialState?.settings,
+});
+
+/**
+ * 请求配置：Bearer Token 注入 + Laravel 错误处理，见 requestErrorConfig.ts
  * @doc https://umijs.org/docs/max/request#配置
  */
 export const request: RequestConfig = {
-  baseURL: isDev ? '' : 'https://pro-api.ant-design-demo.workers.dev',
+  timeout: 30_000,
   ...errorConfig,
 };
 
