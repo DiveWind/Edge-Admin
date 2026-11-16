@@ -39,14 +39,17 @@ export default defineConfig({
   //============== Umi Max 插件 ===============
   model: {},
   initialState: {},
-  /** @doc https://umijs.org/docs/max/layout-menu */
+  /**
+   * 编译期只用到 title / locale，其余 ProLayout 设置在 src/app.tsx 的 layout 运行时配置中传入
+   * @doc https://umijs.org/docs/max/layout-menu
+   */
   layout: {
     locale: true,
-    ...defaultSettings,
+    title: defaultSettings.title,
   },
   moment2dayjs: {
     preset: 'antd',
-    plugins: ['duration', 'relativeTime'],
+    plugins: ['duration'],
   },
   /** @doc https://umijs.org/docs/max/i18n */
   locale: {

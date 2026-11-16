@@ -1,0 +1,30 @@
+/** 应用级文案：请求错误、网络、错误边界、头部 */
+export default {
+  'app.request.401': '登录已过期，请重新登录',
+  'app.request.403': '没有权限执行该操作',
+  'app.request.422': '提交的数据校验未通过',
+  'app.request.429': '请求过于频繁，请稍后再试',
+  'app.request.status': '请求失败（HTTP {status}）',
+  'app.request.offline': '网络不可用，请检查网络连接后重试',
+  'app.request.noResponse': '服务器无响应，请稍后重试',
+  'app.request.unknown': '请求出错，请稍后重试',
+  'app.network.offline': '当前处于离线状态，部分功能可能不可用',
+  'app.error.chunk.title': '页面加载失败',
+  'app.error.chunk.description.offline':
+    '网络连接已断开，请检查网络后重新加载。',
+  'app.error.chunk.description.online': '页面资源加载失败，请重新加载重试。',
+  'app.error.render.title': '页面出现错误',
+  'app.error.render.description':
+    '抱歉，页面遇到了一些问题，请刷新页面或返回首页。',
+  'app.error.retry': '重试',
+  'app.error.reload': '刷新页面',
+  'app.error.home': '返回首页',
+  'app.header.language': '切换语言',
+  'app.header.accountSettings': '个人设置',
+  'app.header.logout': '退出登录',
+  'app.notice.title': '通知',
+  'app.notice.empty': '暂无未读通知',
+  'app.notice.markRead': '已读',
+  'app.notice.markAllRead': '全部已读',
+  'app.notice.viewAll': '查看全部',
+};

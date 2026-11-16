@@ -1,17 +1,22 @@
-import { Link } from '@umijs/max';
-import { Button, Card, Result } from 'antd';
+import { history } from '@umijs/max';
+import { Button, Result } from 'antd';
+import type React from 'react';
+import { useT } from '@/utils/i18n';
 
-export default () => (
-  <Card variant="borderless">
+const Exception403: React.FC = () => {
+  const t = useT();
+  return (
     <Result
       status="403"
       title="403"
-      subTitle="Sorry, you are not authorized to access this page."
+      subTitle={t('pages.exception.403')}
       extra={
-        <Link to="/" prefetch>
-          <Button type="primary">Back to home</Button>
-        </Link>
+        <Button type="primary" onClick={() => history.push('/')}>
+          {t('pages.exception.backHome')}
+        </Button>
       }
     />
-  </Card>
-);
+  );
+};
+
+export default Exception403;

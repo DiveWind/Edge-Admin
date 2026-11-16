@@ -90,6 +90,17 @@ declare namespace API {
     children?: DepartmentOption[];
   }
 
+  /** `GET /api/permissions` 树节点 */
+  interface PermissionNode {
+    id: Id;
+    parent_id: Id | null;
+    name: string;
+    code: string;
+    type: 'menu' | 'action';
+    sort: number;
+    children?: PermissionNode[];
+  }
+
   interface LoginParams {
     username: string;
     password: string;

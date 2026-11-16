@@ -1,5 +1,5 @@
 import type { RequestConfig, RequestOptions } from '@umijs/max';
-import { message } from 'antd';
+import { getMessageApi } from '@/components/FeedbackBridge';
 import { clearToken, getToken, redirectToLogin } from '@/utils/auth';
 import { isRequestError, toHttpError } from '@/utils/error';
 import { t } from '@/utils/i18n';
@@ -17,6 +17,7 @@ export const errorConfig: RequestConfig = {
   errorConfig: {
     errorHandler: (error, opts) => {
       if (opts?.skipErrorHandler) throw error;
+      const message = getMessageApi();
 
       const httpError = toHttpError(error);
       if (httpError) {
@@ -25,20 +26,23 @@ export const errorConfig: RequestConfig = {
           case 401:
             clearToken();
             // 并发请求同时 401 时只提示一次
-            message.warning({ key: 'unauthorized', content: t('app.request.401') });
+            message?.warning({
+              key: 'unauthorized',
+              content: t('app.request.401'),
+            });
             redirectToLogin();
             break;
           case 403:
-            message.error(serverMessage || t('app.request.403'));
+            message?.error(serverMessage || t('app.request.403'));
             break;
           case 422:
-            message.error(serverMessage || t('app.request.422'));
+            message?.error(serverMessage || t('app.request.422'));
             break;
           case 429:
-            message.error(serverMessage || t('app.request.429'));
+            message?.error(serverMessage || t('app.request.429'));
             break;
           default:
-            message.error(
+            message?.error(
               serverMessage ||
                 t('app.request.status', { status: httpError.status }),
             );
@@ -47,11 +51,11 @@ export const errorConfig: RequestConfig = {
       }
 
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        message.error(t('app.request.offline'));
+        message?.error(t('app.request.offline'));
       } else if (isRequestError(error)) {
-        message.error(t('app.request.noResponse'));
+        message?.error(t('app.request.noResponse'));
       } else {
-        message.error(t('app.request.unknown'));
+        message?.error(t('app.request.unknown'));
       }
     },
   },

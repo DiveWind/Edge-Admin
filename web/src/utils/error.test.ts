@@ -9,9 +9,10 @@ const axiosLikeError = (status: number, data: unknown) => ({
 
 describe('toHttpError', () => {
   it('extracts status and Laravel error body', () => {
-    expect(toHttpError(axiosLikeError(403, { message: 'Forbidden' }))).toEqual(
-      { status: 403, body: { message: 'Forbidden' } },
-    );
+    expect(toHttpError(axiosLikeError(403, { message: 'Forbidden' }))).toEqual({
+      status: 403,
+      body: { message: 'Forbidden' },
+    });
   });
 
   it('ignores bodies that are not Laravel errors', () => {
@@ -41,7 +42,10 @@ describe('getFieldErrors', () => {
       { name: 'username', errors: ['The username has already been taken.'] },
       {
         name: 'role_ids',
-        errors: ['The selected role is invalid.', 'The selected role is disabled.'],
+        errors: [
+          'The selected role is invalid.',
+          'The selected role is disabled.',
+        ],
       },
     ]);
   });

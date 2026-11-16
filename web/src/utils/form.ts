@@ -1,4 +1,4 @@
-import type { FormInstance } from 'antd';
+import type { FormInstance, FormRule } from 'antd';
 import { getFieldErrors, isRequestError } from './error';
 
 /**
@@ -24,3 +24,13 @@ export async function submitForm(
     return false;
   }
 }
+
+/** 确认字段校验：值必须与 `field` 一致（如 password_confirmation） */
+export const sameAsRule =
+  (field: string, message: string): FormRule =>
+  ({ getFieldValue }) => ({
+    validator: (_, value) =>
+      !value || value === getFieldValue(field)
+        ? Promise.resolve()
+        : Promise.reject(new Error(message)),
+  });

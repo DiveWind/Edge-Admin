@@ -1,0 +1,45 @@
+<?php
+
+/*
+| 操作日志摘要：键为路由名，由 RecordOperationLog 中间件读取。
+*/
+
+return [
+    'auth.logout' => '退出登录',
+    'auth.profile' => '修改个人资料',
+    'auth.password' => '修改密码',
+    'users.store' => '新增用户',
+    'users.update' => '编辑用户',
+    'users.destroy' => '删除用户',
+    'users.password' => '重置用户密码',
+    'roles.store' => '新增角色',
+    'roles.update' => '编辑角色',
+    'roles.destroy' => '删除角色',
+    'departments.store' => '新增部门',
+    'departments.update' => '编辑部门',
+    'departments.destroy' => '删除部门',
+    'positions.store' => '新增岗位',
+    'positions.update' => '编辑岗位',
+    'positions.destroy' => '删除岗位',
+    'login-logs.destroy' => '删除登录日志',
+    'login-logs.clear' => '清空登录日志',
+    'operation-logs.destroy' => '删除操作日志',
+    'operation-logs.clear' => '清空操作日志',
+    'scheduled-tasks.run' => '执行定时任务',
+    'failed-jobs.retry' => '重试失败任务',
+    'failed-jobs.destroy' => '删除失败任务',
+    'announcements.store' => '新增公告',
+    'announcements.update' => '编辑公告',
+    'announcements.destroy' => '删除公告',
+    'announcements.publish' => '发布公告',
+    'notifications.read' => '标记通知已读',
+    'notifications.read-all' => '全部通知标记已读',
+    'notifications.destroy' => '删除通知',
+    'article-categories.store' => '新增文章分类',
+    'article-categories.update' => '编辑文章分类',
+    'article-categories.destroy' => '删除文章分类',
+    'articles.store' => '新增文章',
+    'articles.update' => '编辑文章',
+    'articles.destroy' => '删除文章',
+    'uploads.store' => '上传文件',
+];

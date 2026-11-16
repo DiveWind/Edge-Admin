@@ -1,17 +1,19 @@
 ---
+
 name: antd
 description: >
-  Use when the user's task involves Ant Design (antd) — writing antd components,
-  debugging antd issues, querying antd APIs/props/tokens/demos, migrating between
-  antd versions, or analyzing antd usage in a project. Triggers on antd-related
-  code, imports from 'antd', or explicit antd questions.
+Use when the user's task involves Ant Design (antd) — writing antd components,
+debugging antd issues, querying antd APIs/props/tokens/demos, migrating between
+antd versions, or analyzing antd usage in a project. Triggers on antd-related
+code, imports from 'antd', or explicit antd questions.
 allowed-tools:
-  - Bash(antd *)
-  - Bash(antd bug*)
-  - Bash(antd bug-cli*)
-  - Bash(npx antd *)
-  - Bash(npx antd bug*)
-  - Bash(npx antd bug-cli*)
+- Bash(antd *)
+- Bash(antd bug*)
+- Bash(antd bug-cli*)
+- Bash(npx antd *)
+- Bash(npx antd bug*)
+- Bash(npx antd bug-cli*)
+
 ---
 
 # Ant Design CLI
@@ -218,12 +220,12 @@ This provides 7 tools (`antd_list`, `antd_info`, `antd_doc`, `antd_demo`, `antd_
 
 ## Global Flags
 
-| Flag | Purpose |
-|---|---|
-| `--format json` | Structured output — always use this |
-| `--version <v>` | Target a specific antd version (e.g. `5.20.0`) |
-| `--lang zh` | Chinese output (default: `en`) |
-| `--detail` | Include extra fields (description, since, deprecated, FAQ) |
+| Flag            | Purpose                                                    |
+| --------------- | ---------------------------------------------------------- |
+| `--format json` | Structured output — always use this                        |
+| `--version <v>` | Target a specific antd version (e.g. `5.20.0`)             |
+| `--lang zh`     | Chinese output (default: `en`)                             |
+| `--detail`      | Include extra fields (description, since, deprecated, FAQ) |
 
 ## Key Rules
 

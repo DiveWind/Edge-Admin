@@ -1,23 +1,25 @@
 ---
+
 name: pro-upgrade
 description: >
-  Use when the user wants to upgrade their Ant Design Pro project to the latest version.
-  Triggers on: upgrade pro, pro upgrade, migrate pro, update pro, 升级, 迁移项目,
-  "how to upgrade", "update to latest", "keep project up to date".
+Use when the user wants to upgrade their Ant Design Pro project to the latest version.
+Triggers on: upgrade pro, pro upgrade, migrate pro, update pro, 升级, 迁移项目,
+"how to upgrade", "update to latest", "keep project up to date".
 allowed-tools:
-  - Bash(git clone *)
-  - Bash(diff *)
-  - Bash(npm install)
-  - Bash(npm run lint*)
-  - Bash(npm run build*)
-  - Bash(npm run tsc*)
-  - Bash(npx antd *)
-  - Bash(rm -rf /tmp/ant-design-pro-upgrade*)
-  - Read
-  - Edit
-  - Write
-  - Glob
-  - Grep
+- Bash(git clone *)
+- Bash(diff *)
+- Bash(npm install)
+- Bash(npm run lint*)
+- Bash(npm run build*)
+- Bash(npm run tsc*)
+- Bash(npx antd *)
+- Bash(rm -rf /tmp/ant-design-pro-upgrade*)
+- Read
+- Edit
+- Write
+- Glob
+- Grep
+
 ---
 
 # Ant Design Pro Upgrade Skill
@@ -48,23 +50,23 @@ Separate the user's project files into **framework files** (Pro-owned, rarely cu
 
 **Framework files** — diff these against the template:
 
-| Path | Notes |
-|---|---|
-| `package.json` | dependencies, scripts, devDependencies only |
-| `config/config.ts` | framework config |
-| `config/routes.ts` | structure only — preserve user-added routes |
-| `config/defaultSettings.ts` | layout/theme defaults |
-| `config/proxy.ts` | structure only — preserve user targets |
-| `src/app.tsx` | runtime config |
-| `src/access.ts` | permission definitions |
-| `src/global.tsx` | global side effects |
-| `src/loading.tsx` | loading component |
-| `src/requestErrorConfig.ts` | request interceptor |
-| `src/typings.d.ts` | global type declarations |
-| `tsconfig.json` | TypeScript config |
-| `biome.json` or `biome.jsonc` | linter config |
-| `.husky/` | git hooks |
-| `commitlint.config.*` | commit lint config |
+| Path                           | Notes                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| `package.json`                 | dependencies, scripts, devDependencies only                              |
+| `config/config.ts`             | framework config                                                         |
+| `config/routes.ts`             | structure only — preserve user-added routes                              |
+| `config/defaultSettings.ts`    | layout/theme defaults                                                    |
+| `config/proxy.ts`              | structure only — preserve user targets                                   |
+| `src/app.tsx`                  | runtime config                                                           |
+| `src/access.ts`                | permission definitions                                                   |
+| `src/global.tsx`               | global side effects                                                      |
+| `src/loading.tsx`              | loading component                                                        |
+| `src/requestErrorConfig.ts`    | request interceptor                                                      |
+| `src/typings.d.ts`             | global type declarations                                                 |
+| `tsconfig.json`                | TypeScript config                                                        |
+| `biome.json` or `biome.jsonc`  | linter config                                                            |
+| `.husky/`                      | git hooks                                                                |
+| `commitlint.config.*`          | commit lint config                                                       |
 | `src/services/ant-design-pro/` | auto-generated — do NOT manually edit; regenerate with `npm run openapi` |
 
 **Business files** — preserve these, only adjust imports/APIs if needed:

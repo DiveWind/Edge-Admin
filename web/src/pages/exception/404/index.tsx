@@ -1,24 +1,21 @@
-import { Link, useIntl } from '@umijs/max';
-import { Button, Card, Result } from 'antd';
-import React from 'react';
+import { history } from '@umijs/max';
+import { Button, Result } from 'antd';
+import type React from 'react';
+import { useT } from '@/utils/i18n';
 
 const Exception404: React.FC = () => {
-  const intl = useIntl();
+  const t = useT();
   return (
-    <Card variant="borderless">
-      <Result
-        status="404"
-        title="404"
-        subTitle={intl.formatMessage({ id: 'pages.404.subTitle' })}
-        extra={
-          <Link to="/" prefetch>
-            <Button type="primary">
-              {intl.formatMessage({ id: 'pages.404.buttonText' })}
-            </Button>
-          </Link>
-        }
-      />
-    </Card>
+    <Result
+      status="404"
+      title="404"
+      subTitle={t('pages.exception.404')}
+      extra={
+        <Button type="primary" onClick={() => history.push('/')}>
+          {t('pages.exception.backHome')}
+        </Button>
+      }
+    />
   );
 };
 

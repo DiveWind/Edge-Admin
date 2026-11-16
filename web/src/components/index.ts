@@ -1,22 +1,13 @@
 /**
- * 这个文件作为组件的目录
- * 目的是统一管理对外输出的组件，方便分类
+ * 公共组件出口。只放跨页面复用的组件，页面私有组件放在页面目录的 components/ 下。
  */
-/**
- * 布局组件
- */
-import Footer from './Footer';
-import { DocLink, LangDropdown, VersionDropdown } from './RightContent';
-import { AvatarDropdown } from './RightContent/AvatarDropdown';
 
-/**
- * 业务组件
- */
-export { default as ArticleListContent } from './ArticleListContent';
-export { default as AvatarList } from './AvatarList';
+export { default as DeleteAction } from './DeleteAction';
 export { default as ErrorBoundary } from './ErrorBoundary';
+export { default as FeedbackBridge, getMessageApi } from './FeedbackBridge';
+export { default as Footer } from './Footer';
+export { default as ImageUpload } from './ImageUpload';
 export { default as OfflineBanner } from './OfflineBanner';
-export { default as StandardFormRow } from './StandardFormRow';
-export { default as TagSelect } from './TagSelect';
-
-export { AvatarDropdown, DocLink, Footer, LangDropdown, VersionDropdown };
+export { AvatarDropdown } from './RightContent/AvatarDropdown';
+export { LangDropdown } from './RightContent/LangDropdown';
+export { NoticeBell } from './RightContent/NoticeBell';

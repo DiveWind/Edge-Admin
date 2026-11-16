@@ -1,22 +1,28 @@
+import app from './zh-CN/app';
+import common from './zh-CN/common';
 import component from './zh-CN/component';
-import globalHeader from './zh-CN/globalHeader';
 import menu from './zh-CN/menu';
-import network from './zh-CN/network';
-import pages from './zh-CN/pages';
-import settingDrawer from './zh-CN/settingDrawer';
-import settings from './zh-CN/settings';
+import account from './zh-CN/pages/account';
+import content from './zh-CN/pages/content';
+import dashboard from './zh-CN/pages/dashboard';
+import exception from './zh-CN/pages/exception';
+import login from './zh-CN/pages/login';
+import message from './zh-CN/pages/message';
+import monitor from './zh-CN/pages/monitor';
+import system from './zh-CN/pages/system';
 
+/** 默认语言，也是文案 key 的类型来源（见 src/utils/i18n.ts） */
 export default {
-  'navBar.lang': '语言',
-  'layout.user.link.help': '帮助',
-  'layout.user.link.privacy': '隐私',
-  'layout.user.link.terms': '条款',
-  'app.preview.down.block': '下载此页面到本地项目',
-  ...pages,
-  ...globalHeader,
-  ...menu,
-  ...settingDrawer,
-  ...settings,
-  ...network,
+  ...app,
+  ...common,
   ...component,
+  ...menu,
+  ...login,
+  ...exception,
+  ...dashboard,
+  ...system,
+  ...monitor,
+  ...message,
+  ...content,
+  ...account,
 };

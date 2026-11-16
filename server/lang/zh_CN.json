@@ -1,0 +1,8 @@
+{
+    "Unauthenticated.": "未登录或登录已过期。",
+    "This action is unauthorized.": "无权执行此操作。",
+    "Not Found": "资源不存在。",
+    "Too Many Attempts.": "请求过于频繁，请稍后再试。",
+    "Server Error": "服务器错误。",
+    "Method Not Allowed": "请求方法不被允许。"
+}

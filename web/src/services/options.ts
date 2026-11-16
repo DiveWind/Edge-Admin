@@ -23,3 +23,7 @@ export function getArticleCategoryOptions() {
 export function getUserOptions() {
   return request<API.Collection<API.Option>>('/api/options/users');
 }
+
+/** options 接口 → Select / ProFormSelect 的 `{label, value}` */
+export const toSelectOptions = ({ data }: API.Collection<API.Option>) =>
+  data.map(({ id, name }) => ({ label: name, value: id }));

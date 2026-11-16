@@ -9,7 +9,8 @@ export const notificationKeys = {
   latestUnread: ['notifications', 'latest-unread'] as const,
 };
 
-export function queryNotifications(params: API.ListQuery & { read?: 0 | 1 }) {
+/** 过滤字段 `read`：0 未读 / 1 已读 */
+export function queryNotifications(params: API.ListQuery) {
   return request<API.Paginated<API.Notification>>('/api/notifications', {
     params,
   });

@@ -1,7 +1,18 @@
 import { BellOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { history, useModel } from '@umijs/max';
-import { Badge, Button, Flex, List, Popover, Typography } from 'antd';
+import {
+  Badge,
+  Button,
+  Divider,
+  Empty,
+  Flex,
+  Listy,
+  Popover,
+  Spin,
+  Typography,
+} from 'antd';
+import { createStyles } from 'antd-style';
 import dayjs from 'dayjs';
 import type React from 'react';
 import { useState } from 'react';
@@ -19,10 +30,22 @@ import useHeaderActionStyles from './style';
 const POLL_INTERVAL = 60_000;
 const LATEST_SIZE = 5;
 
-/** 头部通知铃铛：未读数 + 最近未读，变更后 invalidate notificationKeys.all 统一刷新 */
+const useStyles = createStyles(({ token, css }) => ({
+  panel: css`
+    width: 360px;
+    max-width: calc(100vw - ${token.marginLG}px);
+  `,
+  item: css`
+    padding: ${token.paddingXS}px 0;
+    border-bottom: 1px solid ${token.colorSplit};
+  `,
+}));
+
+/** 头部通知铃铛：未读数 + 最近未读；任何通知变更后 invalidate notificationKeys.all 统一刷新 */
 export const NoticeBell: React.FC = () => {
   const t = useT();
-  const { styles } = useHeaderActionStyles();
+  const { styles: actionStyles } = useHeaderActionStyles();
+  const { styles } = useStyles();
   const { initialState } = useModel('@@initialState');
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -60,48 +83,52 @@ export const NoticeBell: React.FC = () => {
     history.push('/message/notifications');
   };
 
-  const content = (
-    <Flex vertical gap="small" style={{ width: 360 }}>
-      <List<API.Notification>
+  const renderItem = (item: API.Notification) => (
+    <Flex className={styles.item} justify="space-between" gap="small">
+      <Flex vertical style={{ minWidth: 0 }}>
+        <Typography.Text strong ellipsis>
+          {item.title}
+        </Typography.Text>
+        <Typography.Text type="secondary" ellipsis>
+          {item.content}
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          {dayjs(item.created_at).fromNow()}
+        </Typography.Text>
+      </Flex>
+      <Button
+        type="link"
         size="small"
-        loading={isFetching}
-        dataSource={latest}
-        locale={{ emptyText: t('app.notice.empty') }}
-        renderItem={(item) => (
-          <List.Item
-            actions={[
-              <Button
-                key="read"
-                type="link"
-                size="small"
-                onClick={() => handleRead(item.id)}
-              >
-                {t('app.notice.markRead')}
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={<Typography.Text ellipsis>{item.title}</Typography.Text>}
-              description={
-                <Flex vertical>
-                  <Typography.Text type="secondary" ellipsis>
-                    {item.content}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">
-                    {dayjs(item.created_at).fromNow()}
-                  </Typography.Text>
-                </Flex>
-              }
-            />
-          </List.Item>
+        onClick={() => handleRead(item.id).catch(() => undefined)}
+      >
+        {t('app.notice.markRead')}
+      </Button>
+    </Flex>
+  );
+
+  const content = (
+    <Flex vertical className={styles.panel}>
+      <Spin spinning={isFetching}>
+        {latest.length ? (
+          <Listy<API.Notification>
+            items={latest}
+            rowKey="id"
+            itemRender={renderItem}
+          />
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t('app.notice.empty')}
+          />
         )}
-      />
+      </Spin>
+      <Divider style={{ margin: '8px 0' }} />
       <Flex justify="space-between">
         <Button
           type="link"
           size="small"
           disabled={!unreadCount}
-          onClick={handleReadAll}
+          onClick={() => handleReadAll().catch(() => undefined)}
         >
           {t('app.notice.markAllRead')}
         </Button>
@@ -123,7 +150,7 @@ export const NoticeBell: React.FC = () => {
     >
       <Button
         type="text"
-        className={styles.action}
+        className={actionStyles.action}
         aria-label={t('app.notice.title')}
       >
         <Badge count={unreadCount} size="small">

@@ -1,0 +1,37 @@
+import type zh from '../zh-CN/common';
+
+const messages: Record<keyof typeof zh, string> = {
+  'common.create': 'New',
+  'common.edit': 'Edit',
+  'common.delete': 'Delete',
+  'common.detail': 'Detail',
+  'common.actions': 'Actions',
+  'common.clear': 'Clear',
+  'common.created': 'Created successfully',
+  'common.updated': 'Saved successfully',
+  'common.deleted': 'Deleted successfully',
+  'common.cleared': 'Cleared',
+  'common.deleteConfirm': 'Are you sure you want to delete this record?',
+  'common.clearConfirm':
+    'Are you sure you want to clear all records? This cannot be undone.',
+  'common.status': 'Status',
+  'common.status.active': 'Active',
+  'common.status.disabled': 'Disabled',
+  'common.publishStatus.draft': 'Draft',
+  'common.publishStatus.published': 'Published',
+  'common.dataScope.all': 'All data',
+  'common.dataScope.custom': 'Custom departments',
+  'common.dataScope.department_and_children': 'Department and below',
+  'common.dataScope.department': 'Own department',
+  'common.dataScope.self': 'Own records only',
+  'common.name': 'Name',
+  'common.code': 'Code',
+  'common.sort': 'Sort',
+  'common.remark': 'Remark',
+  'common.createdAt': 'Created At',
+  'common.updatedAt': 'Updated At',
+  'common.publishedAt': 'Published At',
+  'common.passwordMismatch': 'The two passwords do not match',
+};
+
+export default messages;

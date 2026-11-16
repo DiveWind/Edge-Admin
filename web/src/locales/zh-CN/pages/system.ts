@@ -1,0 +1,52 @@
+export default {
+  // 用户
+  'pages.system.users.create': '新建用户',
+  'pages.system.users.edit': '编辑用户',
+  'pages.system.users.username': '用户名',
+  'pages.system.users.name': '姓名',
+  'pages.system.users.password': '初始密码',
+  'pages.system.users.email': '邮箱',
+  'pages.system.users.phone': '手机号',
+  'pages.system.users.avatar': '头像',
+  'pages.system.users.department': '部门',
+  'pages.system.users.departmentTree': '组织架构',
+  'pages.system.users.roles': '角色',
+  'pages.system.users.positions': '岗位',
+  'pages.system.users.lastLoginAt': '最后登录',
+  'pages.system.users.resetPassword': '重置密码',
+  'pages.system.users.resetPassword.title': '重置密码：{name}',
+  'pages.system.users.resetPassword.password': '新密码',
+  'pages.system.users.resetPassword.confirm': '确认新密码',
+  'pages.system.users.resetPassword.success': '密码已重置',
+  // 角色
+  'pages.system.roles.create': '新建角色',
+  'pages.system.roles.edit': '编辑角色',
+  'pages.system.roles.name': '角色名称',
+  'pages.system.roles.code': '角色编码',
+  'pages.system.roles.dataScope': '数据权限',
+  'pages.system.roles.permissions': '功能权限',
+  'pages.system.roles.departments': '自定义部门',
+  // 权限
+  'pages.system.permissions.description':
+    '权限点在后端 config/permissions.php 中声明，执行 php artisan permission:sync 同步，此处只读。',
+  'pages.system.permissions.name': '名称',
+  'pages.system.permissions.code': '权限码',
+  'pages.system.permissions.type': '类型',
+  'pages.system.permissions.type.menu': '菜单',
+  'pages.system.permissions.type.action': '操作',
+  // 部门
+  'pages.system.departments.create': '新建部门',
+  'pages.system.departments.edit': '编辑部门',
+  'pages.system.departments.name': '部门名称',
+  'pages.system.departments.parent': '上级部门',
+  'pages.system.departments.parent.placeholder': '不选则为顶级部门',
+  'pages.system.departments.leader': '负责人',
+  'pages.system.departments.addChild': '新增下级',
+  'pages.system.departments.deleteConfirm':
+    '确定删除该部门吗？存在下级部门或用户时无法删除。',
+  // 岗位
+  'pages.system.positions.create': '新建岗位',
+  'pages.system.positions.edit': '编辑岗位',
+  'pages.system.positions.name': '岗位名称',
+  'pages.system.positions.code': '岗位编码',
+};

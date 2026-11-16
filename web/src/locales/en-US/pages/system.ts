@@ -1,0 +1,52 @@
+import type zh from '../../zh-CN/pages/system';
+
+const messages: Record<keyof typeof zh, string> = {
+  'pages.system.users.create': 'New User',
+  'pages.system.users.edit': 'Edit User',
+  'pages.system.users.username': 'Username',
+  'pages.system.users.name': 'Name',
+  'pages.system.users.password': 'Initial Password',
+  'pages.system.users.email': 'Email',
+  'pages.system.users.phone': 'Phone',
+  'pages.system.users.avatar': 'Avatar',
+  'pages.system.users.department': 'Department',
+  'pages.system.users.departmentTree': 'Organization',
+  'pages.system.users.roles': 'Roles',
+  'pages.system.users.positions': 'Positions',
+  'pages.system.users.lastLoginAt': 'Last Login',
+  'pages.system.users.resetPassword': 'Reset Password',
+  'pages.system.users.resetPassword.title': 'Reset Password: {name}',
+  'pages.system.users.resetPassword.password': 'New Password',
+  'pages.system.users.resetPassword.confirm': 'Confirm New Password',
+  'pages.system.users.resetPassword.success': 'Password has been reset',
+  'pages.system.roles.create': 'New Role',
+  'pages.system.roles.edit': 'Edit Role',
+  'pages.system.roles.name': 'Role Name',
+  'pages.system.roles.code': 'Role Code',
+  'pages.system.roles.dataScope': 'Data Scope',
+  'pages.system.roles.permissions': 'Permissions',
+  'pages.system.roles.departments': 'Custom Departments',
+  'pages.system.permissions.description':
+    'Permissions are declared in the backend config/permissions.php and synced with php artisan permission:sync. Read only.',
+  'pages.system.permissions.name': 'Name',
+  'pages.system.permissions.code': 'Code',
+  'pages.system.permissions.type': 'Type',
+  'pages.system.permissions.type.menu': 'Menu',
+  'pages.system.permissions.type.action': 'Action',
+  'pages.system.departments.create': 'New Department',
+  'pages.system.departments.edit': 'Edit Department',
+  'pages.system.departments.name': 'Department Name',
+  'pages.system.departments.parent': 'Parent Department',
+  'pages.system.departments.parent.placeholder':
+    'Leave empty for a top-level department',
+  'pages.system.departments.leader': 'Leader',
+  'pages.system.departments.addChild': 'Add Child',
+  'pages.system.departments.deleteConfirm':
+    'Delete this department? Departments with children or users cannot be deleted.',
+  'pages.system.positions.create': 'New Position',
+  'pages.system.positions.edit': 'Edit Position',
+  'pages.system.positions.name': 'Position Name',
+  'pages.system.positions.code': 'Position Code',
+};
+
+export default messages;

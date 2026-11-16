@@ -53,8 +53,7 @@ export function toListQuery(
 
 /** Laravel 列表响应 → ProTable 结果。分页响应取 `meta.total`，非分页取数组长度 */
 export function toTableResult<T>(response: ListResponse<T>): TableResult<T> {
-  const total =
-    'meta' in response ? response.meta.total : response.data.length;
+  const total = 'meta' in response ? response.meta.total : response.data.length;
   return { data: response.data, total, success: true };
 }
 

@@ -1,10 +1,10 @@
-import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
 import type React from 'react';
 import {
   AvatarDropdown,
   ErrorBoundary,
+  FeedbackBridge,
   Footer,
   LangDropdown,
   NoticeBell,
@@ -12,13 +12,17 @@ import {
 } from '@/components';
 import Forbidden from '@/pages/exception/403';
 import { getCurrentUser } from '@/services/auth';
-import { clearToken, getToken, LOGIN_PATH, redirectToLogin } from '@/utils/auth';
+import {
+  clearToken,
+  getToken,
+  LOGIN_PATH,
+  redirectToLogin,
+} from '@/utils/auth';
 import { toHttpError } from '@/utils/error';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
 export interface InitialState {
-  settings: Partial<LayoutSettings>;
   currentUser?: API.CurrentUser;
   /** 重新拉取当前用户（登录后、修改资料后调用） */
   fetchUserInfo: () => Promise<API.CurrentUser | undefined>;
@@ -40,10 +44,7 @@ async function fetchUserInfo(): Promise<API.CurrentUser | undefined> {
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
  */
 export async function getInitialState(): Promise<InitialState> {
-  const state: InitialState = {
-    settings: defaultSettings,
-    fetchUserInfo,
-  };
+  const state: InitialState = { fetchUserInfo };
   if (history.location.pathname === LOGIN_PATH) return state;
 
   const currentUser = await fetchUserInfo();
@@ -53,6 +54,8 @@ export async function getInitialState(): Promise<InitialState> {
 
 /** @see https://procomponents.ant.design/components/layout */
 export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
+  // 插件只消费 config 中 layout 的 title，logo / 布局模式等需在运行时传入
+  ...defaultSettings,
   menuItemRender: (item, dom) =>
     item.path ? (
       <Link to={item.path} prefetch>
@@ -80,7 +83,6 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
   // 无权限访问路由时渲染（菜单已由 access 隐藏）
   unAccessible: <Forbidden />,
   ErrorBoundary,
-  ...initialState?.settings,
 });
 
 /**
@@ -97,6 +99,16 @@ export function rootContainer(container: React.ReactNode) {
     <>
       <OfflineBanner />
       <ErrorBoundary>{container}</ErrorBoundary>
+    </>
+  );
+}
+
+/** 位于 antd `<App>` 之内（umi 中 app.tsx 的 innerProvider 最先执行，处于最内层） */
+export function innerProvider(container: React.ReactNode) {
+  return (
+    <>
+      <FeedbackBridge />
+      {container}
     </>
   );
 }
