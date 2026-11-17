@@ -2,6 +2,8 @@
 export interface OperationLog {
   id: API.Id;
   user_id: API.Id | null;
+  /** 该请求的 `X-Request-Id`，可与服务端日志关联；历史记录为 null */
+  request_id: string | null;
   user: API.Brief | null;
   method: string;
   path: string;

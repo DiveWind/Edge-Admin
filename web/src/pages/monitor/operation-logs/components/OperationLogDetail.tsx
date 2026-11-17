@@ -61,6 +61,11 @@ const OperationLogDetail: React.FC<OperationLogDetailProps> = ({
             dataIndex: 'route_name',
           },
           {
+            title: t('pages.monitor.operationLogs.requestId'),
+            dataIndex: 'request_id',
+            copyable: true,
+          },
+          {
             title: t('pages.monitor.operationLogs.statusCode'),
             dataIndex: 'status_code',
             render: (_, record) => <StatusCodeTag code={record.status_code} />,

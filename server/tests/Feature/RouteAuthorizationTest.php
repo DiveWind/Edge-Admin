@@ -3,7 +3,7 @@
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\{Collection, Str};
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\{DB, Route};
 
 /*
 |--------------------------------------------------------------------------
@@ -77,3 +77,37 @@ test('every permission code used by a route is declared in config/permissions.ph
 
     expect(protectedApiRoutes()->flatten()->unique()->diff($declared)->values()->all())->toBe([]);
 });
+
+test('every api route parameter is constrained by a global route pattern', function () {
+    $unconstrained = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn (RouteDefinition $route): bool => str_starts_with($route->uri(), 'api/'))
+        ->flatMap(fn (RouteDefinition $route): array => collect($route->parameterNames())
+            ->reject(fn (string $parameter): bool => array_key_exists($parameter, $route->wheres))
+            ->map(fn (string $parameter): string => "{$route->uri()} {{$parameter}}")
+            ->all())
+        ->values()
+        ->all();
+
+    expect($unconstrained)->toBe([], '请在 routes/api.php 的 Route::patterns() 中为这些参数声明约束（模型 id 加到 // edge:route-keys 之前）');
+});
+
+test('malformed route parameters are rejected with 404 before reaching the database', function (string $method, string $uri) {
+    actingAsUser(superAdmin());
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    $this->json($method, $uri)
+        ->assertNotFound()
+        ->assertExactJson(['message' => __('Not Found')]);
+
+    $leaked = collect(DB::getQueryLog())->pluck('bindings')->flatten()
+        ->filter(fn (mixed $binding): bool => is_string($binding) && str_contains(strtolower($binding), 'abc'));
+
+    expect($leaked->all())->toBe([]);
+})->with([
+    'model id' => ['GET', '/api/users/abc'],
+    'model id with suffix' => ['DELETE', '/api/roles/1abc'],
+    'notification uuid' => ['POST', '/api/notifications/abc/read'],
+    'failed job uuid' => ['DELETE', '/api/failed-jobs/abc'],
+    'scheduled task key' => ['POST', '/api/scheduled-tasks/ABC_1/run'],
+]);

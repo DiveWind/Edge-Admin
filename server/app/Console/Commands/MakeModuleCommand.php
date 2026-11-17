@@ -403,7 +403,7 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
     }
 
     /**
-     * 在已有文件的锚点处登记：菜单权限、资源路由、选项路由、操作日志摘要。
+     * 在已有文件的锚点处登记：菜单权限、资源路由与其数字 id 参数约束、选项路由、操作日志摘要。
      */
     protected function planRegistrations(): void
     {
@@ -417,6 +417,7 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
         ]);
 
         $this->insert(base_path('routes/api.php'), "'{$this->blueprint->route()}' => ", ['// edge:resources' => $this->stubs->render('resource_route', $variables)]);
+        $this->insert(base_path('routes/api.php'), "'{$this->blueprint->routeParameter()}',", ['// edge:route-keys' => $this->stubs->render('route_key', $variables)]);
 
         if ($this->blueprint->withOptions) {
             $this->insert(base_path('routes/api.php'), "{$this->blueprint->class}OptionController::class", ['// edge:options' => $this->stubs->render('option_route', $variables)]);

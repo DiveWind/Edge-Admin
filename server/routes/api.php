@@ -21,9 +21,27 @@ use Illuminate\Support\Facades\Route;
 | tests/Feature/RouteAuthorizationTest.php 保证 auth:sanctum 下的每条路由都有功能权限
 | （登录即可访问的少数路由在该测试中显式列出），且权限码都已在 config/permissions.php 中声明。
 |
-| `// edge:resources`、`// edge:options` 为 `php artisan edge:make-module` 的插入锚点，请保留。
+| `// edge:route-keys`、`// edge:resources`、`// edge:options` 为 `php artisan edge:make-module` 的插入锚点，请保留。
 |
 */
+
+/*
+| 路由参数约束（全局 Route::pattern，按参数名作用于其后定义的全部路由）：不匹配直接 404（与记录不存在相同），
+| 非法值不会进入查询（PostgreSQL 下 bigint / uuid 列与非法字面量比较会报错 → 500）。
+| tests/Feature/RouteAuthorizationTest.php 保证 /api 下的每个路由参数都有约束。
+*/
+Route::patterns([
+    'id' => '[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}',   // 站内通知（UUID）
+    'uuid' => '[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}', // 失败任务（UUID）
+    'key' => '[a-z0-9-]+',                                                                 // 定时任务（命令 slug）
+]);
+
+// 隐式模型绑定的参数（apiResource 的单数蛇形名）只接受数字 id
+Route::patterns(array_fill_keys([
+    'user', 'role', 'permission', 'department', 'position', 'dict_type', 'dict_item', 'setting', 'attachment',
+    'login_log', 'operation_log', 'online_session', 'announcement', 'article_category', 'article',
+    // edge:route-keys
+], '[0-9]+'));
 
 Route::post('auth/login', [TokenController::class, 'store'])->name('auth.login');
 

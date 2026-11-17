@@ -15,6 +15,7 @@ const messages: Record<keyof typeof zh, string> = {
   'pages.monitor.operationLogs.method': 'Method',
   'pages.monitor.operationLogs.path': 'Path',
   'pages.monitor.operationLogs.routeName': 'Route Name',
+  'pages.monitor.operationLogs.requestId': 'Request ID',
   'pages.monitor.operationLogs.statusCode': 'Status Code',
   'pages.monitor.operationLogs.duration': 'Duration',
   'pages.monitor.operationLogs.ip': 'IP',

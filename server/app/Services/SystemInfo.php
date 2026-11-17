@@ -3,21 +3,32 @@
 namespace App\Services;
 
 use App\Models\{Attachment, PersonalAccessToken, User};
+use Illuminate\Cache\CacheManager;
+use Illuminate\Container\Attributes\Config;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Queue\Failed\FailedJobProviderInterface;
-use Throwable;
 
 /**
  * 系统信息（GET /api/system-info）。只采集可移植获取的指标，不输出主机、账号、密钥等敏感配置；
  * 无法获取的指标（如数据库不支持统计表大小、disk_*_space 被禁用）返回 null。
+ *
+ * 存储占用（磁盘、库大小、附件总大小）的统计开销随数据量增长（MySQL / PostgreSQL 需查询 information_schema / 系统目录），
+ * 与工作台一样按 stale-while-revalidate 缓存（Cache::flexible()，见 config('edge.statistics_cache')）。
  */
 class SystemInfo
 {
+    public const string STORAGE_CACHE_KEY = 'edge:system-info:storage';
+
+    /**
+     * @param  array{fresh: int, stale: int}  $cacheTtl
+     */
     public function __construct(
         protected Application $app,
         protected DatabaseManager $db,
         protected FailedJobProviderInterface $failer,
+        protected CacheManager $cache,
+        #[Config('edge.statistics_cache')] protected array $cacheTtl,
     ) {}
 
     /**
@@ -94,12 +105,18 @@ class SystemInfo
     {
         $path = storage_path();
 
-        return [
+        $compute = fn (): array => [
             'disk_total_bytes' => $this->diskSpace(fn (): float|false => disk_total_space($path)),
             'disk_free_bytes' => $this->diskSpace(fn (): float|false => disk_free_space($path)),
             'database_bytes' => $this->databaseSize(),
             'attachments_bytes' => (int) Attachment::query()->sum('size'),
         ];
+
+        if ($this->cacheTtl['fresh'] <= 0) {
+            return $compute();
+        }
+
+        return $this->cache->flexible(self::STORAGE_CACHE_KEY, [$this->cacheTtl['fresh'], max($this->cacheTtl['fresh'], $this->cacheTtl['stale'])], $compute);
     }
 
     /**
@@ -120,11 +137,7 @@ class SystemInfo
      */
     protected function diskSpace(callable $resolver): ?int
     {
-        try {
-            $bytes = $resolver();
-        } catch (Throwable) {
-            return null;
-        }
+        $bytes = rescue($resolver, false, false);
 
         return $bytes === false ? null : (int) $bytes;
     }
@@ -137,11 +150,7 @@ class SystemInfo
     {
         $connection = $this->db->connection();
 
-        try {
-            $size = collect($connection->getSchemaBuilder()->getTables())->sum(fn (array $table): int => (int) ($table['size'] ?? 0));
-        } catch (Throwable) {
-            $size = 0;
-        }
+        $size = rescue(fn (): int => (int) collect($connection->getSchemaBuilder()->getTables())->sum(fn (array $table): int => (int) ($table['size'] ?? 0)), 0, false);
 
         if ($size > 0) {
             return (int) $size;

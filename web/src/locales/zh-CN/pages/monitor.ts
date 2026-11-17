@@ -15,6 +15,7 @@ export default {
   'pages.monitor.operationLogs.method': '请求方法',
   'pages.monitor.operationLogs.path': '请求路径',
   'pages.monitor.operationLogs.routeName': '路由名称',
+  'pages.monitor.operationLogs.requestId': '请求 ID',
   'pages.monitor.operationLogs.statusCode': '状态码',
   'pages.monitor.operationLogs.duration': '耗时',
   'pages.monitor.operationLogs.ip': 'IP',

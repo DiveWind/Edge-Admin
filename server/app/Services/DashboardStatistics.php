@@ -5,15 +5,31 @@ namespace App\Services;
 use App\Enums\LoginStatus;
 use App\Models\{Article, ArticleCategory, Attachment, Department, LoginLog, OperationLog, PersonalAccessToken, Role, User};
 use Carbon\CarbonPeriod;
+use Illuminate\Cache\CacheManager;
+use Illuminate\Container\Attributes\Config;
 
 /**
  * 工作台统计。按日期分组在 PHP 侧完成，保持数据库无关。
+ *
+ * 汇总类统计（8 项计数、登录趋势、分类 / 部门分布）按 stale-while-revalidate 缓存（Cache::flexible()，
+ * 时长见 config('edge.statistics_cache')）：过期后的第一个请求先拿到旧值，重新计算在响应发送后进行（defer），
+ * 并由缓存锁保证只有一个请求重算。"最近操作"是带索引的 10 行查询，始终实时。
  */
 class DashboardStatistics
 {
+    public const string CACHE_KEY = 'edge:dashboard';
+
     protected const int TREND_DAYS = 14;
 
     protected const int RECENT_OPERATIONS = 10;
+
+    /**
+     * @param  array{fresh: int, stale: int}  $cacheTtl
+     */
+    public function __construct(
+        protected CacheManager $cache,
+        #[Config('edge.statistics_cache')] protected array $cacheTtl,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -21,12 +37,28 @@ class DashboardStatistics
     public function summary(): array
     {
         return [
+            ...$this->aggregates(),
+            'recent_operations' => $this->recentOperations(),
+        ];
+    }
+
+    /**
+     * @return array{totals: array<string, int>, login_trend: list<array{date: string, success: int, failed: int}>, articles_by_category: array<int, array{category: string, count: int}>, users_by_department: array<int, array{department: string, count: int}>}
+     */
+    protected function aggregates(): array
+    {
+        $compute = fn (): array => [
             'totals' => $this->totals(),
             'login_trend' => $this->loginTrend(),
             'articles_by_category' => $this->articlesByCategory(),
             'users_by_department' => $this->usersByDepartment(),
-            'recent_operations' => $this->recentOperations(),
         ];
+
+        if ($this->cacheTtl['fresh'] <= 0) {
+            return $compute();
+        }
+
+        return $this->cache->flexible(self::CACHE_KEY, [$this->cacheTtl['fresh'], max($this->cacheTtl['fresh'], $this->cacheTtl['stale'])], $compute);
     }
 
     /**

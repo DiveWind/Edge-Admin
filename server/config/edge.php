@@ -121,6 +121,39 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queues
+    |--------------------------------------------------------------------------
+    |
+    | 队列任务的集中路由（AppServiceProvider 中 Queue::route()，Job 类上不声明队列）：
+    | notifications：公告站内通知群发（编排任务与分块任务）；tasks：手动"立即执行"的定时任务命令。
+    | 留空使用队列连接的默认队列；拆分队列后 worker 需监听对应队列，如
+    | `php artisan queue:work --queue=default,notifications`。
+    |
+    */
+
+    'queues' => [
+        'notifications' => env('EDGE_QUEUE_NOTIFICATIONS'),
+        'tasks' => env('EDGE_QUEUE_TASKS'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Statistics Cache
+    |--------------------------------------------------------------------------
+    |
+    | 工作台汇总统计与系统信息中的存储占用按 stale-while-revalidate 缓存（Cache::flexible()）：
+    | fresh 秒内直接返回缓存；fresh ~ stale 秒之间先返回旧值，响应发送后在后台重新计算；
+    | 超过 stale 秒同步重新计算。fresh 设为 0 关闭缓存。
+    |
+    */
+
+    'statistics_cache' => [
+        'fresh' => (int) env('EDGE_STATS_CACHE_FRESH', 60),
+        'stale' => (int) env('EDGE_STATS_CACHE_STALE', 300),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Module Generator
     |--------------------------------------------------------------------------
     |

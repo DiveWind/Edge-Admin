@@ -239,6 +239,7 @@ test('it orchestrates the make commands into a complete backend and frontend mod
         ->toContain('// edge:permissions:crm');
     expect($files['server/routes/api.php'])
         ->toContain("'tickets' => TicketController::class,\n        // edge:resources")
+        ->toContain("'ticket',\n    // edge:route-keys")
         ->toContain('use App\Http\Controllers\Api\Crm\TicketController;')
         ->not->toContain('can:');
     expect($files['server/lang/zh_CN/operations.php'])->toContain("'tickets.store' => '新增Ticket',");
@@ -340,6 +341,7 @@ test('running the generator twice does not duplicate anything', function () {
 
     expect(generatedFiles($this->root))->toBe($first)
         ->and(substr_count($first['server/routes/api.php'], "'tickets' =>"))->toBe(1)
+        ->and(substr_count($first['server/routes/api.php'], "'ticket',"))->toBe(1)
         ->and(substr_count($first['server/config/permissions.php'], "'code' => 'content.ticket'"))->toBe(1)
         ->and(substr_count($first['server/config/permissions.php'], "'code' => 'content',"))->toBe(1);
 });
