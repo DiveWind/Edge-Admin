@@ -2,7 +2,7 @@
 
 use App\Models\{ArticleCategory, Department, LoginLog, Position, Role, User};
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\{DB, Storage};
 
 test('the root url returns the application name and version', function () {
     $this->getJson('/')->assertOk()->assertJsonStructure(['name', 'version']);
@@ -74,4 +74,45 @@ test('dashboard requires the dashboard permission', function () {
     actingAsUser(User::factory()->create());
 
     $this->getJson('/api/dashboard')->assertForbidden();
+});
+
+test('dashboard aggregates are served stale-while-revalidate', function () {
+    config(['edge.statistics_cache' => ['fresh' => 60, 'stale' => 300]]);
+    actingAsUser(superAdmin());
+    $this->freezeTime();
+
+    $users = $this->getJson('/api/dashboard')->assertOk()->json('data.totals.users');
+    User::factory()->create();
+
+    // 新鲜期内返回缓存
+    $this->getJson('/api/dashboard')->assertJsonPath('data.totals.users', $users);
+
+    // 过了新鲜期：本次仍返回旧值，响应发送后（deferred）重新计算，下一次拿到新值
+    $this->travel(61)->seconds();
+    $this->getJson('/api/dashboard')->assertJsonPath('data.totals.users', $users);
+    $this->getJson('/api/dashboard')->assertJsonPath('data.totals.users', $users + 1);
+});
+
+test('dashboard caching can be disabled', function () {
+    config(['edge.statistics_cache' => ['fresh' => 0, 'stale' => 0]]);
+    actingAsUser(superAdmin());
+
+    $users = $this->getJson('/api/dashboard')->json('data.totals.users');
+    User::factory()->create();
+
+    $this->getJson('/api/dashboard')->assertJsonPath('data.totals.users', $users + 1);
+});
+
+test('the health route checks the database connection', function () {
+    $this->get('/up')->assertOk();
+
+    DB::shouldReceive('connection->getPdo')->andThrow(new RuntimeException('database is down'));
+
+    $this->get('/up')->assertServerError();
+});
+
+test('php artisan about shows the Edge Admin section', function () {
+    $this->artisan('about', ['--only' => 'edge_admin', '--json' => true])
+        ->expectsOutputToContain('"upload_max_size":"2 MB"')
+        ->assertSuccessful();
 });

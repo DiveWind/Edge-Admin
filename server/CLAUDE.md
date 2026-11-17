@@ -201,7 +201,8 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   两者带缓存（`Cache::memo()`，每请求 / 任务只读一次缓存存储），由 `DictionaryObserver` / `SettingObserver` 自动失效。
 - 用户可见文案放 `lang/zh_CN/*.php` 并同步 `lang/en`，接口语言由 `SetLocale` 按 `Accept-Language` 切换；操作日志摘要以路由名为键写在 `lang/*/operations.php`。
 - 可配置项放 `config/edge.php` 并在 `.env.example` 中给出 `EDGE_*` 变量；可注入的类（Action / 中间件 / 命令）用 `#[Config('edge.xxx')]` 构造器注入，
-  其余用 `config()->integer()` / `->array()` 等类型化读取。命令用 `#[Signature]` / `#[Description]`，Job 用 `#[Tries]` 等队列 Attribute（架构测试强制）。
+  其余用 `config()->integer()` / `->array()` 等类型化读取。命令用 `#[Signature]` / `#[Description]`，Job 用 `#[Tries]` 等队列 Attribute（架构测试强制）；Job 的队列只在 `AppServiceProvider::configureQueues()` 的 `Queue::route()` 中登记（`ConventionsTest` / `QueueRoutingTest` 强制）。
+- 请求体只能包含 `rules()` 声明的字段（全局 `FormRequest::failOnUnknownFields()`，未知字段 422）；新资源的路由参数名加入 `routes/api.php` 的 `// edge:route-keys` 列表（只匹配数字，`RouteAuthorizationTest` 强制）。
 - 导入：同一命名空间合并为 `use A\B\{C, D};`（Pint `group_import`，`composer format` 自动处理，`ConventionsTest` 检查）。完整写法约定见 backend-guide「现代 Laravel 写法约定」。
 - 保持数据库无关：不写方言 SQL，模糊匹配用 `whereLike()`，按日期用 `whereDate()`，分组统计可在 PHP 侧完成。
 - `routes/api.php`、`config/permissions.php`、`lang/*/operations.php` 中的 `// edge:*` 注释是代码生成器的锚点，请保留；`stubs/*.stub` 中的 `//` 占位行与

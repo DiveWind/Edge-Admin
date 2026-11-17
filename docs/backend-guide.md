@@ -119,7 +119,8 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
 | 无功能权限 | 403 | 控制器动作 `#[Authorize('<权限码>')]` |
 | 违反记录级业务规则 | 403 + `message` | Policy 返回 `Response::deny(__('policy.xxx'))`，控制器动作 `#[Authorize('delete', 'article')]`（需要请求体时在 Form Request `authorize()`） |
 | 字段级约束 | 422 + `errors` | Form Request 规则 / `after()` 钩子，文案放 `lang/*/validation.php` 的 `custom` |
-| 记录不存在 | 404 | 路由模型绑定 / `findOrFail()`；统一渲染为 `{message: "资源不存在。"}`，不暴露模型类名 |
+| 请求体含未声明字段 | 422 + `errors.<字段>` | 全局 `FormRequest::failOnUnknownFields()`：请求体只能包含 `rules()` 中的字段（含 `*_confirmation`、`ids.*` 通配）；值本身是任意 JSON 的字段在 `prepareForValidation()` 中序列化（见 `StoreSettingRequest`） |
+| 记录不存在 / 参数格式不对 | 404 | 路由模型绑定 / `findOrFail()`；`routes/api.php` 顶部的 `Route::patterns()` 让非数字 id、非 UUID 等直接不匹配路由（不会把非法值带进 PostgreSQL 查询导致 500）；统一渲染为 `{message: "资源不存在。"}`，不暴露模型类名 |
 | 限流 | 429 | `throttle:api`（全局）；登录在 `LoginRequest::authenticate()` 中用 `RateLimiter` 只累计失败、成功清零，均带 `Retry-After` |
 
 异常的 JSON 渲染集中在 `bootstrap/app.php`，`message` 按当前语言翻译（中文 JSON 文案见 `lang/zh_CN.json`）。
@@ -134,7 +135,10 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
 - `URL::forceHttps(config('edge.force_https'))`；`Sanctum::usePersonalAccessTokenModel(App\Models\PersonalAccessToken::class)`；
 - 限流器 `api`（`EDGE_API_RATE_LIMIT`）；登录限流不走命名限流器，而是与官方 starter kit 一样在 `LoginRequest` 中
   `RateLimiter::tooManyAttempts()` / `hit()` / `clear()`（次数取系统参数 `security.login_max_attempts`，只累计失败，成功后清零，超出 429 + `Retry-After`）；
-- JSON Resource 保持默认的 `data` 包裹（契约依赖它），不调用 `withoutWrapping()`。
+- JSON Resource 保持默认的 `data` 包裹（契约依赖它），不调用 `withoutWrapping()`；
+- `FormRequest::failOnUnknownFields()`：全部写接口拒绝契约之外的字段（见第 4 节）；
+- `Queue::route([...])`：Job 的队列集中登记（`configureQueues()`，队列名取 `config('edge.queues')` / `EDGE_QUEUE_*`，Job 类上不写队列，架构测试强制）；
+- `AboutCommand::add('Edge Admin', ...)`：`php artisan about` 显示版本、语言、Token 有效期、上传配置（`Number::fileSize()`）、队列路由与权限节点数。
 
 ## 6. 多语言
 
@@ -166,7 +170,9 @@ app(Settings::class)->integer('security.login_max_attempts', config()->integer('
 - 用 Factory 造数据（Factory 给出全部字段，开启了严格模式），用 `tests/Pest.php` 中的 `userWithPermissions([...])`、`superAdmin()`、`actingAsUser()`；
   需要真实 token 时（如在线会话）用 `$user->createToken()` + `withToken()`；
 - 测试客户端默认 `Accept-Language: zh-CN`（见 `tests/TestCase.php`），多语言行为在 `LocaleTest` 中单独覆盖；
-- 外部副作用用 `Storage::fake()`、`Queue::fake()`、`Notification::fake()` 隔离；
+- 外部副作用用 `Storage::fake()`、`Queue::fake()`、`Bus::fake()`（`Bus::assertBatched()`）、`Notification::fake()` 隔离；时间相关用 `$this->freezeTime()` / `$this->travel()`；
+- `tests/Pest.php`：`LazilyRefreshDatabase`（不访问数据库的测试不迁移）、每个 Feature 测试 `Http::preventStrayRequests()`（禁止意外的出站请求）；
+  非生产环境的 `Model::shouldBeStrict()` 在测试中同样生效（懒加载即失败）；
 - 提交前：`composer lint && composer analyse && composer test`。
 
 ## 9. 新增业务模块（清单）
@@ -215,8 +221,10 @@ app(Settings::class)->integer('security.login_max_attempts', config()->integer('
 | 场景 | 标准写法 | 反例 |
 |---|---|---|
 | 当前用户 | 参数 `#[CurrentUser] User $user` | `$request->user()` / `auth()->user()` + 断言类型 |
-| 类型化取值 | `$request->enum('status', Status::class)`、`->string()`、`->integer()`、`->boolean()`、`->safe()->only()` | `$request->input('x')` 后手工转换 |
-| 校验规则 | `Rule::enum()`、`Rule::exists()`、`Password::defaults()`、`File::types()` | 手写 `in:` 枚举值 |
+| 类型化取值 | `$request->enum('status', Status::class, Status::Active)`、`->string()`、`->integer()`、`->boolean()`、`->safe()->only()`；Policy 参数用枚举类型 | `$request->input('x')` 后手工转换 |
+| 校验规则 | `Rule::enum()`（限定取值用 `->only()` / `->when()`）、`Rule::date()`（`->afterOrEqual('created_from')`）、`Rule::exists()`、`Password::defaults()`、`File::types()` | 手写 `in:` 枚举值、`Rule::enum()` + `Rule::in()` 叠用 |
+| 请求体字段 | 只提交 `rules()` 中声明的字段（全局 `failOnUnknownFields()`，未知字段 422）；任意结构的 JSON 值在 `prepareForValidation()` 中序列化 | 依赖"多余字段会被忽略" |
+| 路由参数 | 新资源的参数名加入 `routes/api.php` 的 `// edge:route-keys` 列表（只匹配数字） | 不加约束（`RouteAuthorizationTest` 会失败） |
 | 输出 | 显式字段的 API Resource，`whenLoaded()` / `whenCounted()`，时间 `?->toIso8601String()` | `parent::toArray()`、在 Resource 中查库 |
 
 ### 10.4 命令、队列、容器、配置
@@ -226,6 +234,11 @@ app(Settings::class)->integer('security.login_max_attempts', config()->integer('
 | 命令签名 | `#[Signature('permission:sync')]` `#[Description('...')]` | `protected $signature` | `ConventionsTest` |
 | 队列选项 | `#[Tries(1)]` `#[DeleteWhenMissingModels]` `#[Backoff]` `#[Timeout]` | `public int $tries = 1` | `ConventionsTest` |
 | 事务后入队 | Job 实现 `ShouldQueueAfterCommit` | 每处 `dispatch()->afterCommit()` | — |
+| 队列选择 | `AppServiceProvider::configureQueues()` 中 `Queue::route()`，队列名取 `config('edge.queues')` | Job 上 `#[Queue]` / `onQueue()` | `ConventionsTest`、`QueueRoutingTest` |
+| 大批量处理 | 编排任务 + `Bus::batch()`，每块一个 `Batchable` 任务独立重试 | 一个任务内循环处理全部数据 | — |
+| 防止重复执行 | `ShouldBeUnique` + `uniqueId()` + `#[UniqueFor]` | 自己用缓存加锁 | — |
+| 读多写少的统计 | `Cache::flexible($key, [fresh, stale], fn)`（`config('edge.statistics_cache')`） | 每次请求现算 / 固定 TTL 到期后同步重算 | — |
+| 类型化读取数组 | `Arr::string($node, 'code')`、`Arr::boolean($node, 'visible', true)` | `(string) $node['code']` | — |
 | 配置注入 | 构造器 / handle 参数 `#[Config('edge.auth.token_ttl')] int $tokenTtl` | 类里散落 `config('...')` | — |
 | 类型化读取（不可注入处） | `config()->integer()` / `->string()` / `->array()` / `->boolean()` | `(int) config('...')` | — |
 | 请求内缓存 | 服务通过 `CacheManager::memo()` 读取（memo 为 scoped 绑定，每个请求 / 队列任务重置） | 自己写静态缓存属性 | — |
@@ -239,16 +252,128 @@ app(Settings::class)->integer('security.login_max_attempts', config()->integer('
 - `#[\Override]` 只用在**有意覆盖项目自身或框架具体方法**的地方（`UpdatePermissionRequest` 等继承 Store 请求的子类、`StoresDatesInAppTimezone::fromDateTime()`），
   父类方法改名时立即报错；实现抽象方法 / 接口（Resource `toArray()`、Factory `definition()`）不加，避免满屏噪音。
 
-### 10.6 评估后不采用的写法
+### 10.6 Laravel 11 → 13 新特性清单与结论
 
-| 特性 | 原因 |
-|---|---|
-| `#[UsePolicy]` `#[UseFactory]` `#[UseModel]` `#[Table]`（约定命名的模型） | 全部模型、Policy、Factory 都遵循命名约定，框架自动发现；只在不符合约定时才写 |
-| `#[UseResource]` + `$model->toResource()` | 返回类型只能推断为 `JsonResource`，`new XxxResource($model)` 对 Larastan / Scramble（OpenAPI）更精确 |
-| 全局 `FormRequest::failOnUnknownFields()` / `#[FailOnUnknownFields]` | 会改变契约（目前未知字段被忽略，前端 ProTable / 表单可能携带额外字段），需前后端一起评估后再启用 |
-| `#[StopOnFirstFailure]` | 前端按字段回填全部 422 错误，只返回第一个错误会降低体验 |
-| `defer()` 写操作日志 / 最后登录时间 | 操作日志已在 terminable 中间件 `terminate()` 中于响应发送后写入（官方机制，语义相同）；最后登录时间属于登录事务的一部分，需同步写入 |
-| `once()` 缓存权限码 | 需要在角色变更后按实例失效（`flushPermissionCache()`），`once()` 无法按实例清除 |
-| 枚举 `label()` / `options()` | 枚举文案由前端按值做 i18n（契约约定），后端没有使用方，不为了特性而加 |
-| `->whereNumber()` 约束资源 id | 隐式模型绑定已对不存在的 id 返回 404；参数名随资源变化，逐个声明收益小（PostgreSQL 下非数字 id 的 500 记为遗留项） |
-| 全量 `#[\Override]`（PHPStan `checkMissingOverrideMethodAttribute`） | 见 10.5，只在有意覆盖具体方法处使用 |
+逐项对照官方文档（`laravel/docs` 13.x 源文件、11.x / 12.x / 13.x `releases.md`）与框架 CHANGELOG，并在 `vendor/` 中确认 13.42 已提供。
+"采用"列给出落地位置；"不采用"给出具体理由（"现有写法也能用"不算理由）。
+
+#### Laravel 13 发行说明点名的能力
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `Queue::route()` 队列集中路由 | **采用** | `AppServiceProvider::configureQueues()`，队列名来自 `config('edge.queues')`（`EDGE_QUEUE_NOTIFICATIONS` / `EDGE_QUEUE_TASKS`，留空为默认队列）。拆队列只改环境变量；`ConventionsTest` 禁止 Job 上写 `#[Queue]` / `#[Connection]`，`QueueRoutingTest` 要求每个 Job 都已登记。注意批处理不经过路由表，`SendAnnouncementNotifications` 用 `Queue::resolveQueueFromQueueRoute()` 取同一张表 |
+| `Cache::touch()` | 不采用 | 项目没有"滑动过期"的缓存项：字典 / 参数为 `rememberForever` + Observer 失效，统计为 `flexible()`。出现会话类缓存时再用 |
+| JSON:API Resources | 不采用（待负责人决定） | 会整体改变响应包络（`data.attributes` / `relationships` / `included`）与前端全部 service，见评估报告 |
+| 扩展的 Attributes | **部分采用** | 新增 `#[UniqueFor]`、`#[WithoutRelations]`、`#[Backoff]`（Job）。`#[FailOnUnknownFields]` 改为全局开启（见下）。`#[RetryFor]` 文档已列出但 13.42 的 `Illuminate\Queue\Attributes` 中尚不存在；`#[DebounceFor]` 无"频繁重复派发"的 Job；`#[Seed]` / `#[Seeder]` 是 PHPUnit 类级 Attribute，Pest 测试不需要种子数据（Factory 构造） |
+| Request Forgery Protection（`PreventRequestForgery`） | 不适用 | 它保护**基于 Cookie / Session** 的 `web` 组（`Sec-Fetch-Site` 同源校验 + CSRF token 回退）。本项目 `/api/*` 只认 `Authorization: Bearer`，浏览器不会自动携带该头，跨站请求无法冒用凭证，`api` 组也不含 Session；若将来改用 Sanctum SPA Cookie 认证，必须在 `api` 组启用 `statefulApi()`（会带上该中间件） |
+| 语义 / 向量搜索（`whereVectorSimilarTo`） | 不采用 | 依赖 PostgreSQL + pgvector 与嵌入模型，项目默认 SQLite 且要求数据库无关；没有全文 / 语义检索需求 |
+| Laravel AI SDK（`laravel/ai`） | 不采用（待负责人决定） | 需要新增依赖与模型服务商密钥，见评估报告（可选演示模块方案） |
+
+#### 缓存
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `Cache::flexible()`（stale-while-revalidate） | **采用** | `DashboardStatistics`（8 项计数、14 天登录趋势、分类 / 部门分布）与 `SystemInfo::storage()`（磁盘、库大小、附件总量）。时长 `config('edge.statistics_cache')`（默认新鲜 60 秒、可陈旧至 300 秒，`fresh=0` 关闭）；过期后的请求先拿旧值，重算通过 `defer()` 在响应后进行且有锁。"最近操作"保持实时 |
+| `Cache::memo()` | 已采用 | `Dictionary`、`Settings` 通过 `CacheManager::memo()` 读取，每请求 / 任务只访问一次缓存存储 |
+| 缓存锁 / `withoutOverlapping` | **采用** | 调度任务组 `withoutOverlapping()->onOneServer()`（`routes/console.php`），`RunScheduledTask` 的 `ShouldBeUnique` 都基于缓存锁 |
+| `Cache::remember` + 标签 | 不采用 | 标签不被 database / file 驱动支持（默认 `CACHE_STORE=database`）；按 key 失效已足够 |
+
+#### 请求与校验
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `FormRequest::failOnUnknownFields()` | **采用（推翻上一轮）** | `AppServiceProvider` 全局开启：写接口请求体出现契约外字段返回 422（错误挂在该字段上）。拼错的字段名不再被静默忽略，前端 42 个 e2e 用例验证前端只发送契约字段。系统参数 json 值是任意结构：在 `StoreSettingRequest::prepareForValidation()` 中序列化后按 `json` 规则校验，无需退出检查。查询参数不受影响（框架只检查请求体） |
+| `$request->enum()/string()/integer()/boolean()/safe()` | 已采用，补齐 | `UpdateUserStatusRequest::authorize()` 改为 `$this->enum('status', Status::class)`，`UserPolicy::updateStatus()` 参数变为 `?Status`；`UserStatusController` 用 `enum()` 的默认值参数 |
+| `$request->date()` / `float()` / `collect()` / `fluent()` | 不采用 | 日期过滤需要按 `APP_TIMEZONE` 换算（`asAppDateTime()`，见第 3 节），`date()` 只解析不换算；没有 float 字段；`filters()` 已返回已校验数组，`fluent()` / `collect()` 只会多一层包装 |
+| `Rule::enum()->only()/except()` + `when()` | **采用** | `RoleRequest`（超级管理员角色只能为启用）、`UpdateUserStatusRequest`（id=1 只能为启用）：一个规则替代 `Rule::enum()` + `Rule::in([...])` 两个 |
+| `Rule::date()` 流式规则 | **采用** | 列表的 `created_from` / `created_to`（`Rule::date()->afterOrEqual('created_from')`），生成器的 date / datetime 字段与过滤规则 |
+| `Rule::anyOf()` | 不采用 | 唯一的"多种形态"字段（系统参数 json 值：对象 / 数组 / JSON 字符串）在 `prepareForValidation()` 归一为字符串后用内置 `json` 规则，比 `anyOf` 更简单 |
+| `Rule::numeric()` / `Rule::array()` / `File::image()` 流式 | 不采用 | 现有规则只有 `numeric` / `array` 一个约束，流式写法没有额外信息；上传已用 `File::types()->max()` |
+| `required_if_accepted`、`prohibits` 等新规则 | 不采用 | 没有"勾选后必填 / 互斥字段"的表单；类型相关字段在 `prepareForValidation()` 中归一（`StorePermissionRequest`） |
+| `#[StopOnFirstFailure]` | 不采用 | 前端按字段回填全部 422 错误 |
+
+#### Eloquent / 查询
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| 路由参数约束（`Route::patterns()`） | **采用（推翻上一轮）** | `routes/api.php` 顶部：模型 id `[0-9]+`、通知 / 失败任务 UUID、定时任务 key slug。非法值直接 404，不会进入 PostgreSQL 的 bigint / uuid 比较（原来 500）。`RouteAuthorizationTest` 要求每个 `/api` 路由参数都有约束；生成器在 `// edge:route-keys` 锚点自动登记 |
+| `whereAny` / `whereAll` / `whereNone` | 不采用（推荐写法） | 契约没有"关键字跨字段搜索"参数，每个过滤字段单独匹配。新增 `keyword` 过滤时用 `$q->whereAny(['username', 'name', 'phone'], 'like', "%{$value}%")`（注意 `whereLike()` 在 PostgreSQL 下大小写不敏感，`whereAny` + `like` 敏感） |
+| `whereLike` / `whereRelation` / `whereHas` | 已采用 | 模糊匹配统一 `whereLike()`；`User::filter()` 用 `whereRelation('roles', ...)`；关联字段模糊匹配仍用 `whereHas(fn => whereLike())`（`whereRelation` 不支持大小写不敏感的 like） |
+| `withWhereHas` / `whereBelongsTo` / `whereAttachedTo` | 不采用 | 没有"按关联过滤且同时加载该关联"的列表；过滤参数是 id 而不是模型实例 |
+| `Model::automaticallyEagerLoadRelationships()` | 不采用 | 项目在非生产环境用 `shouldBeStrict()` 让懒加载直接失败，并在控制器显式 `with()`；自动预加载会让这道检查失效，N+1 不再在开发期暴露 |
+| `chaperone()` / `latestOfMany()` | 不采用 | 树由 `TreeCollection` 组装且不回访父节点；"最近一条执行日志"的主体是调度事件而不是模型（`ScheduledTaskRegistry` 用一次分组子查询） |
+| `#[UseResource]` + `toResource()` | 不采用 | 模型会依赖 `App\Http\Resources`（架构测试禁止模型依赖 HTTP 层）；`toResource()` 返回类型为 `JsonResource`，Larastan 3 没有对应扩展，控制器返回类型会退化 |
+| `#[CollectedBy]` / `#[ObservedBy]` / `#[Scope]` | 已采用 | 见 10.2 |
+| `Prunable` / `MassPrunable` | 已采用 | 登录 / 操作 / 任务日志由 `model:prune` 清理 |
+| `preventLazyLoading` 等严格模式 | 已采用 | `Model::shouldBeStrict(! isProduction())`，测试中同样生效 |
+| `incrementEach` / `upsert` / `createOrFirst` | 不采用 | 没有计数器字段；权限同步需要按层级回填 parent_id 并统计新增 / 修正数，不能用一次 `upsert` |
+| `createQuietly` / `withoutEvents` | 不采用 | 所有写入都需要触发 Observer（缓存失效、发布时间） |
+| 游标 / 简单分页 | 不采用 | ProTable 需要 `total` 与跳页，契约为 `LengthAwarePaginator` |
+| `Attribute::make` 访问器 / JSON 列查询 / `when` 链式条件 | 已采用 / 不适用 | `Attachment::url()` 为 `Attribute::get()`，过滤作用域用 `->when()`；没有按 JSON 子字段查询的需求 |
+| 类型化读取 `Arr::string()/boolean()/array()` | **采用** | `SyncBuiltinPermissions` 读取 `config/permissions.php`：配置写错类型时直接报错，不再 `(string)` / `(bool)` 静默转换后写库 |
+
+#### 辅助函数
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `Number` | **采用** | `php artisan about` 的上传上限 `Number::fileSize()`。接口返回原始字节数 / 毫秒，由前端按语言格式化（契约），后端不格式化 |
+| `rescue()` | **采用** | `SystemInfo` 的磁盘空间、表大小采集（替代 `try/catch`） |
+| `Str` / `Stringable` | **采用** | `DictOptionRequest::codes()`（`string()->explode()` 链式）、`RecordOperationLog`（`Str::start()`） |
+| `once()` | 不采用（理由更新） | `Once` 只在测试结束与 Octane 请求边界清空：在队列 worker 中静态调用的 `once()` 会跨任务一直保留旧值；对象内的 `once()` 无法按实例失效。权限码 / 菜单树需要在角色、节点变更后立即失效，已由 `#[Scoped] PermissionRegistry` + `flush()` 解决 |
+| `defer()` | 间接采用 | `Cache::flexible()` 的后台重算基于 `defer()`；操作日志仍在 terminable 中间件 `terminate()` 中写入（同为响应后执行，是中间件的官方机制）；最后登录时间属于登录用例，需同步写入 |
+| `Uri` / `fluent()` / `literal()` / `Arr::from()` | 不采用 | 后端不拼装 / 解析 URL（附件 URL 由 `Storage::url()` 生成）；没有需要临时对象的结构化数据 |
+| `Benchmark` / `Sleep` / `Lottery` / `Pipeline` | 不采用 | 耗时统计跨越 `try/catch` 与中间件的 `handle` / `terminate` 两个阶段（`hrtime()`），`Benchmark::value()` 在异常时拿不到耗时；没有重试等待、概率采样或管道式处理 |
+
+#### 基础设施
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `Context`（含队列透传） | 已采用 | `request_id` / `user_id` 自动带到日志与队列任务；`Context::scope()`、hidden context 暂无需要（没有只在局部生效或不应进日志的上下文） |
+| `Concurrency::run()` / `defer()` | 不采用 | 默认 `process` 驱动为每个任务启动一个 PHP 进程并重新引导 Laravel（约数十毫秒），而工作台每项统计是毫秒级的单条查询，并行反而更慢；SQLite 内存库的测试也无法跨进程。统计改用 `Cache::flexible()` |
+| `RateLimiter`（`perSecond`、`by`、`response`、`after()`） | 不采用 | 现有 `api` 限流按用户 / IP 每分钟计数已满足契约；429 的 JSON 渲染集中在 `bootstrap/app.php`，不需要每个限流器自定义 `response` |
+| `Schedule::group()` / `onOneServer()` / `withoutOverlapping()` | **采用** | `routes/console.php` 用分组声明共同属性，多台服务器只有一台执行；新增 `queue:prune-batches`（清理公告群发的批处理记录） |
+| `Process` / `Http` 客户端 | 不适用 | 没有外部进程与出站 HTTP；测试中 `Http::preventStrayRequests()` 防止意外引入 |
+| 健康检查 `/up` + `DiagnosingHealth` | **采用** | `App\Listeners\CheckDatabaseConnection`（事件自动发现）：数据库不可用时 `/up` 返回 500，负载均衡可据此摘除实例 |
+| 异常 `dontReportDuplicates()` | **采用** | `bootstrap/app.php`：同一异常实例只上报一次 |
+| 异常 `throttle()` | 不采用 | 只写本地日志，没有按量计费的上报服务 |
+| `Log::shareContext()` | 不采用 | `Context` 已覆盖且会透传到队列任务 |
+| `Storage::serve` / 临时 URL / scoped disk | 不采用 | 附件在 public 磁盘直接访问；私有附件需求出现时再用 `temporaryUrl()` |
+| `config()->integer()` 等类型化读取 / `#[Config]` 注入 | 已采用 | 见 10.4；`env()` 在 13.42 没有类型化版本，`config/edge.php` 中保留 `(int) env()` |
+| `bootstrap/app.php` 流式配置（`withSchedule`、`withEvents`） | 不采用 | 调度保留在 `routes/console.php`（`ScheduledTaskRegistry` 与官方默认结构一致），监听器使用事件自动发现 |
+| `AboutCommand::add()` | **采用** | `php artisan about` 中的 Edge Admin 区块 |
+
+#### 队列 / 事件 / 通知
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `Bus::batch()` / `Batchable` | **采用** | 公告群发：`SendAnnouncementNotifications` 按 500 人一块派发批处理 `announcement:{id}`（`allowFailures()`），`SendAnnouncementNotificationChunk` 每块独立重试（`#[Tries(3)]`、`#[Backoff([10, 60])]`）。原来一个任务内循环发送，中途失败重试会给已发送的用户重复发通知；现在只重发失败的块，多 worker 可并行 |
+| `ShouldBeUnique` + `#[UniqueFor]` | **采用** | `RunScheduledTask` 按命令加唯一锁：重复点击"立即执行"不会让同一命令并发 |
+| `#[WithoutRelations]` | **采用** | 两个公告任务：序列化时不带已加载的关联，执行时也不重新加载 |
+| `ShouldQueueAfterCommit` / `afterCommit` | 已采用 | 公告编排任务 |
+| `WithoutOverlapping` / `RateLimited` / `Skip` job 中间件 | 不采用 | 并发控制已由唯一任务覆盖；没有调用外部限额服务的任务 |
+| `ShouldBeEncrypted` | 不采用 | 队列载荷只有模型 id、用户 id 与命令名，不含敏感数据 |
+| 事件 `ShouldDispatchAfterCommit` / 事件发现 | 已采用 / 不适用 | 监听器由事件发现注册；项目没有自定义领域事件 |
+| 队列化通知 | 不采用 | 通知在分块任务内 `sendNow()`，本身已在队列中，再排队只会多一跳 |
+
+#### 测试
+
+| 特性 | 结论 | 落地位置 / 理由 |
+|---|---|---|
+| `LazilyRefreshDatabase` | **采用** | `tests/Pest.php`：不访问数据库的 Feature 测试（生成器、路由约束等）不再迁移 |
+| `Http::preventStrayRequests()` | **采用** | `tests/Pest.php` 的 `beforeEach` |
+| `freezeTime()` / `travel()` | **采用** | `CommonEndpointsTest` 验证统计缓存的新鲜期 / 陈旧期 |
+| `Bus::fake()` + `assertBatched()` | **采用** | `AnnouncementTest` |
+| `assertExactJson` / `assertOnlyJsonValidationErrors` | **采用** | 路由约束 404、未知字段 422 的断言 |
+| `Exceptions::fake()` / `Context` 断言 / `withoutDefer()` | 不采用 | 健康检查用 Facade mock 模拟数据库故障即可；`Context` 已有 `request_id` 断言；需要验证的正是 deferred 重算，不能关闭 defer |
+| `#[Seed]` / `#[Seeder]` | 不采用 | Pest 函数式测试，数据由 Factory 构造 |
+| 并行测试（`--parallel`） | 不采用 | 全量约 22 秒，进程启动开销大于收益；CI 可按需加 |
+
+### 10.7 重新审视后推翻的上一轮决定
+
+| 上一轮"不采用" | 现在 | 原因 |
+|---|---|---|
+| 全局 `failOnUnknownFields()` | 采用 | "会改变契约"恰恰是目的：契约只定义了这些字段，多余字段被静默丢弃会掩盖前端拼写错误与过时字段；e2e 证明前端只发送契约字段 |
+| `->whereNumber()` 约束资源 id | 采用（`Route::patterns()`） | PostgreSQL 下非数字 id 会 500，这是 bug 而不是风格问题；按参数名的全局约束只需一处声明，生成器自动登记，测试保证不遗漏 |
+| `once()` | 仍不采用，理由更正 | 上一轮理由"无法按实例清除"不完整，真正的问题是 `Once` 在队列 worker 中不会在任务之间清空 |
+| `#[UseResource]` + `toResource()` | 仍不采用，理由补充 | 除类型退化外，模型标注 Resource 会让模型层依赖 HTTP 层（违反分层架构测试） |
+

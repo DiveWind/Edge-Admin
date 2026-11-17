@@ -49,6 +49,10 @@ test('{{ variable }} input is validated', function () {
     actingAsUser(userWithPermissions(['{{ permission }}.create']));
 
     $this->postJson('/api/{{ route }}', [])->assertUnprocessable();
+    $this->postJson('/api/{{ route }}', [...{{ variable }}Payload(), 'unknown_field' => 1])
+        ->assertUnprocessable()
+        ->assertOnlyJsonValidationErrors(['unknown_field']);
+    $this->getJson('/api/{{ route }}/not-a-number')->assertNotFound();
 });
 
 {{#if with_options}}

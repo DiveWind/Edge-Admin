@@ -65,6 +65,15 @@ test('jobs declare queue options with queue attributes', function () {
     }
 });
 
+test('jobs leave queue selection to the central Queue::route() table', function () {
+    foreach (array_keys(ownProperties('app/Jobs', 'App\\Jobs')) as $job) {
+        $attributes = collect((new ReflectionClass($job))->getAttributes())->map(fn (ReflectionAttribute $attribute): string => $attribute->getName())->all();
+
+        expect(array_intersect($attributes, ['Illuminate\Queue\Attributes\Queue', 'Illuminate\Queue\Attributes\Connection']))
+            ->toBe([], "{$job}：不要在 Job 上声明队列 / 连接，请在 AppServiceProvider::configureQueues() 的 Queue::route() 中登记（队列名来自 config('edge.queues')）");
+    }
+});
+
 test('the routes file only describes structure: permissions are declared on controller actions', function () {
     $routes = (string) file_get_contents(dirname(__DIR__, 2).'/routes/api.php');
 

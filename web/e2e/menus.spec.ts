@@ -44,6 +44,9 @@ interface Node {
   status: 'active' | 'disabled';
   sort: number;
   remark: string | null;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
   children: Node[];
 }
 
@@ -64,9 +67,19 @@ async function findNode(request: APIRequestContext, code: string) {
   return node;
 }
 
-/** 把节点恢复为给定字段（内置节点用例结束后还原） */
+/**
+ * 把节点恢复为给定字段（内置节点用例结束后还原）。
+ * 只提交契约中的可写字段：后端拒绝请求体中的未声明字段（id / is_system / 时间戳等只读字段会 422）。
+ */
 async function restore(request: APIRequestContext, node: Node) {
-  const { children: _children, ...fields } = node;
+  const {
+    children: _children,
+    id: _id,
+    is_system: _isSystem,
+    created_at: _createdAt,
+    updated_at: _updatedAt,
+    ...fields
+  } = node;
   const response = await request.put(`/api/permissions/${node.id}`, {
     headers: adminHeaders(),
     data: fields,

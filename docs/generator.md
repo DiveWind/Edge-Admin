@@ -77,14 +77,14 @@ php artisan permission:sync && php artisan migrate     # 完成：菜单自动�
 | `make:resource TagResource` | `stubs/resource.stub` | `app/Http/Resources/TagResource.php` | `@mixin Tag`、`toArray()` 字段 |
 | `make:controller Api/Content/TagController --model=Tag --type=module` | `stubs/controller.module.stub`（`--data-scope` 时 `controller.module.data-scope.stub`） | `app/Http/Controllers/Api/Content/TagController.php` | 替换模板中官方命令不认识的 `{{ permission }}` `{{ routeParameter }}` `{{ requestNamespace }}` |
 | `make:option-controller TagOptionController --model=Tag`（`--with-options`） | `stubs/controller.option.stub` | `app/Http/Controllers/Api/Options/TagOptionController.php` | 启用项过滤与排序 |
-| `make:test TagTest --pest` | — | `tests/Feature/TagTest.php` | 内容为模块接口测试 `stubs/edge/test.stub`：列表、CRUD（datetime 断言时区换算、软删除断言）、校验、无权限 403、选项接口 |
+| `make:test TagTest --pest` | — | `tests/Feature/TagTest.php` | 内容为模块接口测试 `stubs/edge/test.stub`：列表、CRUD（datetime 断言时区换算、软删除断言）、校验（含未声明字段 422、非数字 id 404）、无权限 403、选项接口 |
 
 然后在已有文件的锚点处登记（第 6 节）：
 
 | 文件 | 内容 |
 |---|---|
 | `config/permissions.php` | `content.tag` 菜单节点（`type: menu`、`path: /content/tags`、`icon: TableOutlined`、view/create/update/delete 操作；模块分组不存在时新建 `type: directory` 的目录） |
-| `routes/api.php` | `Route::apiResources([...])` 中的 `'tags' => TagController::class,`（`--with-options` 时另在 `options` 分组登记 `Route::get('tags', TagOptionController::class)`）；导入由 Pint 合并进已有的 `use …\Content\{…};` |
+| `routes/api.php` | 路由参数约束列表（`// edge:route-keys`）中的 `'tag',`（只匹配数字 id，非法值 404）；`Route::apiResources([...])` 中的 `'tags' => TagController::class,`（`--with-options` 时另在 `options` 分组登记 `Route::get('tags', TagOptionController::class)`）；导入由 Pint 合并进已有的 `use …\Content\{…};` |
 | `lang/*/operations.php` | `tags.store/update/destroy` 摘要 |
 | 前端 | `web/src/pages/content/tags/{index.tsx,service.ts,data.d.ts,components/TagForm.tsx}`、`web/src/locales/{zh-CN,en-US}/pages/content-tags.ts`；修改 `config/routes.ts`、`src/locales/{zh-CN,en-US}.ts`、`src/access.ts` |
 
@@ -220,6 +220,7 @@ import { ProFormText } from '@ant-design/pro-components';
 |---|---|---|
 | `server/config/permissions.php` | `// edge:permissions:<模块>`（模块 children 末尾） | 权限节点 |
 | 同上 | `// edge:permissions`（顶层数组末尾） | 模块不存在时：新模块分组（自带 `// edge:permissions:<模块>`） |
+| `server/routes/api.php` | `// edge:route-keys`（顶部 `Route::patterns(array_fill_keys([...], '[0-9]+'))` 的参数名列表末尾） | `'<路由参数>',`（如 `'tag',`；`RouteAuthorizationTest` 要求每个 `/api` 路由参数都有约束） |
 | `server/routes/api.php` | `// edge:resources`（业务模块的 `Route::apiResources([...])` 数组末尾） | `'<路由>' => \App\…\<Class>Controller::class,`（导入由 Pint 合并） |
 | 同上 | `// edge:options`（`options` 分组末尾） | `--with-options`：`Route::get('<路由>', …OptionController::class)->name('<路由>')` |
 | `server/lang/<locale>/operations.php` | `// edge:operations`（数组末尾） | 三条操作日志摘要 |

@@ -25,6 +25,6 @@ class DictOptionRequest extends FormRequest
      */
     public function codes(): array
     {
-        return $this->string('codes')->explode(',')->map(trim(...))->filter()->unique()->values()->all();
+        return array_values($this->string('codes')->explode(',')->map(fn (string $code): string => trim($code))->filter()->unique()->all());
     }
 }

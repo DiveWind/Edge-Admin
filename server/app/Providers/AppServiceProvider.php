@@ -135,7 +135,7 @@ class AppServiceProvider extends ServiceProvider
             'Queues' => collect(config()->array('edge.queues'))
                 ->map(fn (mixed $queue, string $purpose): string => "{$purpose}: ".(is_string($queue) && $queue !== '' ? $queue : 'default'))
                 ->implode(', '),
-            'Permissions' => fn (): string => rescue(fn (): string => Number::format(Permission::query()->count()), '-', false),
+            'Permissions' => fn (): int|string => rescue(fn (): int => Permission::query()->count(), '-', false),
         ]);
     }
 

@@ -32,6 +32,11 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
 - 失败响应遵循 Laravel 标准：`{ "message": "...", "errors"?: { "field": ["..."] } }`
   - `401` 未登录 / token 失效，`403` 无权限，`404`（含记录不存在，不暴露模型名），`405`，`422` 校验失败，
     `429` 限流（带 `Retry-After` 响应头）
+  - **路由参数格式**：资源 id 只接受数字，站内通知 `{id}` 与失败任务 `{uuid}` 只接受 UUID，定时任务 `{key}` 只接受小写字母 / 数字 / `-`；
+    格式不符直接返回 `404`（与记录不存在相同）
+  - **请求体只能包含本文列出的字段**：写接口（POST / PUT / PATCH）的 JSON / 表单请求体出现未声明的字段时返回 `422`，
+    错误挂在该字段上（嵌套字段为点号路径，如 `errors["extra.a"]`），文案为"<字段> 字段不允许提交"；
+    `*_confirmation` 确认字段随其主字段允许。查询参数（列表过滤、分页）不受此限制
   - `message` 为已本地化的提示，前端可直接展示
   - 违反**记录级业务规则**（不能删除自己、受保护对象、有子部门 / 用户 / 文章时不可删、已发布公告不可编辑、
     数据权限之外的记录）返回 `403` + `message`；**字段级约束**（如上级部门不能是自己或下级、超级管理员角色不可改码 / 禁用、
@@ -228,7 +233,7 @@ Menu（`GET /api/auth/menus`，仅需登录）：
 | POST/PUT | `/api/dict-items[/{id}]` | `system.dict.create`/`.update` | dict_type_id label value color? sort? status remark?；同一类型下 value 唯一（422 `errors.value`） |
 | GET/DELETE | `/api/dict-items/{id}` | `.view`/`.delete` | 204 |
 | GET | `/api/settings` | `system.setting.view` | 过滤 group(精确) key name；项见下方 Setting |
-| POST/PUT | `/api/settings[/{id}]` | `system.setting.create`/`.update` | group key(小写字母数字下划线，以 `.` 分段，唯一) name type value? is_public? remark?；value 按 type 校验：number 数字、boolean 布尔、json 为对象 / 数组或合法 JSON 字符串、string 字符串；**内置参数（`is_system`）不可改 key / type（422）** |
+| POST/PUT | `/api/settings[/{id}]` | `system.setting.create`/`.update` | group key(小写字母数字下划线，以 `.` 分段，唯一) name type value? is_public? remark?；value 按 type 校验：number 数字、boolean 布尔、json 为对象 / 数组或合法 JSON 字符串（对象 / 数组的嵌套键不受未知字段限制）、string 字符串；**内置参数（`is_system`）不可改 key / type（422）** |
 | GET/DELETE | `/api/settings/{id}` | `.view`/`.delete` | 内置参数不可删（403） |
 | GET | `/api/attachments` | `system.attachment.view` | 过滤 name mime(模糊，如 `image/`、`pdf`) uploaded_by created_from/to；项见下方 Attachment，含 `uploader{id,name}` |
 | DELETE | `/api/attachments/{id}` | `system.attachment.delete` | 同时删除物理文件，204（引用该 URL 的头像 / 封面等不会自动清空） |
@@ -341,7 +346,10 @@ Dashboard：
 } }
 ```
 
-`login_trend` 为最近 14 天（含今天，缺失补 0）。`recent_operations` 为最近 10 条操作日志。
+`login_trend` 为最近 14 天（含今天，缺失补 0）。`recent_operations` 为最近 10 条操作日志（实时）。
+`totals`、`login_trend`、`articles_by_category`、`users_by_department` 为缓存的汇总值：默认最多 60 秒内不变，
+60 ~ 300 秒之间先返回旧值并在后台刷新（`EDGE_STATS_CACHE_FRESH` / `EDGE_STATS_CACHE_STALE`，前者为 0 时不缓存）。
+`GET /api/system-info` 的 `storage` 同样按此缓存。
 
 ### 5.7 列表排序白名单
 

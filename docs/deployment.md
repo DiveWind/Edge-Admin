@@ -89,6 +89,10 @@ server {
 
 公告通知、"立即执行"定时任务依赖队列；日志清理、过期 token 清理依赖调度。
 
+队列由 `AppServiceProvider` 中的 `Queue::route()` 集中路由：默认都进连接的默认队列；公告群发量大时可设置
+`EDGE_QUEUE_NOTIFICATIONS=notifications`（`EDGE_QUEUE_TASKS` 同理），并让 worker 监听对应队列，如
+`queue:work --queue=default,notifications`，或为群发单独起一组 worker。公告群发为批处理（`job_batches` 表），每 500 人一块、失败块独立重试。
+
 ### Supervisor
 
 ```ini
@@ -129,7 +133,12 @@ WantedBy=multi-user.target
 ```
 
 内置定时任务：`model:prune`（每日，清理超过系统参数 `log.retention_days` 天的登录 / 操作 / 任务日志）、
-`sanctum:prune-expired --hours=24`、`queue:prune-failed --hours=168`。可在"系统监控 / 定时任务"中查看与立即执行。
+`sanctum:prune-expired --hours=24`、`queue:prune-failed --hours=168`、`queue:prune-batches --hours=168 --unfinished=168`。
+可在"系统监控 / 定时任务"中查看与立即执行。全部任务 `withoutOverlapping()->onOneServer()`：多台服务器都配置 cron 时只有一台执行
+（依赖共享缓存锁，默认的 `CACHE_STORE=database` 或 redis 均可；`file` / `array` 只在单机有效）。
+
+健康检查 `GET /up`：引导应用并检查默认数据库连接（`DiagnosingHealth` 监听器），不可用时返回 500，可直接用于负载均衡 / 容器探针。
+`php artisan about` 中的 "Edge Admin" 区块列出版本、语言、Token 有效期、上传配置与队列路由，便于核对部署配置。
 
 ## 5. 环境变量
 
@@ -159,6 +168,8 @@ Edge Admin 自定义变量（`config/edge.php`）：
 | `EDGE_UPLOAD_DISK` | public | 附件磁盘（可换 s3 等） |
 | `EDGE_UPLOAD_MAX_SIZE` | 2048 | 单文件上限（KB） |
 | `EDGE_UPLOAD_EXTENSIONS` | 图片 + 常见文档 | 允许的扩展名，逗号分隔（按真实 MIME 校验，不建议加入 svg / html） |
+| `EDGE_QUEUE_NOTIFICATIONS` / `EDGE_QUEUE_TASKS` | 留空 | 公告群发 / 手动执行定时任务所用队列（`Queue::route()`），留空为默认队列；设置后 worker 需监听该队列 |
+| `EDGE_STATS_CACHE_FRESH` / `EDGE_STATS_CACHE_STALE` | `60` / `300` | 工作台统计与系统信息存储占用的缓存（秒，stale-while-revalidate），`FRESH=0` 关闭 |
 | `EDGE_GENERATOR_WEB_PATH` | `../web` | 代码生成器的前端目录（仅开发环境使用） |
 
 ## 6. 上线检查

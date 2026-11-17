@@ -66,7 +66,6 @@ test('task logs can be listed', function () {
 
 test('running the same task again while it is still queued does not queue a duplicate', function () {
     Queue::fake();
-    actingAsUser(superAdmin());
 
     $this->postJson('/api/scheduled-tasks/model-prune/run')->assertAccepted();
     $this->postJson('/api/scheduled-tasks/model-prune/run')->assertAccepted();

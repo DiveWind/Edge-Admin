@@ -34,7 +34,7 @@ class SendAnnouncementNotifications implements ShouldQueueAfterCommit
         $chunks = [];
 
         User::query()->active()->select('id')->chunkById(self::CHUNK_SIZE, function (Collection $users) use (&$chunks): void {
-            $chunks[] = new SendAnnouncementNotificationChunk($this->announcement, array_map(intval(...), $users->modelKeys()));
+            $chunks[] = new SendAnnouncementNotificationChunk($this->announcement, array_values(array_map(intval(...), $users->modelKeys())));
         });
 
         if ($chunks === []) {
