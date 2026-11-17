@@ -1,4 +1,4 @@
-{{@import { ProFormRadio } from '@ant-design/pro-components'}}
+import { ProFormRadio } from '@ant-design/pro-components';
       <ProFormRadio.Group
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

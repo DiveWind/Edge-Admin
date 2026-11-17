@@ -1,8 +1,6 @@
 <?php
 
-use App\Models\{{ class }};
-use App\Models\User;
-{{ uses }}
+use App\Models\{{{ class }}, User};
 
 /**
  * 合法的提交数据（含所需的关联 / 字典数据）。

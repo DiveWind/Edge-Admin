@@ -1,0 +1,24 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+use Illuminate\Auth\Access\Response;
+
+/**
+ * 记录级规则（数据权限、受保护对象、"被引用时不可删除"等），由控制器动作上的 #[Authorize('<方法>', '<路由参数>')] 调用；
+ * 功能权限是权限码，同样用 #[Authorize('<权限码>')] 声明，不写在 Policy 中。返回带 message 的 Response::deny() 时接口为 403 + message。
+ */
+class {{ class }}
+{
+    public function update({{ user }} $actor, {{ model }} ${{ modelVariable }}): Response
+    {
+        return Response::allow();
+    }
+
+    public function delete({{ user }} $actor, {{ model }} ${{ modelVariable }}): Response
+    {
+        return Response::allow();
+    }
+}

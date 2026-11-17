@@ -1,8 +1,6 @@
 <?php
 
-use App\Models\Permission;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Permission, Role, User};
 
 test('user without the permission receives 403', function () {
     actingAsUser(User::factory()->create());

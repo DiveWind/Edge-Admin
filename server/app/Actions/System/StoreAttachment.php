@@ -2,8 +2,7 @@
 
 namespace App\Actions\System;
 
-use App\Models\Attachment;
-use App\Models\User;
+use App\Models\{Attachment, User};
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;

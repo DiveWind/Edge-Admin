@@ -3,20 +3,14 @@
 namespace App\Models;
 
 use App\Collections\TreeCollection;
-use App\Enums\PermissionType;
-use App\Enums\Status;
+use App\Enums\{PermissionType, Status};
 use App\Models\Concerns\StoresDatesInAppTimezone;
-use App\Services\PermissionRegistry;
+use App\Observers\PermissionObserver;
 use Database\Factories\PermissionFactory;
-use Illuminate\Database\Eloquent\Attributes\CollectedBy;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{CollectedBy, Fillable, ObservedBy, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, BelongsToMany, HasMany};
 
 /**
  * 菜单权限树节点：目录（directory）/ 菜单（menu）/ 操作（action），code 即权限码。
@@ -26,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * - 隐藏（is_visible = false）只影响菜单显示，权限仍然有效。
  */
 #[CollectedBy(TreeCollection::class)]
+#[ObservedBy(PermissionObserver::class)]
 #[Fillable(['parent_id', 'name', 'code', 'type', 'path', 'icon', 'is_external', 'is_visible', 'status', 'sort', 'remark'])]
 class Permission extends Model
 {
@@ -57,15 +52,6 @@ class Permission extends Model
             'is_system' => 'boolean',
             'sort' => 'integer',
         ];
-    }
-
-    /**
-     * 节点变更时清除请求内的权限树缓存。
-     */
-    protected static function booted(): void
-    {
-        static::saved(fn () => app(PermissionRegistry::class)->flush());
-        static::deleted(fn () => app(PermissionRegistry::class)->flush());
     }
 
     /**

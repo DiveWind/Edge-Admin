@@ -6,17 +6,17 @@ use App\Enums\TaskStatus;
 use App\Models\ScheduledTaskLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\Artisan;
 use Throwable;
 
 /**
- * 手动"立即执行"一个定时任务命令，并写入执行日志。
+ * 手动"立即执行"一个定时任务命令，并写入执行日志（只执行一次：失败即记为失败，由管理员决定是否重试）。
  */
+#[Tries(1)]
 class RunScheduledTask implements ShouldQueue
 {
     use Queueable;
-
-    public int $tries = 1;
 
     public function __construct(public string $command) {}
 

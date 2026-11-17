@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\OperationLog;
-use App\Models\User;
+use App\Models\{OperationLog, User};
 
 test('the api language follows Accept-Language', function (string $header, string $message, string $contentLanguage) {
     $this->withHeader('Accept-Language', $header)

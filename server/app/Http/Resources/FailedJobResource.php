@@ -4,8 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
+use Illuminate\Support\{Carbon, Str};
 
 /**
  * 失败队列任务（queue.failer 返回的原始记录；uuid 驱动下其 id 即 uuid）。

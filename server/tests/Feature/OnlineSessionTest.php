@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\PersonalAccessToken;
-use App\Models\User;
+use App\Models\{PersonalAccessToken, User};
 
 test('login records client info on the issued token', function () {
     $user = User::factory()->create(['username' => 'alice']);

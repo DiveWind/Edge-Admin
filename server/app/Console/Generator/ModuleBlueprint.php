@@ -92,16 +92,6 @@ class ModuleBlueprint
     }
 
     /**
-     * 模板变体（如 controller.data_scope.stub）。
-     *
-     * @return list<string>
-     */
-    public function variants(): array
-    {
-        return $this->dataScope ? ['data_scope'] : [];
-    }
-
-    /**
      * 模块级模板变量（全部模板与片段可用，完整清单见 docs/generator.md）。
      *
      * @return array<string, string|null>
@@ -113,8 +103,6 @@ class ModuleBlueprint
             fn (Field $field): string => "'{$field->name}'",
             array_values(array_filter($this->fields, fn (Field $field): bool => in_array($field->type, ['integer', 'decimal', 'date', 'datetime'], true))),
         ), "'created_at'"];
-        $traits = ['HasFactory', 'StoresDatesInAppTimezone', ...($this->dataScope ? ['HasDataScope'] : []), ...($this->softDeletes ? ['SoftDeletes'] : [])];
-        sort($traits);
 
         return [
             'class' => $this->class,
@@ -134,20 +122,11 @@ class ModuleBlueprint
             'request_namespace' => 'App\\Http\\Requests\\'.$this->moduleStudly(),
             'fillable' => implode(', ', $fillable),
             'sortable' => implode(', ', $sortable),
-            'traits' => implode(', ', $traits),
             'data_scope' => $this->dataScope ? 'true' : '',
             'soft_deletes' => $this->softDeletes ? 'true' : '',
             'with_options' => $this->withOptions ? 'true' : '',
             'status_field' => $this->statusField() ?? '',
             'sort_field' => collect($this->fields)->contains(fn (Field $field): bool => $field->name === 'sort' && $field->type === 'integer') ? 'sort' : '',
-            'migration.extras' => $this->dataScope
-                ? "            \$table->foreignId('department_id')->nullable()->index();\n            \$table->foreignId('created_by')->nullable()->index();"
-                : '',
-            'migration.soft_deletes' => $this->softDeletes ? '            $table->softDeletes();' : '',
-            'casts.extras' => $this->dataScope ? "            'department_id' => 'integer',\n            'created_by' => 'integer',"
-                : '',
-            'factory.extras' => $this->dataScope ? "            'department_id' => null,\n            'created_by' => null," : '',
-            'resource.extras' => $this->dataScope ? "            'department_id' => \$this->department_id,\n            'created_by' => \$this->created_by," : '',
             'web.path' => "/{$this->module}/{$this->route()}",
             'web.page_dir' => "{$this->module}/{$this->route()}",
             'web.component' => "{$this->class}List",
@@ -158,41 +137,16 @@ class ModuleBlueprint
         ];
     }
 
-    /**
-     * 模型额外的 use 导入（trait）。
-     *
-     * @return list<string>
-     */
-    public function modelImports(): array
+    /** App\Http\Requests\Content */
+    public function requestNamespace(): string
     {
-        return [
-            'App\\Models\\Concerns\\StoresDatesInAppTimezone',
-            ...($this->dataScope ? ['App\\Models\\Concerns\\HasDataScope'] : []),
-            ...($this->softDeletes ? ['Illuminate\\Database\\Eloquent\\SoftDeletes'] : []),
-        ];
+        return 'App\\Http\\Requests\\'.$this->moduleStudly();
     }
 
-    /**
-     * 后端要创建的文件：模板名 => 相对 base_path 的路径（迁移的文件名由命令决定）。
-     *
-     * @return array<string, string>
-     */
-    public function backendFiles(): array
+    /** Api/Content/TagController（make:controller 的名称参数） */
+    public function controllerName(): string
     {
-        $module = $this->moduleStudly();
-
-        return [
-            'model' => "app/Models/{$this->class}.php",
-            'factory' => "database/factories/{$this->class}Factory.php",
-            'index_request' => "app/Http/Requests/{$module}/{$this->class}IndexRequest.php",
-            'store_request' => "app/Http/Requests/{$module}/Store{$this->class}Request.php",
-            'update_request' => "app/Http/Requests/{$module}/Update{$this->class}Request.php",
-            'resource' => "app/Http/Resources/{$this->class}Resource.php",
-            'policy' => "app/Policies/{$this->class}Policy.php",
-            'controller' => "app/Http/Controllers/Api/{$module}/{$this->class}Controller.php",
-            'test' => "tests/Feature/{$this->class}Test.php",
-            ...($this->withOptions ? ['option_controller' => "app/Http/Controllers/Api/Options/{$this->class}OptionController.php"] : []),
-        ];
+        return "Api/{$this->moduleStudly()}/{$this->class}Controller";
     }
 
     /**

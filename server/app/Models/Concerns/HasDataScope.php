@@ -4,9 +4,8 @@ namespace App\Models\Concerns;
 
 use App\Models\User;
 use App\Services\DataScopeResolver;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Attributes\{Boot, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -21,7 +20,8 @@ trait HasDataScope
      * 创建记录时自动填充创建人与所属部门（取当前登录用户）。
      * owner 列为主键（如 users 表）时不做填充。
      */
-    public static function bootHasDataScope(): void
+    #[Boot]
+    public static function fillDataScopeOwnerOnCreating(): void
     {
         static::creating(function (Model $model): void {
             /** @var Model&self $model */

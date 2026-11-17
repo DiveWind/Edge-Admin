@@ -3,25 +3,13 @@
 namespace App\Http\Requests\System;
 
 use App\Enums\Status;
-use App\Models\Role;
-use App\Models\User;
-use Illuminate\Auth\Access\Response;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\Validator;
+use App\Models\{Role, User};
+use Illuminate\Validation\{Rule, Validator};
+use Override;
 
 class UpdateUserRequest extends StoreUserRequest
 {
-    /**
-     * 记录级授权（Policy），先于字段校验执行。
-     */
-    public function authorize(): Response
-    {
-        $user = $this->route('user');
-
-        return Gate::inspect('update', $user);
-    }
-
+    #[Override]
     public function rules(): array
     {
         /** @var User $user */

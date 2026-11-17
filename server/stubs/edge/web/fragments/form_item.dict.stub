@@ -1,4 +1,4 @@
-{{@import { ProFormSelect } from '@ant-design/pro-components'}}
+import { ProFormSelect } from '@ant-design/pro-components';
       <ProFormSelect
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

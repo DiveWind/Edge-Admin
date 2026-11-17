@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\Announcement;
-use App\Models\User;
+use App\Models\{Announcement, User};
 use App\Notifications\AnnouncementPublished;
 
 beforeEach(function () {

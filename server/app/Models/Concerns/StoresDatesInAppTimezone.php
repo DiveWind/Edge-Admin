@@ -4,6 +4,7 @@ namespace App\Models\Concerns;
 
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
+use Override;
 
 /**
  * 日期时间输入统一换算到应用时区（config('app.timezone')）后再写库，所有模型都应使用（见 tests/Arch）。
@@ -34,6 +35,7 @@ trait StoresDatesInAppTimezone
      * @param  mixed  $value
      * @return mixed
      */
+    #[Override]
     public function fromDateTime($value)
     {
         return empty($value) ? $value : $this->asAppDateTime($value)->format($this->getDateFormat());

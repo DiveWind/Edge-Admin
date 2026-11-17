@@ -1,20 +1,24 @@
 <?php
 
-namespace {{ request_namespace }};
+namespace {{ namespace }};
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-{{ uses }}
 
-class Store{{ class }}Request extends FormRequest
+/**
+ * 只做字段校验（422）：功能权限与记录级授权在控制器动作上用 #[Authorize] 声明。
+ */
+class {{ class }} extends FormRequest
 {
     /**
+     * Get the validation rules that apply to the request.
+     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-{{ fields.rules }}
+            //
         ];
     }
 }

@@ -1,9 +1,7 @@
 <?php
 
-use App\Enums\LoginStatus;
-use App\Enums\Status;
-use App\Models\LoginLog;
-use App\Models\User;
+use App\Enums\{LoginStatus, Status};
+use App\Models\{LoginLog, User};
 use Illuminate\Support\Facades\Hash;
 
 test('user can login and receives a bearer token', function () {

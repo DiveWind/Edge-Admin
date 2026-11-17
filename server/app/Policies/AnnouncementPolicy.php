@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\Announcement;
-use App\Models\User;
+use App\Models\{Announcement, User};
 use Illuminate\Auth\Access\Response;
 
 class AnnouncementPolicy

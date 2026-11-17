@@ -2,10 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Department;
-use App\Models\Position;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Department, Position, Role, User};
 use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;

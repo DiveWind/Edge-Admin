@@ -4,11 +4,9 @@ namespace App\Services;
 
 use App\Models\ScheduledTaskLog;
 use Illuminate\Console\Application;
-use Illuminate\Console\Scheduling\Event;
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Console\Scheduling\{Event, Schedule};
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
+use Illuminate\Support\{Collection, Str};
 
 /**
  * 读取 routes/console.php 中定义的 Artisan 命令任务。

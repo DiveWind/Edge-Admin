@@ -37,6 +37,7 @@ class OperationLogFactory extends Factory
             'status_code' => fake()->randomElement([200, 200, 200, 201, 204, 422]),
             'duration_ms' => fake()->numberBetween(5, 300),
             'payload' => [],
+            'request_id' => fake()->uuid(),
             'created_at' => fake()->dateTimeBetween('-13 days'),
         ];
     }

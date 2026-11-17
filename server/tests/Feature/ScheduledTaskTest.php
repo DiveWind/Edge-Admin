@@ -3,8 +3,7 @@
 use App\Enums\TaskStatus;
 use App\Jobs\RunScheduledTask;
 use App\Models\ScheduledTaskLog;
-use Illuminate\Console\Events\ScheduledTaskFinished;
-use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Events\{ScheduledTaskFinished, ScheduledTaskStarting};
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Queue;
 

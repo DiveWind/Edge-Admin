@@ -14,7 +14,7 @@ class PublishAnnouncement
     {
         $announcement->markAsPublished();
 
-        SendAnnouncementNotifications::dispatch($announcement)->afterCommit();
+        SendAnnouncementNotifications::dispatch($announcement);
 
         return $announcement;
     }

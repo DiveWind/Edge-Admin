@@ -15,11 +15,8 @@ class UploadRequest extends FormRequest
      */
     public function rules(): array
     {
-        /** @var list<string> $extensions */
-        $extensions = config('edge.uploads.extensions', []);
-
         return [
-            'file' => ['required', File::types($extensions)->max(config()->integer('edge.uploads.max_size'))],
+            'file' => ['required', File::types(config()->array('edge.uploads.extensions'))->max(config()->integer('edge.uploads.max_size'))],
         ];
     }
 }

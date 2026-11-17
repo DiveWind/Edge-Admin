@@ -1,20 +1,19 @@
-{{@import { PlusOutlined } from '@ant-design/icons'}}
-{{@import type { ActionType, ProColumns } from '@ant-design/pro-components'}}
-{{@import { PageContainer, ProTable } from '@ant-design/pro-components'}}
-{{@import { useAccess } from '@umijs/max'}}
-{{@import { Button, Typography } from 'antd'}}
-{{@import type React from 'react'}}
-{{@import { useRef, useState } from 'react'}}
-{{@import { DeleteAction } from '@/components'}}
-{{@import { useT } from '@/utils/i18n'}}
-{{@import { tableRequest } from '@/utils/table'}}
-{{@import {{ web.form_component }} from './components/{{ web.form_component }}'}}
-{{@import type { {{ class }} } from './data'}}
-{{@import { delete{{ class }}, query{{ class_plural }} } from './service'}}
+import { PlusOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { useAccess } from '@umijs/max';
+import { Button, Typography } from 'antd';
+import type React from 'react';
+import { useRef, useState } from 'react';
+import { DeleteAction } from '@/components';
+import { useT } from '@/utils/i18n';
+import { tableRequest } from '@/utils/table';
+import {{ web.form_component }} from './components/{{ web.form_component }}';
+import type { {{ class }} } from './data';
+import { delete{{ class }}, query{{ class_plural }} } from './service';
 {{#if data_scope}}
-{{@import { fetchSelectOptions } from '@/services/options'}}
+import { fetchSelectOptions } from '@/services/options';
 {{/if}}
-{{ imports }}
 
 /*
  * {{ title_plural }}：由 edge:make-module 生成（docs/generator.md）。字段名文案默认为英文，请在 locales 中改为中文；

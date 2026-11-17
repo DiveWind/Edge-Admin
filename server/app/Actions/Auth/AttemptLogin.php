@@ -3,12 +3,13 @@
 namespace App\Actions\Auth;
 
 use App\Enums\LoginStatus;
-use App\Models\LoginLog;
-use App\Models\User;
+use App\Models\{LoginLog, User};
+use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\NewAccessToken;
+use SensitiveParameter;
 
 /**
  * 校验账号密码并签发 Sanctum Token（记录 ip / user_agent），同时写登录日志。
@@ -16,9 +17,14 @@ use Laravel\Sanctum\NewAccessToken;
 class AttemptLogin
 {
     /**
+     * @param  int  $tokenTtl  签发令牌的有效期（分钟）
+     */
+    public function __construct(#[Config('edge.auth.token_ttl')] protected int $tokenTtl) {}
+
+    /**
      * @throws ValidationException
      */
-    public function handle(string $username, string $password, ?string $ip, ?string $userAgent): NewAccessToken
+    public function handle(string $username, #[SensitiveParameter] string $password, ?string $ip, ?string $userAgent): NewAccessToken
     {
         $user = User::query()->where('username', $username)->first();
 
@@ -34,7 +40,7 @@ class AttemptLogin
 
         $this->log($username, $user, $ip, $userAgent, LoginStatus::Success, __('auth.success'));
 
-        $token = $user->createToken('api', ['*'], now()->addMinutes(config()->integer('edge.auth.token_ttl')));
+        $token = $user->createToken('api', ['*'], now()->addMinutes($this->tokenTtl));
 
         // 记录签发时的客户端信息，用于"在线会话"。
         $token->accessToken->forceFill([

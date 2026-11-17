@@ -2,21 +2,15 @@
 
 namespace App\Providers;
 
-use App\Models\PersonalAccessToken;
-use App\Models\User;
+use App\Models\{PersonalAccessToken, User};
 use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Scramble;
-use Dedoc\Scramble\Support\Generator\OpenApi;
-use Dedoc\Scramble\Support\Generator\SecurityScheme;
+use Dedoc\Scramble\Support\Generator\{OpenApi, SecurityScheme};
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\{DB, Date, Gate, RateLimiter, URL};
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\Sanctum;

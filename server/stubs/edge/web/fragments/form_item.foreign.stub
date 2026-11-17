@@ -1,6 +1,6 @@
-{{@import { ProFormSelect } from '@ant-design/pro-components'}}
+import { ProFormSelect } from '@ant-design/pro-components';
 {{#if field.options_route}}
-{{@import { fetchSelectOptions } from '@/services/options'}}
+import { fetchSelectOptions } from '@/services/options';
 {{/if}}
       <ProFormSelect
         name="{{ field.name }}"

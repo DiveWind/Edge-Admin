@@ -2,8 +2,7 @@
 
 namespace App\Collections;
 
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\{Collection, Model};
 
 /**
  * 以 parent_id 自关联的模型集合，可在 PHP 侧组装为树（与数据库无关）。

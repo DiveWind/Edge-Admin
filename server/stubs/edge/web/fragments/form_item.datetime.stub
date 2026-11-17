@@ -1,5 +1,5 @@
-{{@import { ProFormDateTimePicker } from '@ant-design/pro-components'}}
-{{@import { toOffsetDateTime } from '@/utils/form'}}
+import { ProFormDateTimePicker } from '@ant-design/pro-components';
+import { toOffsetDateTime } from '@/utils/form';
       <ProFormDateTimePicker
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

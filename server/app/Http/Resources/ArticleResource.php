@@ -2,10 +2,7 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Article;
-use App\Models\ArticleCategory;
-use App\Models\Department;
-use App\Models\User;
+use App\Models\{Article, ArticleCategory, Department, User};
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

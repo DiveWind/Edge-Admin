@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\ArticleCategory;
-use App\Models\User;
+use App\Models\{ArticleCategory, User};
 use Illuminate\Auth\Access\Response;
 
 class ArticleCategoryPolicy

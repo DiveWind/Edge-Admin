@@ -1,0 +1,19 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use App\Http\Controllers\Controller;
+use App\Http\Resources\OptionResource;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+
+/**
+ * {{ model }} 下拉选项 `[{id, name}]`，登录即可访问（GET /api/options/<路由>）。
+ */
+class {{ class }} extends Controller
+{
+    public function __invoke(): AnonymousResourceCollection
+    {
+        return OptionResource::collection({{ model }}::query()->orderBy('id')->get(['id', 'name']));
+    }
+}

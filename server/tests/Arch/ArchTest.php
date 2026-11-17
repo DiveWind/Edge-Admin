@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Facades\Facade;
+
 /*
 |--------------------------------------------------------------------------
 | Architecture
@@ -20,7 +22,7 @@ arch('security')->preset()->security();
  */
 arch('laravel')->preset()->laravel();
 
-arch('controllers only orchestrate: authorize, call an action or simple Eloquent, return a resource')
+arch('controllers only orchestrate: authorize declaratively (#[Authorize]), call an action or simple Eloquent, return a resource')
     ->expect('App\Http\Controllers')
     ->not->toUse([
         'Illuminate\Support\Facades\DB',
@@ -30,6 +32,7 @@ arch('controllers only orchestrate: authorize, call an action or simple Eloquent
         'Illuminate\Support\Facades\Bus',
         'Illuminate\Support\Facades\Queue',
         'Illuminate\Support\Facades\Notification',
+        'Illuminate\Support\Facades\Gate',
         'App\Jobs',
         'App\Notifications',
     ]);
@@ -47,12 +50,14 @@ arch('controllers depend only on the allowed layers')
         'Illuminate\Container\Attributes\CurrentUser',
         'Illuminate\Http',
         'Illuminate\Queue\Failed\FailedJobProviderInterface',
-        'Illuminate\Support\Facades\Gate',
+        'Illuminate\Routing\Attributes\Controllers',
         'abort',
         'response',
         '__',
         'now',
-    ]);
+    ])
+    // 分组导入 `use A\{B, C}` 的条目名会被解析为独立的裸类名；与门面别名（Response、Request…）同名时属于误报。
+    ->ignoring(array_keys(Facade::defaultAliases()->all()));
 
 arch('actions are invoked through a single handle() method and stay out of the HTTP layer')
     ->expect('App\Actions')

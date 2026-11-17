@@ -1,10 +1,6 @@
 <?php
 
-use App\Models\Article;
-use App\Models\ArticleCategory;
-use App\Models\DictItem;
-use App\Models\DictType;
-use App\Models\User;
+use App\Models\{Article, ArticleCategory, DictItem, DictType, User};
 
 test('dictionary types can be managed and filtered', function () {
     actingAsUser(userWithPermissions(['system.dict.view', 'system.dict.create', 'system.dict.update']));

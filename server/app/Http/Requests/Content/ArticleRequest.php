@@ -4,24 +4,12 @@ namespace App\Http\Requests\Content;
 
 use App\Enums\PublishStatus;
 use App\Rules\InDict;
-use Illuminate\Auth\Access\Response;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class ArticleRequest extends FormRequest
 {
-    /**
-     * 编辑时的记录级授权（Policy），先于字段校验执行。
-     */
-    public function authorize(): Response
-    {
-        $article = $this->route('article');
-
-        return $article === null ? Response::allow() : Gate::inspect('update', $article);
-    }
-
     /**
      * source 取自数据字典 article_source，不传时为默认值 original。
      *

@@ -2,8 +2,7 @@
 
 namespace App\Http\Requests\System;
 
-use App\Enums\PermissionType;
-use App\Enums\Status;
+use App\Enums\{PermissionType, Status};
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;

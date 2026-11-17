@@ -4,12 +4,14 @@ namespace App\Http\Requests\System;
 
 use App\Models\Setting;
 use Illuminate\Validation\Rule;
+use Override;
 
 /**
  * 内置参数（is_system）不可修改 key 与 type。
  */
 class UpdateSettingRequest extends StoreSettingRequest
 {
+    #[Override]
     public function rules(): array
     {
         /** @var Setting $setting */
@@ -28,6 +30,7 @@ class UpdateSettingRequest extends StoreSettingRequest
     /**
      * @return array<string, string>
      */
+    #[Override]
     public function messages(): array
     {
         return [

@@ -3,20 +3,18 @@
 namespace App\Models;
 
 use App\Enums\PublishStatus;
-use App\Models\Concerns\HasDataScope;
-use App\Models\Concerns\StoresDatesInAppTimezone;
+use App\Models\Concerns\{HasDataScope, StoresDatesInAppTimezone};
+use App\Observers\ArticleObserver;
 use Database\Factories\ArticleFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, ObservedBy, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model, SoftDeletes};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * 业务对接示例：接入数据权限（HasDataScope），作者 / 部门在创建时自动填充。
  */
+#[ObservedBy(ArticleObserver::class)]
 #[Fillable(['category_id', 'title', 'summary', 'cover', 'content', 'status', 'source'])]
 class Article extends Model
 {
@@ -42,15 +40,6 @@ class Article extends Model
             'status' => PublishStatus::class,
             'published_at' => 'datetime',
         ];
-    }
-
-    protected static function booted(): void
-    {
-        static::saving(function (Article $article): void {
-            if ($article->isDirty('status') && $article->status === PublishStatus::Published) {
-                $article->published_at ??= now();
-            }
-        });
     }
 
     /**

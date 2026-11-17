@@ -1,4 +1,4 @@
-    DictItem::query()->firstOrCreate(
-        ['dict_type_id' => DictType::query()->firstOrCreate(['code' => '{{ field.dict }}'], ['name' => '{{ field.dict }}', 'status' => 'active'])->id, 'value' => 'sample'],
+    \App\Models\DictItem::query()->firstOrCreate(
+        ['dict_type_id' => \App\Models\DictType::query()->firstOrCreate(['code' => '{{ field.dict }}'], ['name' => '{{ field.dict }}', 'status' => 'active'])->id, 'value' => 'sample'],
         ['label' => 'Sample', 'sort' => 0, 'status' => 'active'],
     );

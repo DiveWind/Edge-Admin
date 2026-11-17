@@ -1,9 +1,7 @@
 <?php
 
 use App\Enums\DataScope;
-use App\Models\Article;
-use App\Models\Department;
-use App\Models\User;
+use App\Models\{Article, Department, User};
 
 /**
  * 部门树：root → a → a1，root → b；当前用户属于 a。

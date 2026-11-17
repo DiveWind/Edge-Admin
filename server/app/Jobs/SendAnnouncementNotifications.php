@@ -2,18 +2,21 @@
 
 namespace App\Jobs;
 
-use App\Models\Announcement;
-use App\Models\User;
+use App\Models\{Announcement, User};
 use App\Notifications\AnnouncementPublished;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\DeleteWhenMissingModels;
 use Illuminate\Support\Facades\Notification;
 
 /**
  * 分块给所有启用用户发送公告的站内通知。
+ *
+ * 在派发它的事务提交后才入队（ShouldQueueAfterCommit）；公告在执行前被删除时直接丢弃任务。
  */
-class SendAnnouncementNotifications implements ShouldQueue
+#[DeleteWhenMissingModels]
+class SendAnnouncementNotifications implements ShouldQueueAfterCommit
 {
     use Queueable;
 

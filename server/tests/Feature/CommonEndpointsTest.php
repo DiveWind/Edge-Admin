@@ -1,11 +1,6 @@
 <?php
 
-use App\Models\ArticleCategory;
-use App\Models\Department;
-use App\Models\LoginLog;
-use App\Models\Position;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{ArticleCategory, Department, LoginLog, Position, Role, User};
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 

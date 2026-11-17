@@ -9,12 +9,14 @@ use App\Http\Resources\AttachmentResource;
 use App\Models\Attachment;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
  * 附件管理（上传入口为 POST /api/uploads）。
  */
 class AttachmentController extends Controller
 {
+    #[Authorize('system.attachment.view')]
     public function index(AttachmentIndexRequest $request): AnonymousResourceCollection
     {
         $query = Attachment::query()->with('uploader')->filter($request->filters());
@@ -25,6 +27,7 @@ class AttachmentController extends Controller
     /**
      * 同时删除物理文件。
      */
+    #[Authorize('system.attachment.delete')]
     public function destroy(Attachment $attachment, DeleteAttachment $deleteAttachment): Response
     {
         $deleteAttachment->handle($attachment);

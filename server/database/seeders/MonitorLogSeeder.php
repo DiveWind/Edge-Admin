@@ -2,9 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\LoginLog;
-use App\Models\OperationLog;
-use App\Models\User;
+use App\Models\{LoginLog, OperationLog, User};
 use Illuminate\Database\Seeder;
 
 /**

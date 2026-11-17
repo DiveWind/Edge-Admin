@@ -1,1 +1,1 @@
-Route::get('{{ route }}', {{ class }}OptionController::class)->name('{{ route }}');
+Route::get('{{ route }}', \App\Http\Controllers\Api\Options\{{ class }}OptionController::class)->name('{{ route }}');

@@ -3,9 +3,7 @@
 namespace App\Services;
 
 use App\Enums\DataScope;
-use App\Models\Department;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Department, Role, User};
 
 /**
  * 解析用户的可见数据范围：多角色取并集，超级管理员恒为全部。

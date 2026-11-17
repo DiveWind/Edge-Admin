@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\DictType;
-use App\Models\User;
+use App\Models\{DictType, User};
 use Illuminate\Auth\Access\Response;
 
 class DictTypePolicy

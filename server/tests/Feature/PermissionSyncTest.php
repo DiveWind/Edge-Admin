@@ -1,9 +1,7 @@
 <?php
 
-use App\Enums\PermissionType;
-use App\Enums\Status;
-use App\Models\Permission;
-use App\Models\Role;
+use App\Enums\{PermissionType, Status};
+use App\Models\{Permission, Role};
 
 test('permission sync is idempotent and marks builtin nodes', function () {
     $this->artisan('permission:sync')->assertSuccessful();

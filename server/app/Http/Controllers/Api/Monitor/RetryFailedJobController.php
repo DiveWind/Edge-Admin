@@ -6,12 +6,14 @@ use App\Actions\Monitor\RetryFailedJob;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Response;
 use Illuminate\Queue\Failed\FailedJobProviderInterface;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class RetryFailedJobController extends Controller
 {
     /**
      * 重新入队（官方 queue:retry 命令）。
      */
+    #[Authorize('monitor.failed-job.retry')]
     public function __invoke(string $uuid, FailedJobProviderInterface $failer, RetryFailedJob $retryFailedJob): Response
     {
         $failer->find($uuid) ?? abort(404);

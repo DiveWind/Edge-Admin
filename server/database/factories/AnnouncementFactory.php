@@ -2,8 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Enums\AnnouncementType;
-use App\Enums\PublishStatus;
+use App\Enums\{AnnouncementType, PublishStatus};
 use App\Models\Announcement;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

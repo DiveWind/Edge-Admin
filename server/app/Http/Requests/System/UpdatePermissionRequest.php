@@ -6,6 +6,7 @@ use App\Enums\Status;
 use App\Models\Permission;
 use Closure;
 use Illuminate\Validation\Rule;
+use Override;
 
 /**
  * 编辑菜单权限节点。
@@ -23,6 +24,7 @@ class UpdatePermissionRequest extends StorePermissionRequest
      */
     public const array LIFELINE_CODES = ['system.permission.view', 'system.permission.update'];
 
+    #[Override]
     protected function prepareForValidation(): void
     {
         $permission = $this->permission();
@@ -34,6 +36,7 @@ class UpdatePermissionRequest extends StorePermissionRequest
         parent::prepareForValidation();
     }
 
+    #[Override]
     public function rules(): array
     {
         $permission = $this->current();
@@ -50,11 +53,13 @@ class UpdatePermissionRequest extends StorePermissionRequest
         ];
     }
 
+    #[Override]
     protected function typeRules(): array
     {
         return [...parent::typeRules(), $this->childrenRule($this->current())];
     }
 
+    #[Override]
     protected function statusRules(): array
     {
         return [...parent::statusRules(), $this->lockoutRule($this->current())];
@@ -71,6 +76,7 @@ class UpdatePermissionRequest extends StorePermissionRequest
     /**
      * @return array<string, string>
      */
+    #[Override]
     public function messages(): array
     {
         return [

@@ -1,8 +1,6 @@
 <?php
 
-use App\Models\Article;
-use App\Models\ArticleCategory;
-use App\Models\Department;
+use App\Models\{Article, ArticleCategory, Department};
 
 test('creating an article fills author and department automatically', function () {
     $department = Department::factory()->create();

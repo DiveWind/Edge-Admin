@@ -3,15 +3,7 @@
 namespace App\Services;
 
 use App\Enums\LoginStatus;
-use App\Models\Article;
-use App\Models\ArticleCategory;
-use App\Models\Attachment;
-use App\Models\Department;
-use App\Models\LoginLog;
-use App\Models\OperationLog;
-use App\Models\PersonalAccessToken;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Article, ArticleCategory, Attachment, Department, LoginLog, OperationLog, PersonalAccessToken, Role, User};
 use Carbon\CarbonPeriod;
 
 /**

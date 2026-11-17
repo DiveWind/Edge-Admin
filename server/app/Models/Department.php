@@ -6,14 +6,10 @@ use App\Collections\TreeCollection;
 use App\Enums\Status;
 use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\DepartmentFactory;
-use Illuminate\Database\Eloquent\Attributes\CollectedBy;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{CollectedBy, Fillable, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 
 #[CollectedBy(TreeCollection::class)]
 #[Fillable(['parent_id', 'name', 'leader_id', 'sort', 'status'])]

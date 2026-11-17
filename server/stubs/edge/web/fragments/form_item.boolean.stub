@@ -1,4 +1,4 @@
-{{@import { ProFormSwitch } from '@ant-design/pro-components'}}
+import { ProFormSwitch } from '@ant-design/pro-components';
       <ProFormSwitch
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

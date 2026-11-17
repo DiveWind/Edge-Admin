@@ -2,21 +2,14 @@
 
 namespace App\Models;
 
-use App\Enums\DataScope;
-use App\Enums\Status;
-use App\Models\Concerns\HasDataScope;
-use App\Models\Concerns\StoresDatesInAppTimezone;
+use App\Enums\{DataScope, Status};
+use App\Models\Concerns\{HasDataScope, StoresDatesInAppTimezone};
 use App\Services\PermissionRegistry;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, Hidden, Scope};
+use Illuminate\Database\Eloquent\{Builder, Collection, SoftDeletes};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, BelongsToMany};
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;

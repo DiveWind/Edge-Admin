@@ -2,9 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Attachment;
-use App\Models\PersonalAccessToken;
-use App\Models\User;
+use App\Models\{Attachment, PersonalAccessToken, User};
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Queue\Failed\FailedJobProviderInterface;

@@ -2,8 +2,7 @@
 
 namespace App\Http\Requests\Message;
 
-use App\Enums\AnnouncementType;
-use App\Enums\PublishStatus;
+use App\Enums\{AnnouncementType, PublishStatus};
 use App\Http\Requests\ListRequest;
 use Illuminate\Validation\Rule;
 

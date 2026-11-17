@@ -2,8 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Enums\PermissionType;
-use App\Enums\Status;
+use App\Enums\{PermissionType, Status};
 use App\Models\Permission;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

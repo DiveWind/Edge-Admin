@@ -1,9 +1,6 @@
 <?php
 
-use App\Models\Department;
-use App\Models\Permission;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Department, Permission, Role, User};
 
 beforeEach(function () {
     actingAsUser(superAdmin());

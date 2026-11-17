@@ -1,0 +1,20 @@
+<?php
+
+namespace {{ namespace }};
+
+use App\Http\Requests\ListRequest;
+
+/**
+ * 列表请求：page / per_page / sort（白名单）由 ListRequest 校验，这里声明过滤字段与可排序字段。
+ */
+class {{ class }} extends ListRequest
+{
+    protected array $sortable = ['id', 'created_at'];
+
+    protected function filterRules(): array
+    {
+        return [
+            //
+        ];
+    }
+}

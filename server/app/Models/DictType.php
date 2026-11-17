@@ -4,18 +4,17 @@ namespace App\Models;
 
 use App\Enums\Status;
 use App\Models\Concerns\StoresDatesInAppTimezone;
-use App\Services\Dictionary;
+use App\Observers\DictionaryObserver;
 use Database\Factories\DictTypeFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, ObservedBy, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * 数据字典类型，code 为后端与前端引用字典的唯一标识（如 article_source）。
  */
+#[ObservedBy(DictionaryObserver::class)]
 #[Fillable(['name', 'code', 'status', 'remark'])]
 class DictType extends Model
 {
@@ -30,15 +29,6 @@ class DictType extends Model
         return [
             'status' => Status::class,
         ];
-    }
-
-    /**
-     * 字典变更时清除字典缓存。
-     */
-    protected static function booted(): void
-    {
-        static::saved(fn () => app(Dictionary::class)->flush());
-        static::deleted(fn () => app(Dictionary::class)->flush());
     }
 
     /**

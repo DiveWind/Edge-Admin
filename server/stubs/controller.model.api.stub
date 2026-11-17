@@ -1,0 +1,46 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ rootNamespace }}Http\Controllers\Controller;
+use {{ rootNamespace }}Http\Resources\{{ model }}Resource;
+use {{ namespacedRequests }}
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+
+/**
+ * 单表 CRUD 直接使用 Eloquent；多步写入 / 带副作用的用例放到 app/Actions。
+ * 在动作上用 #[Authorize('<权限码>')] 声明功能权限，用 #[Authorize('<policy 方法>', '<路由参数>')] 声明记录级规则。
+ */
+class {{ class }} extends Controller
+{
+    public function index(): AnonymousResourceCollection
+    {
+        return {{ model }}Resource::collection({{ model }}::query()->latest('id')->paginate());
+    }
+
+    public function store({{ storeRequest }} $request): {{ model }}Resource
+    {
+        return new {{ model }}Resource({{ model }}::query()->create($request->validated()));
+    }
+
+    public function show({{ model }} ${{ modelVariable }}): {{ model }}Resource
+    {
+        return new {{ model }}Resource(${{ modelVariable }});
+    }
+
+    public function update({{ updateRequest }} $request, {{ model }} ${{ modelVariable }}): {{ model }}Resource
+    {
+        ${{ modelVariable }}->update($request->validated());
+
+        return new {{ model }}Resource(${{ modelVariable }});
+    }
+
+    public function destroy({{ model }} ${{ modelVariable }}): Response
+    {
+        ${{ modelVariable }}->delete();
+
+        return response()->noContent();
+    }
+}

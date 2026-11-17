@@ -1,8 +1,8 @@
 
     /**
-     * @return BelongsTo<{{ field.related }}, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<{{ field.related_class }}, $this>
      */
-    public function {{ field.relation }}(): BelongsTo
+    public function {{ field.relation }}(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        return $this->belongsTo({{ field.related }}::class, '{{ field.name }}');
+        return $this->belongsTo({{ field.related_class }}::class, '{{ field.name }}');
     }

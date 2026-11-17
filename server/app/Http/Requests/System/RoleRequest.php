@@ -2,8 +2,7 @@
 
 namespace App\Http\Requests\System;
 
-use App\Enums\DataScope;
-use App\Enums\Status;
+use App\Enums\{DataScope, Status};
 use App\Models\Role;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;

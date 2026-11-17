@@ -5,11 +5,9 @@ namespace App\Models;
 use App\Enums\Status;
 use App\Models\Concerns\StoresDatesInAppTimezone;
 use Database\Factories\PositionFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 #[Fillable(['name', 'code', 'sort', 'status', 'remark'])]

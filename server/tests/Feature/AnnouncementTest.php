@@ -1,11 +1,9 @@
 <?php
 
 use App\Jobs\SendAnnouncementNotifications;
-use App\Models\Announcement;
-use App\Models\User;
+use App\Models\{Announcement, User};
 use App\Notifications\AnnouncementPublished;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\{Notification, Queue};
 
 beforeEach(function () {
     $this->admin = actingAsUser(superAdmin());

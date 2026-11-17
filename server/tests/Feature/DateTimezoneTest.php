@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\Article;
-use App\Models\LoginLog;
+use App\Models\{Article, LoginLog};
 
 /*
 | 日期时间输入统一换算到应用时区（契约第 2 节）：带偏移的 ISO 8601 按偏移换算，不带偏移的按应用时区解释，

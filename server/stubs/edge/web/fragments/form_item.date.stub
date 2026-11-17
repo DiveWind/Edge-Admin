@@ -1,4 +1,4 @@
-{{@import { ProFormDatePicker } from '@ant-design/pro-components'}}
+import { ProFormDatePicker } from '@ant-design/pro-components';
       <ProFormDatePicker
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

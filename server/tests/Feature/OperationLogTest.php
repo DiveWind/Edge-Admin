@@ -1,8 +1,6 @@
 <?php
 
-use App\Models\LoginLog;
-use App\Models\OperationLog;
-use App\Models\Position;
+use App\Models\{LoginLog, OperationLog, Position};
 
 beforeEach(function () {
     $this->admin = actingAsUser(superAdmin());
@@ -24,6 +22,18 @@ test('non get requests of authenticated users are recorded with masked payload',
         ->and($log->status_code)->toBe(201)
         ->and($log->payload['password'])->toBe('******')
         ->and($log->payload['username'])->toBe('logged');
+});
+
+test('every api response carries a request id that is also stored on the operation log', function () {
+    $requestId = $this->postJson('/api/positions', ['name' => 'P', 'code' => 'p', 'status' => 'active'])
+        ->assertCreated()
+        ->headers->get('X-Request-Id');
+
+    expect($requestId)->toBeUuid()
+        ->and(OperationLog::query()->sole()->request_id)->toBe($requestId);
+
+    $this->withHeader('X-Request-Id', $given = (string) Str::uuid())->getJson('/api/positions')->assertHeader('X-Request-Id', $given);
+    $this->withHeader('X-Request-Id', 'not-a-uuid')->getJson('/api/positions')->assertHeader('X-Request-Id');
 });
 
 test('get requests are not recorded', function () {

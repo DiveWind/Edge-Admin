@@ -1,0 +1,58 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ rootNamespace }}Http\Controllers\Controller;
+use {{ rootNamespace }}Http\Resources\{{ model }}Resource;
+use {{ requestNamespace }}\{{{ model }}IndexRequest, Store{{ model }}Request, Update{{ model }}Request};
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
+
+/**
+ * 单表 CRUD 直接使用 Eloquent；多步写入 / 带副作用的用例请放到 app/Actions。
+ *
+ * edge:make-module 通过 `make:controller --type=module --model=<模型>` 使用本模板；
+ * {{ permission }} / {{ routeParameter }} / {{ requestNamespace }} 由生成器替换。
+ */
+class {{ class }} extends Controller
+{
+    #[Authorize('{{ permission }}.view')]
+    public function index({{ model }}IndexRequest $request): AnonymousResourceCollection
+    {
+        $query = {{ model }}::query()->filter($request->filters());
+
+        return {{ model }}Resource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
+    }
+
+    #[Authorize('{{ permission }}.create')]
+    public function store(Store{{ model }}Request $request): {{ model }}Resource
+    {
+        return new {{ model }}Resource({{ model }}::query()->create($request->validated()));
+    }
+
+    #[Authorize('{{ permission }}.view')]
+    public function show({{ model }} ${{ modelVariable }}): {{ model }}Resource
+    {
+        return new {{ model }}Resource(${{ modelVariable }});
+    }
+
+    #[Authorize('{{ permission }}.update')]
+    #[Authorize('update', '{{ routeParameter }}')]
+    public function update(Update{{ model }}Request $request, {{ model }} ${{ modelVariable }}): {{ model }}Resource
+    {
+        ${{ modelVariable }}->update($request->validated());
+
+        return new {{ model }}Resource(${{ modelVariable }});
+    }
+
+    #[Authorize('{{ permission }}.delete')]
+    #[Authorize('delete', '{{ routeParameter }}')]
+    public function destroy({{ model }} ${{ modelVariable }}): Response
+    {
+        ${{ modelVariable }}->delete();
+
+        return response()->noContent();
+    }
+}

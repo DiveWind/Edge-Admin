@@ -1,4 +1,4 @@
-{{@import { DictTag } from '@/components'}}
+import { DictTag } from '@/components';
     {
       title: t('{{ web.locale_prefix }}.{{ field.camel }}'),
       dataIndex: '{{ field.name }}',

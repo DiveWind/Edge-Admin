@@ -4,18 +4,17 @@ namespace App\Models;
 
 use App\Enums\Status;
 use App\Models\Concerns\StoresDatesInAppTimezone;
-use App\Services\Dictionary;
+use App\Observers\DictionaryObserver;
 use Database\Factories\DictItemFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, ObservedBy, Scope};
+use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * 数据字典项：label 用于展示，value 为存储值（同一类型下唯一）。
  */
+#[ObservedBy(DictionaryObserver::class)]
 #[Fillable(['dict_type_id', 'label', 'value', 'color', 'sort', 'status', 'remark'])]
 class DictItem extends Model
 {
@@ -32,15 +31,6 @@ class DictItem extends Model
             'sort' => 'integer',
             'status' => Status::class,
         ];
-    }
-
-    /**
-     * 字典变更时清除字典缓存。
-     */
-    protected static function booted(): void
-    {
-        static::saved(fn () => app(Dictionary::class)->flush());
-        static::deleted(fn () => app(Dictionary::class)->flush());
     }
 
     /**

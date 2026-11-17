@@ -3,10 +3,11 @@
 namespace App\Services;
 
 use App\Models\DictType;
-use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Cache\CacheManager;
 
 /**
- * 数据字典读取入口：只包含启用类型下的启用项，按 sort 排序，整体缓存，字典变更时由模型事件清除。
+ * 数据字典读取入口：只包含启用类型下的启用项，按 sort 排序，整体缓存，字典变更时由 DictionaryObserver 清除。
+ * 通过 Cache::memo() 读取：同一请求 / 队列任务内只访问一次缓存存储（memo 为 scoped 绑定，每个请求 / 任务重置）。
  *
  * 用法：app(Dictionary::class)->items('article_source')、->values('article_source')；
  * 校验用 new \App\Rules\InDict('article_source')。
@@ -15,7 +16,7 @@ class Dictionary
 {
     public const string CACHE_KEY = 'edge:dicts';
 
-    public function __construct(protected Repository $cache) {}
+    public function __construct(protected CacheManager $cache) {}
 
     /**
      * 某个字典的启用项。
@@ -69,7 +70,7 @@ class Dictionary
      */
     public function all(): array
     {
-        return $this->cache->rememberForever(self::CACHE_KEY, fn (): array => $this->load());
+        return $this->cache->memo()->rememberForever(self::CACHE_KEY, fn (): array => $this->load());
     }
 
     /**
@@ -97,6 +98,6 @@ class Dictionary
 
     public function flush(): void
     {
-        $this->cache->forget(self::CACHE_KEY);
+        $this->cache->memo()->forget(self::CACHE_KEY);
     }
 }

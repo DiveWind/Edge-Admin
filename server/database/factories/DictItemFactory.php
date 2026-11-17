@@ -3,8 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\Status;
-use App\Models\DictItem;
-use App\Models\DictType;
+use App\Models\{DictItem, DictType};
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

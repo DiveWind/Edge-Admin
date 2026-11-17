@@ -1,8 +1,7 @@
 <?php
 
 use App\Enums\Status;
-use App\Models\Permission;
-use App\Models\User;
+use App\Models\{Permission, User};
 
 beforeEach(function () {
     $this->artisan('permission:sync');

@@ -1,5 +1,5 @@
 {{#if field.options_route}}
-{{@import { fetchSelectOptions } from '@/services/options'}}
+import { fetchSelectOptions } from '@/services/options';
 {{/if}}
     {
       title: t('{{ web.locale_prefix }}.{{ field.camel }}'),

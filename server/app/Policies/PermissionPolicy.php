@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\Permission;
-use App\Models\User;
+use App\Models\{Permission, User};
 use Illuminate\Auth\Access\Response;
 
 class PermissionPolicy

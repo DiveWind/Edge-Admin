@@ -5,15 +5,12 @@ namespace App\Models;
 use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\OperationLogFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, Scope};
+use Illuminate\Database\Eloquent\{Builder, MassPrunable, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\MassPrunable;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'method', 'path', 'route_name', 'summary', 'ip', 'user_agent', 'status_code', 'duration_ms', 'payload'])]
+#[Fillable(['user_id', 'request_id', 'method', 'path', 'route_name', 'summary', 'ip', 'user_agent', 'status_code', 'duration_ms', 'payload'])]
 class OperationLog extends Model
 {
     /** @use HasFactory<OperationLogFactory> */

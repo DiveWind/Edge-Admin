@@ -1,5 +1,5 @@
-{{@import { ProFormTextArea } from '@ant-design/pro-components'}}
-{{@import { jsonRule, parseJson, stringifyJson } from '@/utils/form'}}
+import { ProFormTextArea } from '@ant-design/pro-components';
+import { jsonRule, parseJson, stringifyJson } from '@/utils/form';
       <ProFormTextArea
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

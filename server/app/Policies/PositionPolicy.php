@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\Position;
-use App\Models\User;
+use App\Models\{Position, User};
 use Illuminate\Auth\Access\Response;
 
 class PositionPolicy

@@ -1,8 +1,7 @@
 <?php
 
 use App\Enums\SettingType;
-use App\Models\LoginLog;
-use App\Models\Setting;
+use App\Models\{LoginLog, Setting};
 
 test('setting values are validated and cast by type', function () {
     actingAsUser(userWithPermissions(['system.setting.create', 'system.setting.view']));

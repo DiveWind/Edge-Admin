@@ -2,13 +2,12 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\OperationLog;
-use App\Models\User;
+use App\Models\{OperationLog, User};
 use Closure;
+use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Lang;
-use Illuminate\Support\Str;
+use Illuminate\Support\{Arr, Str};
+use Illuminate\Support\Facades\{Context, Lang};
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -17,6 +16,11 @@ use Symfony\Component\HttpFoundation\Response;
 class RecordOperationLog
 {
     protected const string MASK = '******';
+
+    /**
+     * @param  list<string>  $sensitiveFields  需要脱敏的字段（支持 * 通配）
+     */
+    public function __construct(#[Config('edge.logs.sensitive_fields')] protected array $sensitiveFields) {}
 
     /**
      * Handle an incoming request.
@@ -43,6 +47,7 @@ class RecordOperationLog
 
         OperationLog::query()->create([
             'user_id' => $user->getKey(),
+            'request_id' => Context::get('request_id'),
             'method' => $request->method(),
             'path' => '/'.ltrim($request->path(), '/'),
             'route_name' => $routeName,
@@ -73,11 +78,8 @@ class RecordOperationLog
      */
     protected function mask(array $payload): array
     {
-        /** @var list<string> $patterns */
-        $patterns = config('edge.logs.sensitive_fields', []);
-
         foreach ($payload as $key => $value) {
-            if (is_string($key) && Str::is($patterns, Str::lower($key))) {
+            if (is_string($key) && Str::is($this->sensitiveFields, Str::lower($key))) {
                 $payload[$key] = self::MASK;
             } elseif (is_array($value)) {
                 $payload[$key] = $this->mask($value);

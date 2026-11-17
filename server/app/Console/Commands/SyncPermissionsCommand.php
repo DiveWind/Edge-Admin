@@ -3,9 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Actions\System\SyncBuiltinPermissions;
-use Illuminate\Console\Attributes\Description;
-use Illuminate\Console\Attributes\Signature;
+use Illuminate\Console\Attributes\{Description, Signature};
 use Illuminate\Console\Command;
+use Illuminate\Container\Attributes\Config;
 
 #[Signature('permission:sync')]
 #[Description('将 config/permissions.php 中声明的内置菜单权限同步到 permissions 表（幂等：新增缺失项、修正结构性字段，不覆盖界面上的修改，不删除任何节点）')]
@@ -13,12 +13,11 @@ class SyncPermissionsCommand extends Command
 {
     /**
      * Execute the console command.
+     *
+     * @param  list<array<string, mixed>>  $tree  config/permissions.php 声明的菜单权限树
      */
-    public function handle(SyncBuiltinPermissions $sync): int
+    public function handle(SyncBuiltinPermissions $sync, #[Config('permissions')] array $tree): int
     {
-        /** @var list<array<string, mixed>> $tree */
-        $tree = config('permissions', []);
-
         $result = $sync->handle($tree);
 
         $this->components->info(sprintf(

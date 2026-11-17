@@ -2,8 +2,7 @@
 
 namespace App\Http\Resources;
 
-use App\Models\OperationLog;
-use App\Models\User;
+use App\Models\{OperationLog, User};
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,6 +21,7 @@ class OperationLogResource extends JsonResource
         return [
             'id' => $this->id,
             'user_id' => $this->user_id,
+            'request_id' => $this->request_id,
             'user' => $this->whenLoaded('user', fn (User $user): array => $user->only('id', 'name')),
             'method' => $this->method,
             'path' => $this->path,

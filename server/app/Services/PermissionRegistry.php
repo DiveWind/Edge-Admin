@@ -4,8 +4,7 @@ namespace App\Services;
 
 use App\Collections\TreeCollection;
 use App\Enums\PermissionType;
-use App\Models\Permission;
-use App\Models\User;
+use App\Models\{Permission, User};
 use Illuminate\Container\Attributes\Scoped;
 use Illuminate\Support\Collection;
 

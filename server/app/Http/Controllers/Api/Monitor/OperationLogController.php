@@ -8,9 +8,11 @@ use App\Http\Resources\OperationLogResource;
 use App\Models\OperationLog;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class OperationLogController extends Controller
 {
+    #[Authorize('monitor.operation-log.view')]
     public function index(OperationLogIndexRequest $request): AnonymousResourceCollection
     {
         $query = OperationLog::query()->with('user')->filter($request->filters());
@@ -18,11 +20,13 @@ class OperationLogController extends Controller
         return OperationLogResource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
     }
 
+    #[Authorize('monitor.operation-log.view')]
     public function show(OperationLog $operationLog): OperationLogResource
     {
         return new OperationLogResource($operationLog->load('user'));
     }
 
+    #[Authorize('monitor.operation-log.delete')]
     public function destroy(OperationLog $operationLog): Response
     {
         $operationLog->delete();

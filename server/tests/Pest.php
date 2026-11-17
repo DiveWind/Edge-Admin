@@ -1,10 +1,7 @@
 <?php
 
-use App\Enums\DataScope;
-use App\Enums\PermissionType;
-use App\Models\Permission;
-use App\Models\Role;
-use App\Models\User;
+use App\Enums\{DataScope, PermissionType};
+use App\Models\{Permission, Role, User};
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;

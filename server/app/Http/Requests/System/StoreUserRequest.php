@@ -3,8 +3,7 @@
 namespace App\Http\Requests\System;
 
 use App\Enums\Status;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\{Role, User};
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;

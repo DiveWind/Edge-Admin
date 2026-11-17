@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\Permission;
-use App\Models\Role;
+use App\Models\{Permission, Role};
 
 beforeEach(function () {
     $this->artisan('permission:sync');

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -13,6 +14,11 @@ use Symfony\Component\HttpFoundation\Response;
 class SetLocale
 {
     /**
+     * @param  list<string>  $locales
+     */
+    public function __construct(#[Config('edge.locales')] protected array $locales) {}
+
+    /**
      * Handle an incoming request.
      *
      * @param  Closure(Request): (Response)  $next
@@ -21,11 +27,8 @@ class SetLocale
     {
         $default = config()->string('app.locale');
 
-        /** @var list<string> $supported */
-        $supported = config('edge.locales', []);
-
         // 默认语言排在首位：请求头缺失或不匹配时 getPreferredLanguage() 返回首项。
-        $locale = $request->getPreferredLanguage(array_values(array_unique([$default, ...$supported])));
+        $locale = $request->getPreferredLanguage(array_values(array_unique([$default, ...$this->locales])));
 
         app()->setLocale($locale ?? $default);
 

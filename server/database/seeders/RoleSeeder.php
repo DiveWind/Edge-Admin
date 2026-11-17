@@ -2,11 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Enums\DataScope;
-use App\Enums\PermissionType;
-use App\Models\Department;
-use App\Models\Permission;
-use App\Models\Role;
+use App\Enums\{DataScope, PermissionType};
+use App\Models\{Department, Permission, Role};
 use Illuminate\Database\Seeder;
 
 class RoleSeeder extends Seeder

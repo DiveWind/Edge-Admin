@@ -1,9 +1,7 @@
 <?php
 
-use App\Console\Generator\FieldParser;
-use App\Console\Generator\StubRenderer;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Process;
+use App\Console\Generator\{FieldParser, StubRenderer};
+use Illuminate\Support\Facades\{File, Process};
 
 /*
 | 生成器在临时目录中运行：后端写入 edge.generator.base_path，前端写入 edge.generator.web_path，

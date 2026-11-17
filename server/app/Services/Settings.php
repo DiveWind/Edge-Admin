@@ -3,17 +3,19 @@
 namespace App\Services;
 
 use App\Models\Setting;
-use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Database\QueryException;
 
 /**
- * 系统参数读取入口（亦可用 setting('key', $default) 辅助函数）：整体缓存，参数变更时由模型事件清除。
+ * 系统参数读取入口（亦可用 setting('key', $default) 辅助函数）：整体缓存，参数变更时由 SettingObserver 清除。
+ *
+ * 通过 Cache::memo() 读取：同一请求 / 队列任务内只访问一次缓存存储（memo 为 scoped 绑定，每个请求 / 任务重置）。
  */
 class Settings
 {
     public const string CACHE_KEY = 'edge:settings';
 
-    public function __construct(protected Repository $cache) {}
+    public function __construct(protected CacheManager $cache) {}
 
     /**
      * 读取参数值；参数不存在或值为 null 时返回 $default。
@@ -49,7 +51,7 @@ class Settings
     public function all(): array
     {
         try {
-            return $this->cache->rememberForever(self::CACHE_KEY, fn (): array => Setting::query()
+            return $this->cache->memo()->rememberForever(self::CACHE_KEY, fn (): array => Setting::query()
                 ->orderBy('id')
                 ->get()
                 ->mapWithKeys(fn (Setting $setting): array => [
@@ -64,6 +66,6 @@ class Settings
 
     public function flush(): void
     {
-        $this->cache->forget(self::CACHE_KEY);
+        $this->cache->memo()->forget(self::CACHE_KEY);
     }
 }

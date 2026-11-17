@@ -1,4 +1,4 @@
-{{@import { ProFormTextArea } from '@ant-design/pro-components'}}
+import { ProFormTextArea } from '@ant-design/pro-components';
       <ProFormTextArea
         name="{{ field.name }}"
         label={t('{{ web.locale_prefix }}.{{ field.camel }}')}

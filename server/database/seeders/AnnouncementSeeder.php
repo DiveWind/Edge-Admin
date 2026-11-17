@@ -4,8 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\AnnouncementType;
 use App\Jobs\SendAnnouncementNotifications;
-use App\Models\Announcement;
-use App\Models\User;
+use App\Models\{Announcement, User};
 use Illuminate\Database\Seeder;
 
 class AnnouncementSeeder extends Seeder

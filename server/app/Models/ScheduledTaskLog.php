@@ -6,13 +6,9 @@ use App\Enums\TaskStatus;
 use App\Models\Concerns\StoresDatesInAppTimezone;
 use App\Services\Settings;
 use Database\Factories\ScheduledTaskLogFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Attributes\{Fillable, Scope, WithoutTimestamps};
+use Illuminate\Database\Eloquent\{Builder, MassPrunable, Model};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\MassPrunable;
-use Illuminate\Database\Eloquent\Model;
 
 #[Fillable(['task', 'status', 'output', 'duration_ms', 'started_at', 'finished_at'])]
 #[WithoutTimestamps]

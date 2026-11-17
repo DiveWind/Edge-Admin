@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
  * 生成器字段：由 `name:type[:argument][:rules]` 解析而来，提供各模板片段需要的代码表达式。
  *
  * 返回 null 的表达式表示"该字段不参与此片段"（渲染时跳过），见 StubRenderer。
+ * PHP 表达式中的类一律写完整类名（\App\Enums\Status::class），生成后由 Pint 导入并分组。
  */
 class Field
 {
@@ -91,6 +92,14 @@ class Field
     }
 
     /**
+     * 外键关联模型的完整类名（用于生成代码，导入由 Pint 的 fully_qualified_strict_types 规则整理）。
+     */
+    public function relatedClass(): ?string
+    {
+        return $this->relatedModel() === null ? null : '\\App\\Models\\'.$this->relatedModel();
+    }
+
+    /**
      * 外键关联方法名（category_id → category）。
      */
     public function relationName(): ?string
@@ -114,6 +123,7 @@ class Field
             'argument' => $this->argument,
             'dict' => $this->type === 'dict' ? $this->argument : null,
             'related' => $this->relatedModel(),
+            'related_class' => $this->relatedClass(),
             'relation' => $this->relationName(),
             'related_route' => $this->relatedRoute(),
             'options_route' => $this->optionsRoute,
@@ -132,33 +142,6 @@ class Field
             'value_type' => $this->valueType(),
             'web_search' => $this->filterRule() === null ? ', search: false' : '',
         ];
-    }
-
-    /**
-     * 各片段需要的 use 导入（类名全称）。
-     *
-     * @return list<string>
-     */
-    public function imports(string $section): array
-    {
-        $model = $this->relatedModel() === null ? [] : ['App\\Models\\'.$this->relatedModel()];
-
-        return match ($section) {
-            'cast' => $this->type === 'status' ? ['App\\Enums\\Status'] : [],
-            'rules' => match ($this->type) {
-                'status' => ['App\\Enums\\Status', 'Illuminate\\Validation\\Rule'],
-                'foreign' => ['Illuminate\\Validation\\Rule'],
-                'dict' => ['App\\Rules\\InDict'],
-                default => [],
-            },
-            'filter_rule' => $this->type === 'status' ? ['App\\Enums\\Status', 'Illuminate\\Validation\\Rule'] : [],
-            'factory' => $this->type === 'status' ? ['App\\Enums\\Status'] : $model,
-            'relation' => $model === [] ? [] : [...$model, 'Illuminate\\Database\\Eloquent\\Relations\\BelongsTo'],
-            'test_payload' => $model,
-            'test_setup' => $this->type === 'dict' ? ['App\\Models\\DictItem', 'App\\Models\\DictType'] : [],
-            'test_assertion' => $this->type === 'datetime' ? ['Carbon\\CarbonImmutable'] : [],
-            default => [],
-        };
     }
 
     public function migration(): string
@@ -192,7 +175,7 @@ class Field
             'date' => "'date'",
             'datetime' => "'datetime'",
             'json' => "'array'",
-            'status' => 'Status::class',
+            'status' => '\\App\\Enums\\Status::class',
             default => null,
         };
     }
@@ -214,9 +197,9 @@ class Field
             'boolean' => ["'boolean'"],
             'date', 'datetime' => ["'date'"],
             'json' => ["'array'"],
-            'status' => ['Rule::enum(Status::class)'],
-            'foreign' => ["'integer'", "Rule::exists('{$this->argument}', 'id')"],
-            'dict' => ["'string'", "new InDict('{$this->argument}')"],
+            'status' => ['\\Illuminate\\Validation\\Rule::enum(\\App\\Enums\\Status::class)'],
+            'foreign' => ["'integer'", "\\Illuminate\\Validation\\Rule::exists('{$this->argument}', 'id')"],
+            'dict' => ["'string'", "new \\App\\Rules\\InDict('{$this->argument}')"],
             default => [],
         };
 
@@ -235,7 +218,7 @@ class Field
         return match ($this->type) {
             'string' => "['nullable', 'string', 'max:255']",
             'dict' => "['nullable', 'string', 'max:64']",
-            'status' => "['nullable', Rule::enum(Status::class)]",
+            'status' => "['nullable', \\Illuminate\\Validation\\Rule::enum(\\App\\Enums\\Status::class)]",
             'integer', 'foreign' => "['nullable', 'integer']",
             'boolean' => "['nullable', 'boolean']",
             'date' => "['nullable', 'date']",
@@ -251,11 +234,11 @@ class Field
         $key = "\$filters['{$this->name}']";
 
         return match ($this->type) {
-            'string' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->whereLike('{$this->name}', \"%{\$value}%\"));",
-            'dict', 'status' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->where('{$this->name}', \$value));",
-            'integer', 'foreign' => "\$query->when({$key} ?? null, fn (Builder \$q, int|string \$value) => \$q->where('{$this->name}', \$value));",
-            'boolean' => "\$query->when(isset({$key}), fn (Builder \$q) => \$q->where('{$this->name}', filter_var({$key}, FILTER_VALIDATE_BOOLEAN)));",
-            'date' => "\$query->when({$key} ?? null, fn (Builder \$q, string \$value) => \$q->whereDate('{$this->name}', \$this->asAppDateTime(\$value)));",
+            'string' => "\$query->when({$key} ?? null, fn (\\Illuminate\\Database\\Eloquent\\Builder \$q, string \$value) => \$q->whereLike('{$this->name}', \"%{\$value}%\"));",
+            'dict', 'status' => "\$query->when({$key} ?? null, fn (\\Illuminate\\Database\\Eloquent\\Builder \$q, string \$value) => \$q->where('{$this->name}', \$value));",
+            'integer', 'foreign' => "\$query->when({$key} ?? null, fn (\\Illuminate\\Database\\Eloquent\\Builder \$q, int|string \$value) => \$q->where('{$this->name}', \$value));",
+            'boolean' => "\$query->when(isset({$key}), fn (\\Illuminate\\Database\\Eloquent\\Builder \$q) => \$q->where('{$this->name}', filter_var({$key}, FILTER_VALIDATE_BOOLEAN)));",
+            'date' => "\$query->when({$key} ?? null, fn (\\Illuminate\\Database\\Eloquent\\Builder \$q, string \$value) => \$q->whereDate('{$this->name}', \$this->asAppDateTime(\$value)));",
             default => null,
         };
     }
@@ -273,8 +256,8 @@ class Field
             'date' => 'fake()->date()',
             'datetime' => 'fake()->dateTime()',
             'json' => '[]',
-            'status' => 'Status::Active',
-            'foreign' => $this->relatedModel().'::factory()',
+            'status' => '\\App\\Enums\\Status::Active',
+            'foreign' => $this->relatedClass().'::factory()',
             'dict' => 'fake()->word()',
             default => 'null',
         };
@@ -314,7 +297,7 @@ class Field
             'datetime' => "'2026-01-01T08:00:00+00:00'",
             'json' => "['key' => 'value']",
             'status' => "'active'",
-            'foreign' => $this->relatedModel().'::factory()->create()->id',
+            'foreign' => $this->relatedClass().'::factory()->create()->id',
             'dict' => "'sample'",
             default => 'null',
         };

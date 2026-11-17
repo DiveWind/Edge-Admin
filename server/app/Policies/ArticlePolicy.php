@@ -2,8 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\Article;
-use App\Models\User;
+use App\Models\{Article, User};
 
 /**
  * 文章单条读写受数据权限约束，与列表的 visibleTo() 规则一致。

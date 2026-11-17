@@ -3,15 +3,13 @@
 namespace App\Http\Controllers\Api\Content;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Content\ArticleIndexRequest;
-use App\Http\Requests\Content\ArticleRequest;
+use App\Http\Requests\Content\{ArticleIndexRequest, ArticleRequest};
 use App\Http\Resources\ArticleResource;
-use App\Models\Article;
-use App\Models\User;
+use App\Models\{Article, User};
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
  * 业务模块范本：列表用 visibleTo() 过滤，单条读写用 Policy 判定数据权限。
@@ -23,6 +21,7 @@ class ArticleController extends Controller
      */
     protected array $relations = ['category', 'author', 'department'];
 
+    #[Authorize('content.article.view')]
     public function index(ArticleIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
         $query = Article::query()
@@ -33,6 +32,7 @@ class ArticleController extends Controller
         return ArticleResource::collection($request->applySort($query)->paginate($request->perPage())->withQueryString());
     }
 
+    #[Authorize('content.article.create')]
     public function store(ArticleRequest $request): ArticleResource
     {
         $article = Article::query()->create($request->validated());
@@ -40,13 +40,15 @@ class ArticleController extends Controller
         return new ArticleResource($article->load($this->relations));
     }
 
+    #[Authorize('content.article.view')]
+    #[Authorize('view', 'article')]
     public function show(Article $article): ArticleResource
     {
-        Gate::authorize('view', $article);
-
         return new ArticleResource($article->load($this->relations));
     }
 
+    #[Authorize('content.article.update')]
+    #[Authorize('update', 'article')]
     public function update(ArticleRequest $request, Article $article): ArticleResource
     {
         $article->update($request->validated());
@@ -54,10 +56,10 @@ class ArticleController extends Controller
         return new ArticleResource($article->load($this->relations));
     }
 
+    #[Authorize('content.article.delete')]
+    #[Authorize('delete', 'article')]
     public function destroy(Article $article): Response
     {
-        Gate::authorize('delete', $article);
-
         $article->delete();
 
         return response()->noContent();

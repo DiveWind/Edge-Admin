@@ -3,8 +3,7 @@
 namespace App\Actions\System;
 
 use App\Models\Attachment;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\{DB, Storage};
 
 /**
  * 删除附件记录及其物理文件（记录删除提交后再删文件，避免事务回滚后文件已丢失）。
