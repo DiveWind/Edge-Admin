@@ -211,9 +211,10 @@ test('it orchestrates the make commands into a complete backend and frontend mod
         ->toContain("'category_id' => ['required', 'integer', Rule::exists('article_categories', 'id')],")
         ->toContain("'source' => ['required', 'string', new InDict('article_source')],")
         ->toContain("'level' => ['required', 'string', 'max:255', 'in:low,high'],")
+        ->toContain("'starts_on' => ['nullable', Rule::date()],")
         ->toContain('use App\Rules\InDict;')
         ->not->toContain('function authorize(');
-    expect($files['server/app/Http/Requests/Crm/TicketIndexRequest.php'])->toContain("protected array \$sortable = ['id', 'price', 'quantity', 'starts_on', 'published_at', 'created_at'];");
+    expect($files['server/app/Http/Requests/Crm/TicketIndexRequest.php'])->toContain("'starts_on' => ['nullable', Rule::date()],")->toContain("protected array \$sortable = ['id', 'price', 'quantity', 'starts_on', 'published_at', 'created_at'];");
     expect($files['server/app/Http/Resources/TicketResource.php'])
         ->toContain('@mixin Ticket')
         ->toContain("'id' => \$this->id,")

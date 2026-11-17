@@ -29,6 +29,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // 同一个异常实例只上报一次（如被 rescue() 上报后又被重新抛出）。
+        $exceptions->dontReportDuplicates();
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

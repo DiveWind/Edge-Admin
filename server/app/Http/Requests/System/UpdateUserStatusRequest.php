@@ -9,6 +9,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
 
 class UpdateUserStatusRequest extends FormRequest
 {
@@ -17,7 +18,7 @@ class UpdateUserStatusRequest extends FormRequest
      */
     public function authorize(): Response
     {
-        return Gate::inspect('updateStatus', [$this->route('user'), $this->string('status')->toString()]);
+        return Gate::inspect('updateStatus', [$this->route('user'), $this->enum('status', Status::class)]);
     }
 
     /**
@@ -31,11 +32,7 @@ class UpdateUserStatusRequest extends FormRequest
         $user = $this->route('user');
 
         return [
-            'status' => [
-                'required',
-                Rule::enum(Status::class),
-                ...($user->isRoot() ? [Rule::in([Status::Active->value])] : []),
-            ],
+            'status' => ['required', Rule::enum(Status::class)->when($user->isRoot(), fn (Enum $rule): Enum => $rule->only(Status::Active))],
         ];
     }
 
@@ -45,7 +42,7 @@ class UpdateUserStatusRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'status.in' => __('validation.custom.status.root_user'),
+            'status.enum' => __('validation.custom.status.root_user'),
         ];
     }
 }

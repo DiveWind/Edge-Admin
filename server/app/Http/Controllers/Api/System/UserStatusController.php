@@ -18,7 +18,7 @@ class UserStatusController extends Controller
     #[Authorize('system.user.update')]
     public function update(UpdateUserStatusRequest $request, User $user, UpdateUserStatus $updateUserStatus): UserResource
     {
-        $updateUserStatus->handle($user, $request->enum('status', Status::class) ?? Status::Active);
+        $updateUserStatus->handle($user, $request->enum('status', Status::class, Status::Active));
 
         return new UserResource($user->load(['department', 'roles', 'positions']));
     }

@@ -63,3 +63,14 @@ test('task logs can be listed', function () {
     $this->getJson('/api/scheduled-task-logs?status=failed')->assertOk()->assertJsonCount(1, 'data');
     $this->getJson('/api/scheduled-task-logs?task=sanctum')->assertOk()->assertJsonCount(1, 'data');
 });
+
+test('running the same task again while it is still queued does not queue a duplicate', function () {
+    Queue::fake();
+    actingAsUser(superAdmin());
+
+    $this->postJson('/api/scheduled-tasks/model-prune/run')->assertAccepted();
+    $this->postJson('/api/scheduled-tasks/model-prune/run')->assertAccepted();
+    $this->postJson('/api/scheduled-tasks/sanctum-prune-expired-hours-24/run')->assertAccepted();
+
+    Queue::assertPushed(RunScheduledTask::class, 2);
+});

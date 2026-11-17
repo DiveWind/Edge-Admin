@@ -195,7 +195,7 @@ class Field
             'integer' => ["'integer'"],
             'decimal' => ["'numeric'"],
             'boolean' => ["'boolean'"],
-            'date', 'datetime' => ["'date'"],
+            'date', 'datetime' => ['\\Illuminate\\Validation\\Rule::date()'],
             'json' => ["'array'"],
             'status' => ['\\Illuminate\\Validation\\Rule::enum(\\App\\Enums\\Status::class)'],
             'foreign' => ["'integer'", "\\Illuminate\\Validation\\Rule::exists('{$this->argument}', 'id')"],
@@ -221,7 +221,7 @@ class Field
             'status' => "['nullable', \\Illuminate\\Validation\\Rule::enum(\\App\\Enums\\Status::class)]",
             'integer', 'foreign' => "['nullable', 'integer']",
             'boolean' => "['nullable', 'boolean']",
-            'date' => "['nullable', 'date']",
+            'date' => "['nullable', \\Illuminate\\Validation\\Rule::date()]",
             default => null,
         };
     }

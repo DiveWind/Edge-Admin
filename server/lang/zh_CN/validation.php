@@ -40,6 +40,7 @@ return [
         'uncompromised' => ':attribute 已出现在数据泄露中，请更换。',
     ],
     'present' => ':attribute 必须存在。',
+    'prohibited' => ':attribute 字段不允许提交。',
     'regex' => ':attribute 格式不正确。',
     'required' => ':attribute 不能为空。',
     'string' => ':attribute 必须是字符串。',

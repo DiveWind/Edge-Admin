@@ -14,8 +14,8 @@ class LoginLogIndexRequest extends ListRequest
             'username' => ['nullable', 'string', 'max:64'],
             'ip' => ['nullable', 'string', 'max:45'],
             'status' => ['nullable', Rule::enum(LoginStatus::class)],
-            'created_from' => ['nullable', 'date'],
-            'created_to' => ['nullable', 'date', 'after_or_equal:created_from'],
+            'created_from' => ['nullable', Rule::date()],
+            'created_to' => ['nullable', Rule::date()->afterOrEqual('created_from')],
         ];
     }
 }

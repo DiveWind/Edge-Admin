@@ -3,6 +3,7 @@
 namespace App\Http\Requests\System;
 
 use App\Http\Requests\ListRequest;
+use Illuminate\Validation\Rule;
 
 class AttachmentIndexRequest extends ListRequest
 {
@@ -14,8 +15,8 @@ class AttachmentIndexRequest extends ListRequest
             'name' => ['nullable', 'string', 'max:255'],
             'mime' => ['nullable', 'string', 'max:128'],
             'uploaded_by' => ['nullable', 'integer'],
-            'created_from' => ['nullable', 'date'],
-            'created_to' => ['nullable', 'date', 'after_or_equal:created_from'],
+            'created_from' => ['nullable', Rule::date()],
+            'created_to' => ['nullable', Rule::date()->afterOrEqual('created_from')],
         ];
     }
 }

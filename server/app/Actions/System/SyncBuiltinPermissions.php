@@ -6,6 +6,7 @@ use App\Enums\PermissionType;
 use App\Models\Permission;
 use App\Services\PermissionRegistry;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -57,22 +58,23 @@ class SyncBuiltinPermissions
     {
         foreach ($nodes as $index => $node) {
             /** @var list<array<string, mixed>> $children */
-            $children = $node['children'] ?? [];
-            $type = PermissionType::from((string) ($node['type'] ?? ($children !== [] ? PermissionType::Directory->value : PermissionType::Menu->value)));
+            $children = Arr::array($node, 'children', []);
+            $type = PermissionType::from(Arr::string($node, 'type', $children !== [] ? PermissionType::Directory->value : PermissionType::Menu->value));
 
+            // Arr::string() / boolean() 在配置值类型不对时直接抛异常，配置写错不会被静默转换后写库。
             $permission = $this->upsert($existing, $declared, $result, [
-                'code' => (string) $node['code'],
-                'name' => (string) $node['name'],
+                'code' => Arr::string($node, 'code'),
+                'name' => Arr::string($node, 'name'),
                 'type' => $type,
-                'path' => isset($node['path']) ? (string) $node['path'] : null,
-                'icon' => isset($node['icon']) ? (string) $node['icon'] : null,
-                'is_external' => (bool) ($node['external'] ?? false),
-                'is_visible' => (bool) ($node['visible'] ?? true),
+                'path' => isset($node['path']) ? Arr::string($node, 'path') : null,
+                'icon' => isset($node['icon']) ? Arr::string($node, 'icon') : null,
+                'is_external' => Arr::boolean($node, 'external', false),
+                'is_visible' => Arr::boolean($node, 'visible', true),
                 'sort' => $index,
             ], $parent);
 
             /** @var array<string, string> $actions */
-            $actions = $node['actions'] ?? [];
+            $actions = Arr::array($node, 'actions', []);
 
             foreach (array_keys($actions) as $actionIndex => $action) {
                 $this->upsert($existing, $declared, $result, [

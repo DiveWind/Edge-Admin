@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
 /**
- * 记录级授权（功能权限由路由上的 can:system.user.* 判定）。
+ * 记录级授权（功能权限由控制器动作上的 #[Authorize('system.user.*')] 判定）。
  */
 class UserPolicy
 {
@@ -33,9 +33,9 @@ class UserPolicy
     /**
      * 启用 / 禁用：不能禁用自己；id=1 的保护由 Form Request 校验（422）。
      */
-    public function updateStatus(User $actor, User $user, string $status): Response
+    public function updateStatus(User $actor, User $user, ?Status $status): Response
     {
-        if ($actor->is($user) && $status === Status::Disabled->value) {
+        if ($actor->is($user) && $status === Status::Disabled) {
             return Response::deny(__('policy.user.disable_self'));
         }
 

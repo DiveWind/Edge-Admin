@@ -49,7 +49,7 @@ class RecordOperationLog
             'user_id' => $user->getKey(),
             'request_id' => Context::get('request_id'),
             'method' => $request->method(),
-            'path' => '/'.ltrim($request->path(), '/'),
+            'path' => Str::start($request->path(), '/'),
             'route_name' => $routeName,
             'summary' => $this->summary($routeName),
             'ip' => $request->ip(),

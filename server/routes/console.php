@@ -13,20 +13,29 @@ use Illuminate\Support\Facades\Schedule;
 |
 */
 
-Schedule::command('model:prune')
-    ->dailyAt('02:00')
-    ->description('清理超过保留天数的登录日志、操作日志与任务日志')
-    ->withoutOverlapping()
-    ->storeOutput();
+/*
+ * 共同属性用 Schedule 分组声明：
+ * - withoutOverlapping()：上一次未结束时跳过本次；
+ * - onOneServer()：多台服务器同时运行 schedule:run 时只有一台执行（依赖共享缓存锁，默认的 database 缓存即可）。
+ */
+Schedule::withoutOverlapping()->onOneServer()->group(function (): void {
+    Schedule::command('model:prune')
+        ->dailyAt('02:00')
+        ->description('清理超过保留天数的登录日志、操作日志与任务日志')
+        ->storeOutput();
 
-Schedule::command('sanctum:prune-expired --hours=24')
-    ->dailyAt('03:00')
-    ->description('清理过期超过 24 小时的访问令牌')
-    ->withoutOverlapping()
-    ->storeOutput();
+    Schedule::command('sanctum:prune-expired --hours=24')
+        ->dailyAt('03:00')
+        ->description('清理过期超过 24 小时的访问令牌')
+        ->storeOutput();
 
-Schedule::command('queue:prune-failed --hours=168')
-    ->weeklyOn(1, '03:30')
-    ->description('清理 7 天前的失败队列任务')
-    ->withoutOverlapping()
-    ->storeOutput();
+    Schedule::command('queue:prune-failed --hours=168')
+        ->weeklyOn(1, '03:30')
+        ->description('清理 7 天前的失败队列任务')
+        ->storeOutput();
+
+    Schedule::command('queue:prune-batches --hours=168 --unfinished=168')
+        ->dailyAt('03:15')
+        ->description('清理 7 天前的队列批处理记录（公告群发）')
+        ->storeOutput();
+});

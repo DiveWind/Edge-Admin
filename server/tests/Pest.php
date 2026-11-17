@@ -2,7 +2,8 @@
 
 use App\Enums\{DataScope, PermissionType};
 use App\Models\{Permission, Role, User};
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -24,8 +25,13 @@ use Tests\TestCase;
 |--------------------------------------------------------------------------
 */
 
+/*
+ * LazilyRefreshDatabase：只在测试第一次访问数据库时才迁移（生成器、路由等不碰库的测试不再付迁移开销）；
+ * Http::preventStrayRequests()：后端没有外部 HTTP 依赖，任何未 fake 的出站请求都视为错误。
+ */
 pest()->extend(TestCase::class)
-    ->use(RefreshDatabase::class)
+    ->use(LazilyRefreshDatabase::class)
+    ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Feature');
 
 /*

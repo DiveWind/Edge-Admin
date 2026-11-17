@@ -1,9 +1,10 @@
 <?php
 
-use App\Jobs\SendAnnouncementNotifications;
+use App\Jobs\{SendAnnouncementNotificationChunk, SendAnnouncementNotifications};
 use App\Models\{Announcement, User};
 use App\Notifications\AnnouncementPublished;
-use Illuminate\Support\Facades\{Notification, Queue};
+use Illuminate\Bus\PendingBatch;
+use Illuminate\Support\Facades\{Bus, Notification, Queue};
 
 beforeEach(function () {
     $this->admin = actingAsUser(superAdmin());
@@ -54,4 +55,31 @@ test('published announcements cannot be edited or published again', function () 
     $this->putJson("/api/announcements/{$announcement->id}", ['title' => 'x', 'content' => 'x', 'type' => 'notice'])
         ->assertForbidden();
     $this->postJson("/api/announcements/{$announcement->id}/publish")->assertForbidden();
+});
+
+test('notifications are sent as a batch with one job per chunk of active users', function () {
+    Bus::fake();
+    User::factory(2)->create();
+    User::factory()->disabled()->create();
+    $announcement = Announcement::factory()->create();
+
+    (new SendAnnouncementNotifications($announcement))->handle();
+
+    Bus::assertBatched(fn (PendingBatch $batch): bool => $batch->name === "announcement:{$announcement->id}"
+        && $batch->allowsFailures()
+        && $batch->jobs->count() === 1
+        && $batch->jobs->first() instanceof SendAnnouncementNotificationChunk
+        && count($batch->jobs->first()->userIds) === 3);
+});
+
+test('a chunk skips users that were disabled after it was queued', function () {
+    Notification::fake();
+    [$active, $disabled] = User::factory(2)->create();
+    $announcement = Announcement::factory()->create();
+    $disabled->update(['status' => 'disabled']);
+
+    (new SendAnnouncementNotificationChunk($announcement, [$active->id, $disabled->id]))->handle();
+
+    Notification::assertSentTo($active, AnnouncementPublished::class);
+    Notification::assertNotSentTo($disabled, AnnouncementPublished::class);
 });

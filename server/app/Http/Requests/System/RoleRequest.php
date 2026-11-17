@@ -7,6 +7,7 @@ use App\Models\Role;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
 
 class RoleRequest extends FormRequest
 {
@@ -29,7 +30,7 @@ class RoleRequest extends FormRequest
             ],
             'data_scope' => ['required', Rule::enum(DataScope::class)],
             'sort' => ['sometimes', 'integer', 'min:0'],
-            'status' => ['required', Rule::enum(Status::class), ...($protected ? [Rule::in([Status::Active->value])] : [])],
+            'status' => ['required', Rule::enum(Status::class)->when($protected, fn (Enum $rule): Enum => $rule->only(Status::Active))],
             'remark' => ['nullable', 'string', 'max:255'],
             'permission_ids' => ['present', 'array'],
             'permission_ids.*' => ['integer', 'distinct', Rule::exists('permissions', 'id')],
