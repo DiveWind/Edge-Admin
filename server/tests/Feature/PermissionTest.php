@@ -32,7 +32,9 @@ test('the menu tree can be filtered and contains the menu fields', function () {
             'id', 'parent_id', 'name', 'code', 'type', 'path', 'icon', 'is_external', 'is_visible', 'status', 'is_system', 'sort', 'remark', 'children',
         ]]]);
 
-    $this->getJson('/api/permissions?type=directory')->assertOk()->assertJsonCount(4, 'data');
+    $directories = collect(config('permissions'))->where('type', 'directory')->count();
+
+    $this->getJson('/api/permissions?type=directory')->assertOk()->assertJsonCount($directories, 'data');
     $this->getJson('/api/permissions?code=system.user.re')->assertOk()->assertJsonPath('data.0.code', 'system.user.reset-password');
     $this->getJson('/api/permissions?type=folder')->assertUnprocessable()->assertJsonValidationErrors('type');
 });

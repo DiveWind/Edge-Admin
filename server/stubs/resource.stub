@@ -8,16 +8,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class {{ class }} extends JsonResource
 {
     /**
-     * Transform the resource into an array.
+     * Transform the resource into an array（字段 snake_case，时间用 ?->toIso8601String() 输出带偏移的 ISO 8601）.
      *
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
-            'created_at' => $this->created_at?->toIso8601String(),
-            'updated_at' => $this->updated_at?->toIso8601String(),
+            //
         ];
     }
 }

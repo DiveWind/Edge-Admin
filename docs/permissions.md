@@ -1,6 +1,6 @@
 # 权限：功能权限与数据权限
 
-Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依赖第三方权限包。权限码清单与接口见 [architecture.md §3](architecture.md#3-权限模型)。
+Edge Admin 只使用 Laravel 原生的 Gate / Policy 与官方授权中间件（以控制器 Attribute `#[Authorize]` 声明），不依赖第三方权限包。权限码清单与接口见 [architecture.md §3](architecture.md#3-权限模型)。
 
 ## 1. 功能权限与动态菜单
 
@@ -63,7 +63,7 @@ Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依
 | 停用（`status = disabled`） | 不显示 | 该节点**及全部后代**的权限码对所有人（含超级管理员）失效，不出现在 `/api/auth/me` 与授权树中 | 403 |
 
 包含 `system.permission.view` / `.update` 的节点（菜单管理及其祖先目录）不能停用，避免把所有人锁在菜单管理之外。
-停用节点的角色授权会保留，重新启用后立即恢复。权限判定每个请求只查询一次 `permissions` 表（`App\Services\PermissionRegistry`，节点变更由模型事件清除）。
+停用节点的角色授权会保留，重新启用后立即恢复。权限判定每个请求只查询一次 `permissions` 表（`App\Services\PermissionRegistry`，节点变更由 `PermissionObserver` 清除）。
 
 ### 1.3 新增一个页面（完整流程）
 
@@ -71,7 +71,7 @@ Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依
    页面组件是编译期确定的，菜单只能指向已有的静态路由（或外链）。
 2. **声明菜单**（二选一）：
    - 内置：在 `config/permissions.php` 加菜单节点（`path` = 静态路由路径、`icon`、`actions`），执行 `php artisan permission:sync`；
-     接口用操作权限码挂 `can:` 中间件。随代码发布，适合业务模块（代码生成器即这样做）；
+     接口在控制器动作上用 `#[Authorize('<操作码>')]` 声明。随代码发布，适合业务模块（代码生成器即这样做）；
    - 自定义：在「系统管理 → 菜单管理」新建菜单（路由地址填静态路由路径）及其下的按钮。适合外链、调整菜单结构或复用已有页面。
 3. **授权给角色**：在「角色管理」勾选目录 / 菜单（菜单显示）与操作（接口 / 按钮）。超级管理员自动拥有全部。
 
@@ -80,14 +80,26 @@ Edge Admin 只使用 Laravel 原生的 Gate / Policy / `can:` 中间件，不依
 ### 1.4 使用
 
 ```php
-// 路由：官方 can 中间件
-Route::get('system-info', SystemInfoController::class)->middleware('can:monitor.system-info.view');
+// 路由文件只描述结构
+Route::apiResources(['articles' => ArticleController::class]);
+Route::get('system-info', SystemInfoController::class)->name('system-info');
 
-Route::apiResource('articles', ArticleController::class)
-    ->middlewareFor(['index', 'show'], 'can:content.article.view')
-    ->middlewareFor('store', 'can:content.article.create')
-    ->middlewareFor('update', 'can:content.article.update')
-    ->middlewareFor('destroy', 'can:content.article.delete');
+// 功能权限声明在控制器动作上（官方 Illuminate\Routing\Attributes\Controllers\Authorize，等价于 can:<权限码> 中间件）
+class ArticleController extends Controller
+{
+    #[Authorize('content.article.view')]
+    public function index(ArticleIndexRequest $request): AnonymousResourceCollection { /* ... */ }
+
+    #[Authorize('content.article.delete')]
+    #[Authorize('delete', 'article')]          // 记录级：Policy::delete($user, 路由参数 article)
+    public function destroy(Article $article): Response { /* ... */ }
+}
+
+class SystemInfoController extends Controller
+{
+    #[Authorize('monitor.system-info.view')]
+    public function __invoke(SystemInfo $systemInfo): JsonResponse { /* ... */ }
+}
 
 // 代码中
 $user->can('content.article.update');
@@ -96,6 +108,11 @@ $user->hasPermission('content.article.update');
 
 `AppServiceProvider` 中的 `Gate::before()`：ability 含 `.` 视为权限码，用户拥有即放行（超级管理员拥有全部未停用的权限码）；
 不含 `.` 的 ability（`view`、`update`、`delete`…）返回 `null` 交给 Policy，因此**超级管理员同样受记录级规则约束**（如不能删除自己）。
+
+**可发现性**：`php artisan route:list -v --path=api` 的中间件列显示每条路由的 `Authorize:<权限码>`（Attribute 声明的中间件与路由上声明的完全一样地
+出现在这里，路由缓存下同样生效）。`tests/Feature/RouteAuthorizationTest.php` 强制：`auth:sanctum` 下的每条路由**有且只有一个**功能权限
+（登录即可访问的路由在测试的 `LOGIN_ONLY_ROUTES` 中显式列出），且用到的权限码都已在 `config/permissions.php` 中声明；
+`tests/Arch/ConventionsTest.php` 禁止在 `routes/api.php` 中出现 `can:` / `middlewareFor()`。
 
 ### 1.5 角色与用户
 
@@ -119,8 +136,11 @@ class DictTypePolicy
 }
 ```
 
-- 删除类：控制器中 `Gate::authorize('delete', $model)`；
-- 编辑类：放在 Form Request 的 `authorize()` 中 `return Gate::inspect('update', $model);`，保证**先授权再校验**；
+- 在控制器动作上声明：`#[Authorize('delete', 'dict_type')]`（第二个参数是路由参数名，取到的是路由模型绑定后的模型）。
+  它是官方 `Authorize` 中间件，排在 `SubstituteBindings` 之后、控制器解析 Form Request 之前执行，因此编辑接口天然**先授权再校验**，
+  控制器与 Form Request 中都不需要 `Gate::authorize()` / `Gate::inspect()`（架构测试禁止控制器依赖 `Gate`）；
+- 例外：Policy 需要请求体中的值时（如 `updateStatus` 需要提交的 `status`），在 Form Request 的 `authorize()` 中
+  `return Gate::inspect('updateStatus', [$this->route('user'), $this->string('status')->toString()]);`；
 - 字段级约束（如 id=1 用户不可禁用）放在 Form Request，返回 422。
 
 ## 3. 数据权限

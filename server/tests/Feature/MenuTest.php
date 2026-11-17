@@ -36,7 +36,10 @@ test('the super admin sees every visible menu in sort order', function () {
 
     $menus = $this->getJson('/api/auth/menus')->assertOk()->json('data');
 
-    expect(array_column($menus, 'code'))->toBe(['content', 'dashboard', 'system', 'monitor', 'message'])
+    // 顶层节点按配置顺序（生成器新增的模块目录追加在末尾），content / dashboard 的 sort 已在上面对调
+    $expected = collect(config('permissions'))->pluck('code')->reject(fn (string $code): bool => in_array($code, ['content', 'dashboard'], true));
+
+    expect(array_column($menus, 'code'))->toBe(['content', 'dashboard', ...$expected->values()->all()])
         ->and(menuCodes($menus))->not->toContain('dashboard.view');
 });
 

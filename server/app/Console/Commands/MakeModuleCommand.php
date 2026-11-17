@@ -16,7 +16,8 @@ use RuntimeException;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-use function Laravel\Prompts\{multiselect, text};
+use function Laravel\Prompts\multiselect;
+use function Laravel\Prompts\text;
 
 /**
  * 业务模块生成器：编排官方 make 命令生成骨架（命名空间、路径、stub 解析全走官方逻辑，模板为 stubs/*.stub），
@@ -111,9 +112,12 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
         }
 
         $this->report();
-        $this->formatPhpFiles();
-        $this->formatWebFiles();
-        $this->nextSteps();
+
+        if ($this->artifacts !== [] || $this->changes !== []) {
+            $this->formatPhpFiles();
+            $this->formatWebFiles();
+            $this->nextSteps();
+        }
 
         return self::SUCCESS;
     }
@@ -176,7 +180,16 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
             ['command' => $command, 'arguments' => $arguments, 'path' => $path] = $artifact;
 
             $before = $command === 'make:migration' ? $this->migrations() : [];
-            $force = $artifact['action'] === 'overwrite' && $command !== 'make:migration' ? ['--force' => true] : [];
+            $force = [];
+
+            // 覆盖：支持 --force 的命令直接传；不支持的（make:factory）先删除旧文件；迁移见下方沿用原文件名
+            if ($artifact['action'] === 'overwrite' && $command !== 'make:migration') {
+                if ($this->getApplication()?->find($command)->getDefinition()->hasOption('force')) {
+                    $force = ['--force' => true];
+                } else {
+                    $this->files->delete($path);
+                }
+            }
 
             if ($this->callSilently($command, [...$arguments, ...$force, '--no-interaction' => true]) !== self::SUCCESS) {
                 throw new RuntimeException("{$command} 执行失败。");
@@ -215,15 +228,15 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
      */
     protected function migrations(): array
     {
-        return $this->files->glob(database_path('migrations/*.php'));
+        return array_values(array_map(strval(...), $this->files->glob(database_path('migrations/*.php'))));
     }
 
     protected function patchModel(SourceFile $file): SourceFile
     {
         $variables = $this->blueprint->variables();
         $traits = [
-            ...($this->blueprint->dataScope ? ['\App\Models\Concerns\HasDataScope'] : []),
-            ...($this->blueprint->softDeletes ? ['\Illuminate\Database\Eloquent\SoftDeletes'] : []),
+            ...($this->blueprint->dataScope ? ['App\Models\Concerns\HasDataScope'] : []),
+            ...($this->blueprint->softDeletes ? ['Illuminate\Database\Eloquent\SoftDeletes'] : []),
         ];
 
         $file->replace('#[Fillable([])]', "#[Fillable([{$variables['fillable']}])]", '#[Fillable([])]')
@@ -233,7 +246,9 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
             ], 'casts() 中的 // 占位行');
 
         if ($traits !== []) {
-            $file->replace('use HasFactory, StoresDatesInAppTimezone;', 'use HasFactory, StoresDatesInAppTimezone, '.implode(', ', $traits).';', 'trait 声明 use HasFactory, StoresDatesInAppTimezone;');
+            // trait 名不会被 Pint 自动导入，这里显式导入
+            $file->addImports($traits, 'use 导入')
+                ->replace('use HasFactory, StoresDatesInAppTimezone;', 'use HasFactory, StoresDatesInAppTimezone, '.implode(', ', array_map(class_basename(...), $traits)).';', 'trait 声明 use HasFactory, StoresDatesInAppTimezone;');
         }
 
         return $file->appendToClass(implode("\n", $this->fragments('relation'))."\n".$this->stubs->render('model_filter', $variables, $this->blueprint->fields), 'filter() 作用域与关联');
@@ -298,10 +313,13 @@ class MakeModuleCommand extends Command implements PromptsForMissingInput
     protected function patchResource(SourceFile $file): SourceFile
     {
         return $file->addClassDocTag("@mixin \\App\\Models\\{$this->blueprint->class}")
-            ->insertAfter("'id' => \$this->id,", [
+            ->fill('function toArray(', [
+                "            'id' => \$this->id,",
                 ...$this->fragments('resource'),
                 ...($this->blueprint->dataScope ? ["            'department_id' => \$this->department_id,", "            'created_by' => \$this->created_by,"] : []),
-            ], "'id' => \$this->id,");
+                "            'created_at' => \$this->created_at?->toIso8601String(),",
+                "            'updated_at' => \$this->updated_at?->toIso8601String(),",
+            ], 'toArray() 中的 // 占位行');
     }
 
     /**

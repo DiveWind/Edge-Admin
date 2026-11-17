@@ -45,6 +45,8 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
   → 中文，`en-US` / `en` → 英文；未携带或不支持时使用后端 `APP_LOCALE`（默认 `zh_CN`）。响应头 `Content-Language`
   返回实际语言（`zh-CN` / `en`）。**前端应按当前界面语言显式发送该请求头**（浏览器默认的 Accept-Language 可能与界面语言不一致）。
   字典项 `label`、系统参数、权限点 / 菜单的 `name` 等**数据**不做多语言，菜单与权限点名称由前端按 `code` 做 i18n 展示（`name` 为中文兜底；管理员改过名称的节点直接显示 `name`）。
+- **请求 ID**：每个 `/api/*` 响应带 `X-Request-Id` 响应头（UUID）；请求头携带合法 UUID 的 `X-Request-Id` 时沿用该值，否则由后端生成。
+  同一请求的服务端日志、派发的队列任务与操作日志（`request_id` 字段）都带有它，便于排查。
 - **限流**：全部 `/api/*` 每分钟 120 次（`EDGE_API_RATE_LIMIT`，已登录按用户、未登录按 IP），登录接口另有独立限流（见 5.1）。
 - **时间**：输出的时间字段一律为带时区偏移的 ISO 8601（如 `2026-01-01T08:00:00+08:00`，时区由 `APP_TIMEZONE` 决定，默认 `Asia/Shanghai`）。
   输入的日期时间（表单字段、`created_from` / `created_to` 等过滤参数）：
@@ -71,7 +73,7 @@ Edge Admin 是一个 RBAC 中后台脚手架：后端 Laravel（`server/`），�
   **停用**（`status=disabled`）：该节点及其全部后代的权限码**对所有人（含超级管理员）不生效**——不出现在 `/api/auth/me` 的 `permissions`、
   `/api/auth/menus` 与授权树中，接口返回 403。包含 `system.permission.view` / `.update` 的节点（及其祖先）不可停用（422），避免锁死菜单管理。
 - 权限码格式 `模块.资源.操作`，如 `system.user.view`；不含 `.` 的 ability 视为 Policy 方法名。
-- 后端用 Laravel 原生 Gate：`Gate::before` 中判定；路由用官方 `can:<code>` 中间件。
+- 后端用 Laravel 原生 Gate：`Gate::before` 中判定；接口的功能权限用官方授权中间件，在控制器动作上以 `#[Authorize('<code>')]` 声明（`route:list -v` 中显示为 `Authorize:<code>`）。
   记录级规则（数据权限、受保护对象等）由 Policy 判定，超级管理员同样受其约束（例如不能删除自己）。
 - 角色 `code = super-admin` 为超级管理员，拥有全部（未停用的）权限且不可删除/禁用/改码；`id=1` 的用户同理受保护。
 - 被禁用的角色不生效；被禁用的用户无法登录，已有 token 立即失效。
@@ -264,7 +266,7 @@ Attachment：
 |---|---|---|---|
 | GET | `/api/login-logs` | `monitor.login-log.view` | 过滤 username ip status created_from/to |
 | DELETE | `/api/login-logs/{id}` 、`/api/login-logs` | `.delete` | 单删 / 清空 |
-| GET | `/api/operation-logs[/{id}]` | `monitor.operation-log.view` | 过滤 username method path status_code created_from/to；含 user{id,name}；`payload` 恒为 JSON 对象（无内容时为 `{}`） |
+| GET | `/api/operation-logs[/{id}]` | `monitor.operation-log.view` | 过滤 username method path status_code created_from/to；含 user{id,name}、`request_id`（该请求的 `X-Request-Id`，可与服务端日志关联；历史记录为 null）；`payload` 恒为 JSON 对象（无内容时为 `{}`） |
 | DELETE | `/api/operation-logs/{id}` 、`/api/operation-logs` | `.delete` | 单删 / 清空 |
 | GET | `/api/scheduled-tasks` | `monitor.scheduled-task.view` | 读取 Laravel Schedule：`[{key, command, description, expression, next_run_at, last_log?}]`（不分页）；`key` 为命令的 slug（如 `model-prune`、`sanctum-prune-expired-hours-24`），`last_log` 为最近一条执行日志或 `null` |
 | POST | `/api/scheduled-tasks/{key}/run` | `.run` | 立即执行一次（入队），202 `{message}`；key 不存在 404 |

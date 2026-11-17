@@ -109,6 +109,32 @@ class SourceFile
     }
 
     /**
+     * 在最后一条顶层 use 导入之后添加导入（trait 等 Pint 不会自动导入的完整类名）；分组与排序由随后的 Pint 整理。
+     *
+     * @param  list<class-string|string>  $classes
+     */
+    public function addImports(array $classes, string $description): static
+    {
+        $missing = array_values(array_filter($classes, fn (string $class): bool => preg_match('/^use [^;]*\b'.preg_quote(class_basename($class), '/').'\b[^;]*;$/m', $this->contents) !== 1));
+
+        if ($missing === []) {
+            return $this;
+        }
+
+        preg_match_all('/^use [^;]+;$/m', $this->contents, $matches, PREG_OFFSET_CAPTURE);
+        $last = array_pop($matches[0]);
+
+        if ($last === null) {
+            return $this->miss($description, implode("\n", array_map(fn (string $class): string => "use {$class};", $missing)));
+        }
+
+        [$line, $offset] = $last;
+        $this->contents = substr_replace($this->contents, implode('', array_map(fn (string $class): string => "\nuse {$class};", $missing)), $offset + strlen($line), 0);
+
+        return $this;
+    }
+
+    /**
      * 追加到类体末尾（最后一个 `}` 之前）。
      */
     public function appendToClass(string $code, string $description): static

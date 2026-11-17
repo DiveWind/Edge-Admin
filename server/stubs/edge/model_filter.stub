@@ -1,0 +1,12 @@
+
+    /**
+     * 列表过滤（{{ class }}IndexRequest::filterRules() 中声明的字段）。
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @param  array<string, mixed>  $filters
+     */
+    #[\Illuminate\Database\Eloquent\Attributes\Scope]
+    protected function filter(\Illuminate\Database\Eloquent\Builder $query, array $filters): void
+    {
+{{ fields.filter_scope }}
+    }

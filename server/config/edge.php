@@ -124,17 +124,13 @@ return [
     | Module Generator
     |--------------------------------------------------------------------------
     |
-    | `php artisan edge:make-module` 的配置。
-    | stub_paths：按顺序查找模板的目录，前面的优先（可在前面追加自己的目录覆盖个别模板）。
-    | base_path：后端代码的写入根目录，null 为项目根目录（测试中指向临时目录）。
+    | `php artisan edge:make-module` 的配置（后端文件由官方 make 命令按 stubs/*.stub 生成，模块模板在 stubs/edge）。
     | web_path：前端工程目录，不存在时自动跳过前端代码生成。
     | web_locales：前端语言包目录（src/locales/<locale>）。
     |
     */
 
     'generator' => [
-        'stub_paths' => [base_path('stubs/edge')],
-        'base_path' => null,
         'web_path' => env('EDGE_GENERATOR_WEB_PATH', base_path('../web')),
         'web_locales' => ['zh-CN', 'en-US'],
     ],

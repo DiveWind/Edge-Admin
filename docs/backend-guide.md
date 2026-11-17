@@ -7,7 +7,7 @@
 ## 1. 基本原则
 
 - 只用 Laravel 官方能力与官方包（Sanctum、原生 Gate / Policy、Form Request、API Resource、队列、调度、通知），**原则上不新增依赖**。
-- 文件一律用 `php artisan make:*` 生成（`make:class` 用于 Action / Service），目录保持 Laravel 默认结构。
+- 文件一律用 `php artisan make:*` 生成（`make:class` 用于 Action / Service；`stubs/*.stub` 是按本规范定制的官方模板），生成后 `composer format`；目录保持 Laravel 默认结构。
 - 不使用 `declare(strict_types=1)`；完整的参数 / 返回类型与 PHPDoc 泛型、数组形状；Larastan level 8 零错误，不加 baseline / ignore。
 - 数据库无关：不写方言 SQL，模糊匹配 `whereLike()`，按日期 `whereDate()`，分组统计可在 PHP 侧完成。
 - 用户可见文案放 `lang/zh_CN/*.php` 并同步 `lang/en`；可配置项放 `config/edge.php` 并在 `.env.example` 中给出 `EDGE_*`。
@@ -16,13 +16,14 @@
 
 | 层 | 位置 | 职责 | 不应该做 |
 |---|---|---|---|
-| 路由 | `routes/api.php` | 声明 URL、路由名（= 操作日志摘要键）、功能权限 `can:<权限码>` | 写业务逻辑 |
-| Form Request | `app/Http/Requests/<模块>/` | 字段校验（422）；编辑类接口在 `authorize()` 中 `Gate::inspect()` 做记录级授权，保证先授权后校验 | 写入数据、调用外部服务 |
-| Controller | `app/Http/Controllers/Api/<模块>/` | 授权 → 调用 Action 或**单表** Eloquent → 返回 Resource | 事务、多步写入、派发 Job、发通知、操作文件 / 缓存（架构测试禁止依赖 `DB` `Storage` `Cache` `Artisan` `Bus` `Queue` `Notification` facade 与 `App\Jobs` `App\Notifications`） |
+| 路由 | `routes/api.php` | 声明 URL 结构与路由名（= 操作日志摘要键）：`Route::apiResources()`、`->only()`、`->parameters()` | 写业务逻辑、声明权限（权限在控制器动作上） |
+| Form Request | `app/Http/Requests/<模块>/` | 字段校验（422）；仅当 Policy 需要请求体中的值时在 `authorize()` 中 `Gate::inspect()` | 写入数据、调用外部服务、重复控制器上已声明的授权 |
+| Controller | `app/Http/Controllers/Api/<模块>/` | 动作上 `#[Authorize('<权限码>')]` / `#[Authorize('<policy 方法>', '<路由参数>')]` 声明授权 → 调用 Action 或**单表** Eloquent → 返回 Resource | 事务、多步写入、派发 Job、发通知、操作文件 / 缓存（架构测试禁止依赖 `DB` `Storage` `Cache` `Artisan` `Bus` `Queue` `Notification` `Gate` facade 与 `App\Jobs` `App\Notifications`） |
 | Action | `app/Actions/<模块>/` | 一个写操作用例，单一 `handle()`，构造器注入依赖，**事务在 Action 内** | 依赖 HTTP 层（Request / Resource / `App\Http`） |
 | Service | `app/Services/` | 可复用的读取 / 计算 / 基础设施封装（字典、系统参数、统计、系统信息、数据权限解析、菜单权限树 `PermissionRegistry`） | 依赖 HTTP 层 |
-| Model | `app/Models/` | 表结构映射：`#[Fillable]`、`casts()`、关系、`#[Scope]`、与自身数据相关的小方法（如 `Role::syncAuthorizations()`） | 依赖 HTTP 层与 Action |
-| Policy | `app/Policies/` | 记录级规则：数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()`（403） | 功能权限判断（交给 `can:`）、写数据 |
+| Model | `app/Models/` | 表结构映射：Eloquent Attribute（`#[Fillable]` `#[ObservedBy]` …）、`casts()`、关系、`#[Scope]`、与自身数据相关的小方法（如 `Role::syncAuthorizations()`） | 依赖 HTTP 层与 Action；在 `booted()` 里写事件闭包（用 Observer） |
+| Observer | `app/Observers/` | 模型事件的副作用：缓存失效（`DictionaryObserver` `SettingObserver` `PermissionObserver`）、派生字段（`ArticleObserver` 填发布时间） | 多步业务写入（用 Action） |
+| Policy | `app/Policies/` | 记录级规则：数据权限、受保护对象、"有子项不可删"等，返回带 message 的 `Response::deny()`（403） | 功能权限判断（交给权限码 `#[Authorize]`）、写数据 |
 | Resource | `app/Http/Resources/` | 输出字段（snake_case），时间 `?->toIso8601String()`，关联用 `whenLoaded()` | 查询数据库（关联应在控制器预加载） |
 | Enum | `app/Enums/` | 字符串枚举（状态、类型），在 `casts()` 与 `Rule::enum()` 中使用 | — |
 | Rule | `app/Rules/` | 可复用的校验规则（如 `InDict`） | — |
@@ -36,8 +37,8 @@
    `QueueScheduledTask`）、读写文件（`StoreAttachment`、`DeleteAttachment`）、调用命令（`RetryFailedJob`）；
 3. 需要在 HTTP 之外复用（命令行、队列、测试中直接调用）。
 
-单表、无副作用的 CRUD（`Position::create($request->validated())`）**不必**包一层 Action。缓存失效这类"写后必然发生"的副作用由模型事件处理
-（字典、系统参数在 `booted()` 中清缓存），因此它们的 CRUD 仍是单表操作。
+单表、无副作用的 CRUD（`Position::create($request->validated())`）**不必**包一层 Action。缓存失效这类"写后必然发生"的副作用由 Observer 处理
+（`#[ObservedBy(DictionaryObserver::class)]` 等），因此它们的 CRUD 仍是单表操作。
 
 Action 约定：
 
@@ -115,8 +116,8 @@ return PositionResource::collection($request->applySort($query)->paginate($reque
 | 场景 | 状态码 | 做法 |
 |---|---|---|
 | 未登录 / token 失效 / 用户被禁用 | 401 | `auth:sanctum` + `active` 中间件 |
-| 无功能权限 | 403 | 路由 `can:<权限码>` |
-| 违反记录级业务规则 | 403 + `message` | Policy 返回 `Response::deny(__('policy.xxx'))`，控制器 `Gate::authorize()` 或 Form Request `authorize()` |
+| 无功能权限 | 403 | 控制器动作 `#[Authorize('<权限码>')]` |
+| 违反记录级业务规则 | 403 + `message` | Policy 返回 `Response::deny(__('policy.xxx'))`，控制器动作 `#[Authorize('delete', 'article')]`（需要请求体时在 Form Request `authorize()`） |
 | 字段级约束 | 422 + `errors` | Form Request 规则 / `after()` 钩子，文案放 `lang/*/validation.php` 的 `custom` |
 | 记录不存在 | 404 | 路由模型绑定 / `findOrFail()`；统一渲染为 `{message: "资源不存在。"}`，不暴露模型类名 |
 | 限流 | 429 | `throttle:api`（全局）；登录在 `LoginRequest::authenticate()` 中用 `RateLimiter` 只累计失败、成功清零，均带 `Retry-After` |
@@ -171,8 +172,83 @@ app(Settings::class)->integer('security.login_max_attempts', config()->integer('
 ## 9. 新增业务模块（清单）
 
 1. 先在 `docs/architecture.md` 写清接口、字段、权限码；
-2. `php artisan edge:make-module <Name> --module=<模块> --fields="..."`（或手工：`make:model -mf --policy` → `make:request` → `make:resource` →
-   `make:controller Api/<模块>/<Name>Controller --api` → `make:test --pest`）；
-3. 按本规范补充：多步写入 / 副作用 → Action；记录级规则 → Policy；Seeder；中文文案；
-4. `php artisan migrate && php artisan permission:sync`；
-5. `composer lint && composer analyse && composer test`。
+2. `php artisan edge:make-module <Name> --module=<模块> --fields="..."`（编排官方 make 命令，见 [generator.md](generator.md)）；
+   手工时使用同一组命令：`make:model <Name> -mf --policy` → `make:request <模块>/Store<Name>Request` → `make:index-request <模块>/<Name>IndexRequest` →
+   `make:resource` → `make:controller Api/<模块>/<Name>Controller --api --model=<Name>` → `make:test <Name>Test --pest`，再 `composer format`；
+3. 控制器动作加 `#[Authorize('<权限码>')]`，`routes/api.php` 的 `Route::apiResources()` 登记；
+4. 按本规范补充：多步写入 / 副作用 → Action；记录级规则 → Policy + `#[Authorize('<方法>', '<路由参数>')]`；Seeder；中文文案；
+5. `php artisan migrate && php artisan permission:sync`；
+6. `composer lint && composer analyse && composer test`。
+
+## 10. 现代 Laravel 写法约定
+
+同一类事情全项目只用一种写法。能机械检查的已由 Pint（`pint.json`）、Larastan 与 `tests/Arch/{ArchTest,ConventionsTest}.php`、
+`tests/Feature/RouteAuthorizationTest.php` 强制；表中"强制"列给出对应的检查。
+
+### 10.1 路由与授权
+
+| 场景 | 标准写法 | 反例 | 强制 |
+|---|---|---|---|
+| 导入 | `use App\Http\Controllers\Api\System\{RoleController, UserController};`（同命名空间一条语句） | 一行一个 `use` | Pint `group_import` + `ConventionsTest` |
+| 标准资源 | `Route::apiResources(['users' => UserController::class, ...])`；部分动作 `->only([...])`，参数名 `->parameters([...])` | 逐个 `Route::get/post/...` 拼 CRUD | — |
+| 功能权限 | 控制器动作上 `#[Authorize('system.user.view')]` | 路由上 `->middlewareFor(..., 'can:...')` / `->can()` | `ConventionsTest`（路由文件不得出现 `can:` `middlewareFor`）、`RouteAuthorizationTest`（每条受保护路由恰好一个权限码且已在 `config/permissions.php` 声明） |
+| 记录级授权 | 动作上 `#[Authorize('delete', 'article')]`（第二参数为路由参数名） | 控制器里 `Gate::authorize()`、Form Request 里 `Gate::inspect('update', ...)` | 架构测试禁止控制器依赖 `Gate` |
+| 需要请求体的 Policy | Form Request `authorize(): Response { return Gate::inspect('updateStatus', [$user, $status]); }` | — | — |
+| 登录即可访问 | 不加权限 Attribute，并把路由名加入 `RouteAuthorizationTest::LOGIN_ONLY_ROUTES` | 静默漏掉权限 | `RouteAuthorizationTest` |
+
+`#[Authorize]` 是官方中间件（`Illuminate\Auth\Middleware\Authorize`），`route:list -v` 中与路由声明的中间件一样显示为 `Authorize:<ability>`，路由缓存下同样生效；
+执行顺序为 `auth:sanctum` → `active` → `SubstituteBindings` → `Authorize` → 解析 Form Request（校验），因此"先授权再校验"不需要额外代码。
+
+### 10.2 模型
+
+| 场景 | 标准写法 | 反例 | 强制 |
+|---|---|---|---|
+| 可填充 / 隐藏 / 表名 / 时间戳 | `#[Fillable([...])]` `#[Hidden([...])]` `#[Table('...')]` `#[WithoutTimestamps]` | `protected $fillable` / `$hidden` / `$table` / `public $timestamps = false` | `ConventionsTest` |
+| 类型转换 | `protected function casts(): array`（枚举用 `Status::class`） | `protected $casts` | `ConventionsTest` |
+| 集合 / 作用域 | `#[CollectedBy(TreeCollection::class)]`、`#[Scope] protected function filter(Builder $query, array $filters): void` | `newCollection()` 覆盖、`scopeFilter()` | — |
+| 模型事件 | Observer + `#[ObservedBy(DictionaryObserver::class)]`，Observer 构造器注入服务 | `booted()` 中 `static::saved(fn () => app(...)->flush())` | — |
+| trait 初始化 | `#[Boot] public static function fillDataScopeOwnerOnCreating(): void`（名字说明用途） | 只靠 `bootHasDataScope()` 命名约定 | — |
+| 关系 | 返回类型 + 泛型 `@return BelongsTo<Department, $this>` | 无返回类型 | Larastan |
+
+### 10.3 请求、资源、控制器
+
+| 场景 | 标准写法 | 反例 |
+|---|---|---|
+| 当前用户 | 参数 `#[CurrentUser] User $user` | `$request->user()` / `auth()->user()` + 断言类型 |
+| 类型化取值 | `$request->enum('status', Status::class)`、`->string()`、`->integer()`、`->boolean()`、`->safe()->only()` | `$request->input('x')` 后手工转换 |
+| 校验规则 | `Rule::enum()`、`Rule::exists()`、`Password::defaults()`、`File::types()` | 手写 `in:` 枚举值 |
+| 输出 | 显式字段的 API Resource，`whenLoaded()` / `whenCounted()`，时间 `?->toIso8601String()` | `parent::toArray()`、在 Resource 中查库 |
+
+### 10.4 命令、队列、容器、配置
+
+| 场景 | 标准写法 | 反例 | 强制 |
+|---|---|---|---|
+| 命令签名 | `#[Signature('permission:sync')]` `#[Description('...')]` | `protected $signature` | `ConventionsTest` |
+| 队列选项 | `#[Tries(1)]` `#[DeleteWhenMissingModels]` `#[Backoff]` `#[Timeout]` | `public int $tries = 1` | `ConventionsTest` |
+| 事务后入队 | Job 实现 `ShouldQueueAfterCommit` | 每处 `dispatch()->afterCommit()` | — |
+| 配置注入 | 构造器 / handle 参数 `#[Config('edge.auth.token_ttl')] int $tokenTtl` | 类里散落 `config('...')` | — |
+| 类型化读取（不可注入处） | `config()->integer()` / `->string()` / `->array()` / `->boolean()` | `(int) config('...')` | — |
+| 请求内缓存 | 服务通过 `CacheManager::memo()` 读取（memo 为 scoped 绑定，每个请求 / 队列任务重置） | 自己写静态缓存属性 | — |
+| 每请求单例 | `#[Scoped]`（`PermissionRegistry`） | provider 中手写 `scoped()` 绑定 | — |
+| 日志上下文 | `Context`：`AddRequestContext` 写入 `request_id`（响应头 `X-Request-Id`），`AddAuthenticatedUserToContext` 写入 `user_id`；自动带到日志与队列任务 | 每条日志手动拼 request id | — |
+
+### 10.5 PHP 8.3
+
+- 类型化类常量（`public const string SUPER_ADMIN`）、构造器属性提升、`readonly` 值对象（`DataVisibility`、`ScheduledTask`）、`match`、一等可调用（`trim(...)`、`class_basename(...)`）、`json_validate()`、`never`；
+- 密码参数加 `#[\SensitiveParameter]`（`AttemptLogin`、`ChangePassword`、`ResetUserPassword`），异常栈与日志中不会出现明文；
+- `#[\Override]` 只用在**有意覆盖项目自身或框架具体方法**的地方（`UpdatePermissionRequest` 等继承 Store 请求的子类、`StoresDatesInAppTimezone::fromDateTime()`），
+  父类方法改名时立即报错；实现抽象方法 / 接口（Resource `toArray()`、Factory `definition()`）不加，避免满屏噪音。
+
+### 10.6 评估后不采用的写法
+
+| 特性 | 原因 |
+|---|---|
+| `#[UsePolicy]` `#[UseFactory]` `#[UseModel]` `#[Table]`（约定命名的模型） | 全部模型、Policy、Factory 都遵循命名约定，框架自动发现；只在不符合约定时才写 |
+| `#[UseResource]` + `$model->toResource()` | 返回类型只能推断为 `JsonResource`，`new XxxResource($model)` 对 Larastan / Scramble（OpenAPI）更精确 |
+| 全局 `FormRequest::failOnUnknownFields()` / `#[FailOnUnknownFields]` | 会改变契约（目前未知字段被忽略，前端 ProTable / 表单可能携带额外字段），需前后端一起评估后再启用 |
+| `#[StopOnFirstFailure]` | 前端按字段回填全部 422 错误，只返回第一个错误会降低体验 |
+| `defer()` 写操作日志 / 最后登录时间 | 操作日志已在 terminable 中间件 `terminate()` 中于响应发送后写入（官方机制，语义相同）；最后登录时间属于登录事务的一部分，需同步写入 |
+| `once()` 缓存权限码 | 需要在角色变更后按实例失效（`flushPermissionCache()`），`once()` 无法按实例清除 |
+| 枚举 `label()` / `options()` | 枚举文案由前端按值做 i18n（契约约定），后端没有使用方，不为了特性而加 |
+| `->whereNumber()` 约束资源 id | 隐式模型绑定已对不存在的 id 返回 404；参数名随资源变化，逐个声明收益小（PostgreSQL 下非数字 id 的 500 记为遗留项） |
+| 全量 `#[\Override]`（PHPStan `checkMissingOverrideMethodAttribute`） | 见 10.5，只在有意覆盖具体方法处使用 |

@@ -12,9 +12,6 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
  * 单表 CRUD 直接使用 Eloquent；多步写入 / 带副作用的用例请放到 app/Actions。
- *
- * edge:make-module 通过 `make:controller --type=module --model=<模型>` 使用本模板；
- * {{ permission }} / {{ routeParameter }} / {{ requestNamespace }} 由生成器替换。
  */
 class {{ class }} extends Controller
 {
