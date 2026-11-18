@@ -143,7 +143,7 @@ app/Modules/Content/
 ├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
 ├── Rules/  Casts/
-├── Contracts/  Data/  需要向受限入口开放时才有：接口与只读数据对象
+├── Contracts/  Data/  Services/   需要向受限入口开放时才有：接口、只读数据对象（`<Name>Data`）与接口的实现
 ├── resources/
 │   ├── lang/          模块自己的语言包（命名空间 content::）
 │   └── views/         邮件、PDF、导出模板（不对外访问）
@@ -174,7 +174,7 @@ app/Modules/Content/
 | 路由、语言包、视图 | 需注册 | Provider 中 `loadRoutesFrom()`、`loadTranslationsFrom()`、`loadViewsFrom()`，路由缓存照常可用 |
 | 迁移 | **不受影响** | 保留在 `database/migrations` |
 | 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向 Core 的模型 |
-| 多态类型 | **必须第一天配置** | 在 `AppServiceProvider` 中 `Relation::enforceMorphMap()`。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
+| 多态类型 | **必须第一天配置** | `AppServiceProvider` 中开启 `Relation::enforceMorphMap()`；各模块在自己的 Provider 中用 `Relation::morphMap()` 登记别名（业务模块 `<模块>.<模型>`，内核模块 `<模型>`）。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
 | 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Http/Admin/System/Controllers/UserController`；日常使用 `core:make-*` 生成命令（§10.4） |
 
 ## 5. 分层与依赖边界
@@ -494,14 +494,17 @@ Scramble 的兼容性在引入时另行验证。
 
 | 命令 | 生成 |
 |---|---|
-| `core:make-app {name}` | 入口目录（`app/Http/<Name>`）、ServiceProvider、路由文件、中间件组、测试目录，并登记到 `config/core.php` 与架构测试 |
+| `core:make-app {name} [--restricted]` | 入口目录（`app/Http/<Name>`）、ServiceProvider、路由文件、基础测试，并登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`；`--restricted` 生成受限入口（前缀带 `/v1`）。架构测试自动发现新入口 |
 | `core:make-module {name}` | 业务模块（`app/Modules/<Name>`）+ 各受信任入口中的同名目录；`--crud --fields=... --soft-deletes` 生成完整增删改查 |
-| `core:make-model {name} --module=` | 模型、迁移、工厂、Policy（标准方法齐全） |
+| `core:make-model {name} --module=` | 模型、迁移、工厂、Policy（标准方法齐全、默认拒绝），并在模块 Provider 中登记多态别名 |
+| `core:make-migration` / `core:make-factory` / `core:make-data` | 为已有模型单独生成迁移、工厂；生成只读数据对象 |
 | `core:make-action` / `core:make-query` / `core:make-policy` / `core:make-enum` | 模块中的对应类（`--module=`） |
 | `core:make-contract {name} --module=` | 模块向受限入口导出的接口、只读数据对象与实现绑定 |
 | `core:make-controller` / `core:make-request` / `core:make-resource` | 入口中的对应类（`--app= --module=`） |
 
-- 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问、项目 `stubs/` 目录覆盖模板，行为与官方 make 命令一致。
+- 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问，行为与官方 make 命令一致；失败时退出码为 1。
+- 模板覆盖：项目中的 `stubs/core.<名称>.stub` 优先于命令自带模板，可用 `php artisan vendor:publish --tag=core-stubs` 发布后修改。
+- 路由不自动登记：生成控制器后命令会打印需要添加的路由；生成器本身是内核模块 `app/Core/Generator`，只在命令行下注册。
 - 完整增删改查还会生成：权限节点、路由、操作日志文案、**授权测试**、模块 README。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
 
