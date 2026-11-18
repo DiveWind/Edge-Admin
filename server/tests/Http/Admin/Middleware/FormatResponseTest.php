@@ -31,6 +31,8 @@ beforeEach(function (): void {
         Route::post('no-content-headers', fn () => response()->noContent()->header('X-Custom', 'yes'));
         Route::get('error-json', fn () => response()->json(['message' => 'Account locked', 'reason' => 'too many attempts'], 423));
         Route::get('error-empty', fn () => response()->noContent(410));
+        Route::post('error-validation', fn () => response()->json(['message' => 'The given data was invalid.', 'errors' => ['name' => ['Name is taken.'], 'email' => ['Email is taken.']]], 422));
+        Route::post('error-validation-empty', fn () => response()->json(['message' => 'Invalid', 'errors' => []], 422));
         Route::get('text', fn (): string => 'plain text');
         Route::get('download', fn () => response()->download(__FILE__, 'test.php'));
         Route::get('redirect', fn (): Redirector|\Illuminate\Http\RedirectResponse => redirect('/'));
@@ -104,6 +106,21 @@ it('wraps error responses returned by controllers', function (): void {
     $this->getJson('/api/admin/_test/error-empty')
         ->assertStatus(410)
         ->assertExactJson(['code' => 410, 'data' => null, 'message' => 'Gone']);
+});
+
+it('uses the first field error as the message of 422 responses returned by controllers', function (): void {
+    $this->postJson('/api/admin/_test/error-validation')
+        ->assertUnprocessable()
+        ->assertExactJson([
+            'code' => 422,
+            'data' => null,
+            'message' => 'Name is taken.',
+            'errors' => ['name' => ['Name is taken.'], 'email' => ['Email is taken.']],
+        ]);
+
+    $this->postJson('/api/admin/_test/error-validation-empty')
+        ->assertUnprocessable()
+        ->assertExactJson(['code' => 422, 'data' => null, 'message' => 'Invalid', 'errors' => []]);
 });
 
 it('leaves non-JSON responses with content untouched', function (): void {

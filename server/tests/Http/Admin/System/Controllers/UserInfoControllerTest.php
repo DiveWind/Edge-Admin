@@ -19,6 +19,7 @@ it('returns the Vben user info of the logged-in user', function (): void {
     $user = User::factory()->create([
         'username' => 'alice',
         'name' => 'Alice Liddell',
+        'email' => 'alice@example.com',
         'avatar' => 'https://example.com/alice.png',
     ]);
     $client = new VbenClient($this);
@@ -32,7 +33,9 @@ it('returns the Vben user info of the logged-in user', function (): void {
                 'userId' => (string) $user->id,
                 'username' => 'alice',
                 'realName' => 'Alice Liddell',
+                'email' => 'alice@example.com',
                 'avatar' => 'https://example.com/alice.png',
+                'twoFactorEnabled' => false,
                 'roles' => [],
                 'desc' => '',
                 'homePath' => '/analytics',
@@ -41,15 +44,28 @@ it('returns the Vben user info of the logged-in user', function (): void {
         ]);
 });
 
-it('returns a null avatar and the configured home path', function (): void {
+it('returns a null email and avatar and the configured home path', function (): void {
     config(['core.apps.admin.home_path' => '/workspace']);
 
-    $this->actingAs(User::factory()->create(['avatar' => null]))
+    $this->actingAs(User::factory()->create(['email' => null, 'avatar' => null]))
         ->getJson('/api/admin/user/info')
         ->assertOk()
+        ->assertJsonPath('data.email', null)
         ->assertJsonPath('data.avatar', null)
         ->assertJsonPath('data.homePath', '/workspace');
 });
+
+it('reports two-factor authentication as enabled only once it is confirmed', function (bool $confirmed): void {
+    $user = User::factory()->withTwoFactorAuthentication()->create(['two_factor_confirmed_at' => $confirmed ? now() : null]);
+
+    $this->actingAs($user)
+        ->getJson('/api/admin/user/info')
+        ->assertOk()
+        ->assertJsonPath('data.twoFactorEnabled', $confirmed);
+})->with([
+    'enabled but not confirmed' => false,
+    'confirmed' => true,
+]);
 
 it('accepts Sanctum tokens as well', function (): void {
     $user = User::factory()->create();

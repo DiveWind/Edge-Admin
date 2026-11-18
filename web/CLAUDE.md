@@ -66,7 +66,7 @@ scripts/                  vsh（lint、check-dep、check-circular 等）与 clea
 ### 接口与认证
 
 - 接口函数写在 `src/api/` 下（按模块分文件，用 `requestClient`），类型用 `namespace XxxApi` 声明，字段、路径、权限码严格按契约。
-- `requestClient` 已按契约解包 `{ code, data, message }`（`code === 0` 为成功），页面拿到的就是 `data`。
+- `requestClient` 已按契约解包 `{ code, data, message }`（`code === 0` 为成功），页面拿到的就是 `data`；请求头 `Accept-Language` 为当前界面语言（`zh-CN` / `en-US`），后端的提示文案随之切换（§6.1）。
 - 认证为 Sanctum 会话 Cookie + Fortify（§6.2 / §7）：请求携带 Cookie 与 `X-XSRF-TOKEN`，没有 Authorization 头与刷新令牌；419 重新获取 CSRF Cookie 后重试一次，423 弹出确认密码框后重试，401 清除已登录标记回登录页（`api/client.ts`）。“已登录标记”是 access store 的 `accessToken` 字段中的固定值（`store/auth.ts` 的 `SESSION_MARKER`），启动时用 `GET /user/info` 确认会话（`router/guard.ts`）。
 - 422 的字段错误用 `setFormErrors(formApi, getValidationErrors(error))` 回填到表单（表单字段名与接口字段名一致）；调用方自行处理的状态码用 `AppRequestConfig` 的 `silentError` 关闭自动提示。
 - 菜单与按钮权限暂为前端静态路由模式（`routes/modules/*.ts`），`GET /auth/codes`、`GET /menu/all` 接入前不要请求。

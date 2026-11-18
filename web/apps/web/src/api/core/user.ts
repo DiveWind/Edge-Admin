@@ -1,13 +1,21 @@
 /**
  * 当前用户：用户信息、个人资料、密码、确认密码（契约见 docs/backend-design.md §6.2、§7.2）。
  */
-import type { UserInfo } from '@vben/types';
+import type { UserInfo as VbenUserInfo } from '@vben/types';
 
 import type { AppRequestConfig } from '#/api/request';
 
 import { requestClient } from '#/api/request';
 
 export namespace UserApi {
+  /** GET /user/info：Vben 的用户信息，加上邮箱与两步验证状态（§6.2） */
+  export interface UserInfo extends VbenUserInfo {
+    /** 邮箱，未设置时为 null */
+    email: null | string;
+    /** 两步验证已确认开启（开启后未用动态码确认时为 false） */
+    twoFactorEnabled: boolean;
+  }
+
   /** 修改个人资料：未提交的 email、avatar 保持不变，提交 null 表示清空 */
   export interface UpdateProfileParams {
     avatar?: null | string;
@@ -20,17 +28,13 @@ export namespace UserApi {
     password: string;
     password_confirmation: string;
   }
-
-  export interface ConfirmedPasswordStatus {
-    confirmed: boolean;
-  }
 }
 
 /**
  * 获取当前用户信息；启动时用它判断会话是否有效（401 即未登录）
  */
 export async function getUserInfoApi() {
-  return requestClient.get<UserInfo>('/user/info');
+  return requestClient.get<UserApi.UserInfo>('/user/info');
 }
 
 /**
@@ -45,15 +49,6 @@ export async function updateProfileApi(params: UserApi.UpdateProfileParams) {
  */
 export async function updatePasswordApi(params: UserApi.UpdatePasswordParams) {
   return requestClient.put<null>('/user/password', params);
-}
-
-/**
- * 最近是否确认过密码（敏感操作前需要确认，否则返回 423）
- */
-export async function getConfirmedPasswordStatusApi() {
-  return requestClient.get<UserApi.ConfirmedPasswordStatus>(
-    '/user/confirmed-password-status',
-  );
 }
 
 /**

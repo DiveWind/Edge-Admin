@@ -70,7 +70,7 @@ describe('login', function (): void {
             ->assertExactJson([
                 'code' => 422,
                 'data' => null,
-                'message' => 'The given data was invalid.',
+                'message' => 'These credentials do not match our records.',
                 'errors' => ['username' => ['These credentials do not match our records.']],
             ]);
 
@@ -100,7 +100,7 @@ describe('login', function (): void {
             ->assertExactJson([
                 'code' => 422,
                 'data' => null,
-                'message' => 'The given data was invalid.',
+                'message' => 'This account has been disabled.',
                 'errors' => ['username' => ['This account has been disabled.']],
             ]);
 
@@ -128,15 +128,27 @@ describe('login', function (): void {
         $this->client->login('bob')->assertOk();
     });
 
-    it('translates the messages with the application locale', function (): void {
-        app()->setLocale('zh_CN');
+    it('answers in the language of the Accept-Language header', function (): void {
         User::factory()->disabled()->create(['username' => 'alice']);
 
+        $this->client->withLanguage('zh-CN');
+
         $this->client->login('alice', 'wrong-password')
-            ->assertJsonPath('message', '数据校验失败')
+            ->assertHeader('Content-Language', 'zh-CN')
+            ->assertJsonPath('message', '用户名或密码错误。')
             ->assertJsonPath('errors.username', ['用户名或密码错误。']);
 
-        $this->client->login('alice')->assertJsonPath('errors.username', ['账号已停用']);
+        $this->client->login('alice')
+            ->assertJsonPath('message', '账号已停用')
+            ->assertJsonPath('errors.username', ['账号已停用']);
+
+        $this->client->withLanguage('en-US');
+
+        $this->client->login('alice', 'wrong-password')
+            ->assertHeader('Content-Language', 'en')
+            ->assertJsonPath('message', 'These credentials do not match our records.');
+
+        $this->client->login('alice')->assertJsonPath('message', 'This account has been disabled.');
     });
 
     it('answers 409 instead of redirecting when already logged in', function (): void {

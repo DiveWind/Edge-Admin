@@ -155,7 +155,7 @@ describe('logging in with two-factor authentication', function (): void {
             ->assertExactJson([
                 'code' => 422,
                 'data' => null,
-                'message' => 'The given data was invalid.',
+                'message' => 'The provided two factor authentication code was invalid.',
                 'errors' => ['code' => ['The provided two factor authentication code was invalid.']],
             ]);
 

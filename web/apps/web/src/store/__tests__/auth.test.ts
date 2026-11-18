@@ -60,9 +60,11 @@ vi.mock('#/api/request', () => import('#/api/client'));
 const userInfo = {
   avatar: null,
   desc: '',
+  email: 'admin@example.com',
   homePath: '/analytics',
   realName: '管理员',
   roles: [],
+  twoFactorEnabled: false,
   userId: '1',
   username: 'admin',
 };
@@ -211,6 +213,20 @@ describe('auth store', () => {
         useAuthStore().authTwoFactor({ code: '000000' }),
       ).rejects.toBe(failure);
       expect(useAccessStore().accessToken).toBeNull();
+    });
+  });
+
+  it('keeps the email and two-factor status in the user store', async () => {
+    vi.mocked(api.getUserInfoApi).mockResolvedValue({
+      ...userInfo,
+      twoFactorEnabled: true,
+    } as any);
+
+    await useAuthStore().fetchUserInfo();
+
+    expect(useUserStore().userInfo).toMatchObject({
+      email: 'admin@example.com',
+      twoFactorEnabled: true,
     });
   });
 

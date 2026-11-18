@@ -71,7 +71,7 @@ describe('exceptions', function (): void {
             Route::get('model', fn () => User::query()->findOrFail(999));
             Route::post('only-post', fn (): string => 'ok');
             Route::get('csrf', fn (): never => throw new TokenMismatchException('CSRF token mismatch.'));
-            Route::post('validate', fn (Request $request) => $request->validate(['name' => ['required', 'string']]));
+            Route::post('validate', fn (Request $request) => $request->validate(['name' => ['required', 'string'], 'email' => ['required', 'email']]));
             Route::get('boom', fn (): never => throw new RuntimeException('Secret database password'));
             Route::get('http-response', fn (): never => throw new HttpResponseException(response()->json(['message' => 'Custom', 'reason' => 'locked'], 423)));
         });
@@ -114,14 +114,26 @@ describe('exceptions', function (): void {
             ->assertExactJson(['code' => 419, 'data' => null, 'message' => 'CSRF token mismatch.']);
     });
 
-    it('returns 422 with field errors', function (): void {
+    it('returns 422 with the first error as the message and every field error', function (): void {
         $this->postJson('/api/admin/_test/validate', [])
             ->assertUnprocessable()
             ->assertExactJson([
                 'code' => 422,
                 'data' => null,
-                'message' => 'The given data was invalid.',
-                'errors' => ['name' => ['The name field is required.']],
+                'message' => 'The name field is required.',
+                'errors' => [
+                    'name' => ['The name field is required.'],
+                    'email' => ['The email field is required.'],
+                ],
+            ]);
+
+        $this->postJson('/api/admin/_test/validate', ['name' => 'Alice', 'email' => 'invalid'])
+            ->assertUnprocessable()
+            ->assertExactJson([
+                'code' => 422,
+                'data' => null,
+                'message' => 'The email field must be a valid email address.',
+                'errors' => ['email' => ['The email field must be a valid email address.']],
             ]);
     });
 
@@ -156,13 +168,23 @@ describe('exceptions', function (): void {
             ->assertExactJson(['code' => 423, 'data' => null, 'message' => 'Custom', 'reason' => 'locked']);
     });
 
-    it('translates messages with the application locale', function (): void {
-        app()->setLocale('zh_CN');
+    it('translates messages with the language of the Accept-Language header', function (): void {
+        $chinese = ['Accept-Language' => 'zh-CN,zh;q=0.9'];
 
-        $this->getJson('/api/admin/missing')->assertJsonPath('message', '资源不存在');
-        $this->postJson('/api/admin/_test/validate', [])
-            ->assertJsonPath('message', '数据校验失败')
-            ->assertJsonPath('errors.name.0', '名称 不能为空。');
+        $this->getJson('/api/admin/missing', $chinese)->assertJsonPath('message', '资源不存在');
+        $this->getJson('/api/admin/_test/auth', $chinese)->assertJsonPath('message', '未登录或登录已过期');
+        $this->postJson('/api/admin/_test/validate', [], $chinese)
+            ->assertJsonPath('message', '名称 不能为空。')
+            ->assertJsonPath('errors.name.0', '名称 不能为空。')
+            ->assertJsonPath('errors.email.0', '邮箱 不能为空。');
+
+        $english = ['Accept-Language' => 'en-US,en;q=0.9'];
+
+        $this->getJson('/api/admin/missing', $english)->assertJsonPath('message', 'Not Found');
+        $this->getJson('/api/admin/_test/auth', $english)->assertJsonPath('message', 'Unauthenticated.');
+        $this->postJson('/api/admin/_test/validate', [], $english)
+            ->assertJsonPath('message', 'The name field is required.')
+            ->assertJsonPath('errors.email.0', 'The email field is required.');
     });
 
     it('does not affect other paths', function (): void {

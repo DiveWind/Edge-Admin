@@ -3,7 +3,7 @@
 namespace App\Http\Admin;
 
 use App\Http\Admin\Middleware\{ForceJson, FormatResponse};
-use App\Http\Admin\Responses\VbenResponse;
+use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenResponse};
 use App\Http\Middleware\EnsureUserIsEnabled;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -12,6 +12,7 @@ use Illuminate\Routing\Middleware\{SubstituteBindings, ThrottleRequests};
 use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\{RateLimiter, Route};
 use Illuminate\Support\ServiceProvider;
+use Laravel\Fortify\Contracts\{FailedPasswordResetLinkRequestResponse, FailedPasswordResetResponse as FailedPasswordResetResponseContract, SuccessfulPasswordResetLinkRequestResponse};
 use Laravel\Fortify\Fortify;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use LogicException;
@@ -94,10 +95,15 @@ class AdminServiceProvider extends ServiceProvider
     }
 
     /**
-     * Vben 响应格式：`response()->vben()` 宏，以及本入口路径下的异常输出（含未匹配路由的 404 / 405）。
+     * Vben 响应格式：`response()->vben()` 宏，以及本入口路径下的异常输出（含未匹配路由的 404 / 405）；
+     * 替换 Fortify 的找回、重置密码响应，不暴露哪些邮箱已注册（设计文档 §6.2）。
      */
     protected function configureResponses(): void
     {
+        $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
+        $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
+        $this->app->bind(FailedPasswordResetResponseContract::class, FailedPasswordResetResponse::class);
+
         ResponseFactory::macro('vben', fn (mixed $data = null, string $message = VbenResponse::OK, int $status = 200): VbenResponse => VbenResponse::success($data, $message, $status));
 
         // 框架的 Handler 与命令行下 Collision 的包装类都提供 renderable()，契约 ExceptionHandler 中没有

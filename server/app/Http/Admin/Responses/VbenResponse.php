@@ -17,7 +17,8 @@ use Throwable;
  *
  * - 成功：`{ "code": 0, "data": ..., "message": "ok" }`
  * - 分页：`{ "code": 0, "data": { "items": [...], "total": 123 }, "message": "ok" }`
- * - 失败：`{ "code": <HTTP 状态码>, "data": null, "message": "...", "errors"?: {...} }`
+ * - 失败：`{ "code": <HTTP 状态码>, "data": null, "message": "...", "errors"?: {...} }`；
+ *   422 的 message 取第一条具体错误（如“用户名或密码错误。”），完整错误在 errors 中
  *
  * 例外：后台入口不返回 204。没有内容的成功响应统一为 HTTP 200 + `{ "code": 0, "data": null, "message": "ok" }`
  * （Vben 的默认响应拦截器遇到空响应体会报错）。
@@ -70,7 +71,7 @@ final class VbenResponse extends JsonResponse
     /**
      * 把路由返回的响应转换为 Vben 格式，保留状态码（204 除外）、响应头与 Cookie；无需转换时返回 null。
      *
-     * - JSON 响应：成功时按 dataOf() 取 data，失败时取 message 与其余顶层字段（如 errors）；
+     * - JSON 响应：成功时按 dataOf() 取 data，失败时取 message（422 为第一条具体错误）与其余顶层字段（如 errors）；
      * - 空响应体（`response()->noContent()`、Fortify 的 `new JsonResponse('', 204)` 等）：成功为 data null，失败为通用文案；
      * - 其他响应（文件下载、流、重定向、有内容的非 JSON 响应）：不转换。
      */
@@ -86,7 +87,7 @@ final class VbenResponse extends JsonResponse
             $payload = $response->getData(true);
 
             $formatted = $status >= 400
-                ? self::error($status, self::messageOf($payload), self::extraOf($payload))
+                ? self::error($status, ($status === Response::HTTP_UNPROCESSABLE_ENTITY ? self::firstErrorOf($payload) : null) ?? self::messageOf($payload), self::extraOf($payload))
                 : self::success($status === Response::HTTP_NO_CONTENT ? null : self::dataOf($payload, $response->original), status: $status);
 
             $formatted->setEncodingOptions($response->getEncodingOptions());
@@ -110,7 +111,11 @@ final class VbenResponse extends JsonResponse
     {
         return match (true) {
             $e instanceof HttpResponseException => null,
-            $e instanceof ValidationException => self::error($e->status, self::translate('The given data was invalid.'), ['errors' => $e->errors()]),
+            $e instanceof ValidationException => self::error(
+                $e->status,
+                self::firstErrorOf(['errors' => $e->errors()]) ?? self::translate('The given data was invalid.'),
+                ['errors' => $e->errors()],
+            ),
             $e instanceof AuthenticationException => self::error(Response::HTTP_UNAUTHORIZED, self::translate($e->getMessage())),
             $e instanceof HttpExceptionInterface => self::error(
                 $e->getStatusCode(),
@@ -192,6 +197,21 @@ final class VbenResponse extends JsonResponse
         $message = is_array($payload) ? ($payload['message'] ?? null) : null;
 
         return is_string($message) && $message !== '' ? self::translate($message) : null;
+    }
+
+    /**
+     * 字段错误（`errors`）中的第一条，作为 422 的 message；没有时返回 null。
+     */
+    private static function firstErrorOf(mixed $payload): ?string
+    {
+        $errors = is_array($payload) ? ($payload['errors'] ?? null) : null;
+
+        $first = Arr::first(
+            Arr::flatten(is_array($errors) ? $errors : []),
+            fn (mixed $message): bool => is_string($message) && $message !== '',
+        );
+
+        return is_string($first) ? $first : null;
     }
 
     /**

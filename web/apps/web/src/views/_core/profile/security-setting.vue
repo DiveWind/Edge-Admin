@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import type { TwoFactorApi } from '#/api';
+import type { Recordable } from '@vben/types';
+
+import type { TwoFactorApi, UserApi } from '#/api';
 
 import { computed, onMounted, ref } from 'vue';
 
-import { confirm, useVbenModal } from '@vben/common-ui';
+import { confirm, ProfileSecuritySetting, useVbenModal } from '@vben/common-ui';
+import { useUserStore } from '@vben/stores';
 
 import { useClipboard } from '@vueuse/core';
-import { Alert, Button, message, Space, Spin, Tag } from 'antdv-next';
+import { Alert, Button, message, Space, Spin } from 'antdv-next';
 
 import { setFormErrors, useVbenForm, z } from '#/adapter/form';
 import {
   confirmTwoFactorApi,
   disableTwoFactorApi,
   enableTwoFactorApi,
-  getConfirmedPasswordStatusApi,
   getRecoveryCodesApi,
   getTwoFactorQrCodeApi,
   getTwoFactorSecretKeyApi,
@@ -21,18 +23,39 @@ import {
 } from '#/api';
 import { getValidationErrors } from '#/api/request';
 import { $t } from '#/locales';
+import { useAuthStore } from '#/store';
 
 /**
- * 两步验证设置（Fortify）。这些接口都要求最近确认过密码：未确认时返回 423，请求层弹出确认密码框后自动重试。
+ * 两步验证设置（Fortify）。开启、关闭、二维码、恢复码等接口都要求最近确认过密码：未确认时返回 423，
+ * 请求层弹出确认密码框后自动重试。
  *
- * 状态：接口没有直接返回“是否已开启”，确认密码后按二维码接口判断（有二维码 = 已开启）。
+ * 界面：Vben 的 ProfileSecuritySetting（开关列表），开关即两步验证状态，打开为开启流程、关闭为关闭流程；
+ * 开关由状态决定，流程取消或失败时保持原样。已开启时下方提供查看恢复码。
+ * 状态：GET /user/info 的 twoFactorEnabled（已确认开启）。进入页面时重新获取一次用户信息，
+ * 开启、关闭后同样重新获取，顶栏等处的用户信息随之更新。
  * 开启后必须用动态码确认才生效；在确认前关闭设置弹窗会撤销本次开启，避免留下未确认的密钥。
  */
 
-/** 页面状态：loading 加载中；locked 需要先确认密码；ready 已知开启状态 */
-const status = ref<'loading' | 'locked' | 'ready'>('loading');
-const enabled = ref(false);
+const userStore = useUserStore();
+const authStore = useAuthStore();
+
+/** 正在获取最新状态 */
+const loading = ref(false);
 const busy = ref(false);
+
+const enabled = computed(
+  () =>
+    (userStore.userInfo as null | UserApi.UserInfo)?.twoFactorEnabled === true,
+);
+
+const securitySchema = computed(() => [
+  {
+    description: $t('auth.security.description'),
+    fieldName: 'twoFactor',
+    label: $t('auth.security.title'),
+    value: enabled.value,
+  },
+]);
 
 const setup = ref<{ qrCode: string; secretKey: string }>({
   qrCode: '',
@@ -86,7 +109,7 @@ const [SetupModal, setupModalApi] = useVbenModal({
       } catch {
         // 撤销失败时以服务端状态为准
       }
-      await loadStatus();
+      await refreshStatus();
     }
   },
   async onConfirm() {
@@ -99,7 +122,7 @@ const [SetupModal, setupModalApi] = useVbenModal({
     try {
       await confirmTwoFactorApi(String(code).trim());
       setupConfirmed.value = true;
-      enabled.value = true;
+      await refreshStatus();
       await setupModalApi.close();
       message.success($t('auth.security.enabled'));
       await showRecoveryCodes();
@@ -123,11 +146,13 @@ function isQrCode(value: unknown): value is TwoFactorApi.QrCode {
   return typeof value === 'object' && value !== null && 'svg' in value;
 }
 
-/** 按二维码接口判断是否已开启（未确认密码时会弹出确认框） */
-async function loadStatus() {
-  const qrCode = await getTwoFactorQrCodeApi();
-  enabled.value = isQrCode(qrCode);
-  status.value = 'ready';
+/** 重新获取用户信息（twoFactorEnabled）；失败时保留当前状态（错误提示由请求层统一处理） */
+async function refreshStatus() {
+  try {
+    await authStore.fetchUserInfo();
+  } catch {
+    // 401 等已由请求层处理
+  }
 }
 
 /** 执行一个操作；用户取消确认密码时静默结束（错误提示由请求层统一处理） */
@@ -143,10 +168,6 @@ async function run(action: () => Promise<void>) {
   } finally {
     busy.value = false;
   }
-}
-
-function handleUnlock() {
-  return run(loadStatus);
 }
 
 function handleEnable() {
@@ -194,7 +215,7 @@ function handleDisable() {
       }
       try {
         await disableTwoFactorApi();
-        enabled.value = false;
+        await refreshStatus();
         message.success($t('auth.security.disabled'));
         return true;
       } catch {
@@ -209,74 +230,38 @@ function handleDisable() {
   });
 }
 
-onMounted(async () => {
-  try {
-    const { confirmed } = await getConfirmedPasswordStatusApi();
-    if (confirmed) {
-      await loadStatus();
-    } else {
-      status.value = 'locked';
-    }
-  } catch {
-    status.value = 'locked';
+/** 开关：打开为开启流程，关闭为关闭流程（加载或操作进行中时忽略） */
+function handleChange({ value }: Recordable<any>) {
+  if (loading.value || busy.value) {
+    return;
   }
+  if (value) {
+    void handleEnable();
+  } else {
+    handleDisable();
+  }
+}
+
+onMounted(async () => {
+  loading.value = true;
+  await refreshStatus();
+  loading.value = false;
 });
 </script>
 
 <template>
-  <div class="space-y-4">
-    <Spin :spinning="status === 'loading'">
-      <div
-        class="flex flex-row items-center justify-between gap-4 rounded-lg border p-4"
-      >
-        <div class="space-y-1">
-          <div class="flex items-center gap-2 text-base font-medium">
-            {{ $t('auth.security.title') }}
-            <template v-if="status === 'ready'">
-              <Tag v-if="enabled" color="success">
-                {{ $t('auth.security.statusEnabled') }}
-              </Tag>
-              <Tag v-else>{{ $t('auth.security.statusDisabled') }}</Tag>
-            </template>
-          </div>
-          <div class="text-sm text-muted-foreground">
-            {{
-              status === 'locked'
-                ? $t('auth.security.lockedDesc')
-                : $t('auth.security.description')
-            }}
-          </div>
-        </div>
-        <Space>
-          <Button
-            v-if="status === 'locked'"
-            :loading="busy"
-            type="primary"
-            @click="handleUnlock"
-          >
-            {{ $t('auth.security.unlock') }}
-          </Button>
-          <template v-else-if="status === 'ready'">
-            <Button
-              v-if="!enabled"
-              :loading="busy"
-              type="primary"
-              @click="handleEnable"
-            >
-              {{ $t('auth.security.enable') }}
-            </Button>
-            <template v-else>
-              <Button :loading="busy" @click="showRecoveryCodes">
-                {{ $t('auth.security.recoveryCodes') }}
-              </Button>
-              <Button danger :disabled="busy" @click="handleDisable">
-                {{ $t('auth.security.disable') }}
-              </Button>
-            </template>
-          </template>
-        </Space>
-      </div>
+  <div class="flex flex-col items-stretch gap-4">
+    <Spin :spinning="loading || busy">
+      <ProfileSecuritySetting
+        :form-schema="securitySchema"
+        @change="handleChange"
+      />
     </Spin>
+    <Space v-if="enabled" class="self-start">
+      <Button @click="showRecoveryCodes">
+        {{ $t('auth.security.recoveryCodes') }}
+      </Button>
+    </Space>
 
     <SetupModal class="w-[520px]" :title="$t('auth.security.setupTitle')">
       <div class="space-y-4">

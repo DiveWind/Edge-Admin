@@ -51,6 +51,29 @@ describe('request client', () => {
     expect(request?.headers?.Authorization).toBeUndefined();
   });
 
+  it('sends the current interface language as Accept-Language', async () => {
+    let locale = 'zh-CN';
+    const { client, mock } = setup({ locale: () => locale });
+    mock.onGet('/user/info').reply(200, ok(null));
+
+    await client.get('/user/info');
+    locale = 'en-US';
+    await client.get('/user/info');
+
+    expect(mock.history.get.map((r) => r.headers?.['Accept-Language'])).toEqual(
+      ['zh-CN', 'en-US'],
+    );
+  });
+
+  it('leaves Accept-Language to the browser without a locale', async () => {
+    const { client, mock } = setup();
+    mock.onGet('/user/info').reply(200, ok(null));
+
+    await client.get('/user/info');
+
+    expect(mock.history.get[0]?.headers?.['Accept-Language']).toBeUndefined();
+  });
+
   it('rejects a 200 response whose code is not 0', async () => {
     const { client, handlers, mock } = setup();
     mock.onGet('/user/info').reply(200, fail(1, 'failed'));
@@ -234,16 +257,22 @@ describe('request client', () => {
   });
 
   describe('422 validation errors', () => {
-    it('shows the message and exposes the field errors', async () => {
+    it('shows the message (the first error) and exposes the field errors', async () => {
       const { client, handlers, mock } = setup();
-      const errors = { username: ['用户名或密码错误。'] };
-      mock.onPost('/login').reply(422, fail(422, '数据校验失败', { errors }));
+      const errors = {
+        username: ['用户名或密码错误。'],
+        password: ['密码 不能为空。'],
+      };
+      mock
+        .onPost('/login')
+        .reply(422, fail(422, '用户名或密码错误。', { errors }));
 
       const error = await client
         .post('/login')
         .catch((error_: unknown) => error_);
 
-      expect(handlers.showError).toHaveBeenCalledWith('数据校验失败');
+      expect(handlers.showError).toHaveBeenCalledTimes(1);
+      expect(handlers.showError).toHaveBeenCalledWith('用户名或密码错误。');
       expect(getValidationErrors(error)).toEqual(errors);
       expect(getErrorMessage(error)).toBe('用户名或密码错误。');
     });

@@ -19,7 +19,8 @@ use Tests\TestCase;
  * - 保存响应中的 Cookie 并在之后的请求中带上，写请求带 X-XSRF-TOKEN（取自 XSRF-TOKEN Cookie，与 axios 相同）；
  * - 每次请求前清空框架在内存中保留的认证与会话状态（守卫、会话、控制器实例），登录状态只能来自会话 Cookie，
  *   多个实例即多个浏览器（设备）；会话使用 database 驱动（与默认配置相同，停用账号、修改密码时按用户删除会话）；
- * - 开启 CSRF 校验（框架在单元测试中默认跳过）。
+ * - 开启 CSRF 校验（框架在单元测试中默认跳过）；
+ * - 界面语言：withLanguage() 之后的请求带该 Accept-Language（与 Vben 切换语言相同），默认为测试请求自带的 `en-us`。
  */
 final class VbenClient
 {
@@ -39,6 +40,11 @@ final class VbenClient
      * 不带 X-XSRF-TOKEN 发送下一个写请求。
      */
     private bool $withoutCsrfToken = false;
+
+    /**
+     * 请求头 Accept-Language；null 时使用测试请求的默认值。
+     */
+    private ?string $language = null;
 
     public function __construct(private readonly TestCase $test)
     {
@@ -77,6 +83,16 @@ final class VbenClient
     public function withoutCsrfToken(): self
     {
         $this->withoutCsrfToken = true;
+
+        return $this;
+    }
+
+    /**
+     * 之后的请求带此 Accept-Language（如 `zh-CN`、`en-US`）。
+     */
+    public function withLanguage(string $language): self
+    {
+        $this->language = $language;
 
         return $this;
     }
@@ -130,6 +146,10 @@ final class VbenClient
             'CONTENT_TYPE' => 'application/json',
             'HTTP_REFERER' => self::ORIGIN.'/',
         ];
+
+        if ($this->language !== null) {
+            $server['HTTP_ACCEPT_LANGUAGE'] = $this->language;
+        }
 
         if ($method !== 'GET' && ! $this->withoutCsrfToken && isset($this->cookies['XSRF-TOKEN'])) {
             $server['HTTP_X_XSRF_TOKEN'] = $this->cookies['XSRF-TOKEN'];

@@ -49,7 +49,7 @@ const formSchema = computed((): VbenFormSchema[] => {
       componentProps: {
         autocomplete: 'email',
         maxlength: 255,
-        placeholder: $t('auth.profile.emailPlaceholder'),
+        placeholder: 'example@example.com',
       },
       fieldName: 'email',
       label: $t('auth.profile.email'),
@@ -77,19 +77,18 @@ const formSchema = computed((): VbenFormSchema[] => {
 });
 
 function fillForm() {
-  const userInfo = userStore.userInfo;
+  const userInfo = userStore.userInfo as null | UserApi.UserInfo;
   profileBaseSettingRef.value?.getFormApi().setValues({
     avatar: userInfo?.avatar ?? '',
-    email: '',
+    email: userInfo?.email ?? '',
     name: userInfo?.realName ?? '',
     username: userInfo?.username ?? '',
   });
 }
 
 /**
- * PUT /user/profile-information：
- * - 邮箱留空表示不修改（当前邮箱不在 GET /user/info 中，无法回显）；
- * - 头像地址留空表示清除（使用默认头像）。
+ * PUT /user/profile-information：表单回显 GET /user/info 中的邮箱与头像地址；
+ * 邮箱留空表示清除，头像地址留空表示清除（使用默认头像）。
  * 成功后重新获取用户信息，顶栏与个人中心随之更新。
  */
 async function handleSubmit(values: Recordable<any>) {
@@ -100,8 +99,8 @@ async function handleSubmit(values: Recordable<any>) {
   const avatar = String(values.avatar ?? '').trim();
   const params: UserApi.UpdateProfileParams = {
     avatar: avatar === '' ? null : avatar,
+    email: email === '' ? null : email,
     name: String(values.name ?? '').trim(),
-    ...(email === '' ? {} : { email }),
   };
 
   submitting.value = true;

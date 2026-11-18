@@ -5,14 +5,15 @@
 | 找回密码提示（简体中文）
 |--------------------------------------------------------------------------
 |
-| 密码重置的各状态（Fortify 的 /forgot-password、/reset-password 返回）。
+| 密码重置的各状态（Fortify 的 /forgot-password、/reset-password 返回）。找回密码无论邮箱是否注册都返回 sent，
+| 文案保持中性；user 不会返回给前端（见 App\Http\Admin\Responses）。
 |
 */
 
 return [
 
     'reset' => '密码已重置。',
-    'sent' => '重置密码的链接已发送到您的邮箱。',
+    'sent' => '如果该邮箱已注册，将收到重置密码的邮件。',
     'throttled' => '请稍后再试。',
     'token' => '重置密码的链接无效或已过期。',
     'user' => '找不到使用该邮箱的用户。',

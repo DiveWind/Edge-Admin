@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\{AssignRequestId, RedirectIfAuthenticated};
+use App\Http\Middleware\{AssignRequestId, RedirectIfAuthenticated, SetLocale};
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\{Exceptions, Middleware};
 use Illuminate\Support\Facades\Route;
@@ -25,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(AssignRequestId::class);
+
+        // 按 Accept-Language 选择提示语言（config('core.locales')），各入口共用
+        $middleware->append(SetLocale::class);
 
         // 没有登录页：未登录不重定向，由异常输出返回 401
         $middleware->redirectGuestsTo(null);

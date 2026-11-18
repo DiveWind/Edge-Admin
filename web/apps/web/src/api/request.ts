@@ -19,6 +19,7 @@ export const requestClient = createRequestClient(
   apiURL,
   {
     confirmPassword: () => useAuthStore().confirmPassword(),
+    locale: () => preferences.app.locale,
     onUnauthorized: () => useAuthStore().handleUnauthorized(),
     // 直接用 axios 实例：失败时抛出的是已提示过的原始错误，不会重复提示
     refreshCsrfToken: () => requestClient.instance.get(CSRF_COOKIE_URL),
@@ -28,11 +29,3 @@ export const requestClient = createRequestClient(
   },
   { responseReturn: 'data' },
 );
-
-// 请求头：界面语言
-requestClient.addRequestInterceptor({
-  fulfilled: (config) => {
-    config.headers['Accept-Language'] = preferences.app.locale;
-    return config;
-  },
-});

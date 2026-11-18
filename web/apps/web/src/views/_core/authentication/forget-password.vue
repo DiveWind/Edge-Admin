@@ -37,7 +37,9 @@ const formSchema = computed((): VbenFormSchema[] => {
 });
 
 /**
- * POST /forgot-password：发送重置密码邮件，邮件中的链接打开重置密码页
+ * POST /forgot-password：发送重置密码邮件，邮件中的链接打开重置密码页。
+ * 后端无论邮箱是否注册都返回成功（不暴露哪些邮箱已注册，§6.2），这里统一显示中性提示；
+ * 邮箱格式错误（422）回填到表单，限流（429）等由请求层提示。
  */
 async function handleSubmit(values: Recordable<any>) {
   if (loading.value) {
@@ -45,8 +47,8 @@ async function handleSubmit(values: Recordable<any>) {
   }
   loading.value = true;
   try {
-    const result = await forgotPasswordApi({ email: String(values.email) });
-    message.success(result?.message || $t('auth.forgetPassword.sent'));
+    await forgotPasswordApi({ email: String(values.email).trim() });
+    message.success($t('auth.forgetPassword.sent'));
   } catch (error) {
     setFormErrors(formRef.value?.getFormApi(), getValidationErrors(error));
   } finally {

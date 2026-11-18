@@ -4,8 +4,9 @@
  * 只依赖 @vben/request，不依赖 store 与界面（由 request.ts 注入），便于单元测试。
  *
  * - 请求：携带 Cookie（withCredentials），从 Cookie `XSRF-TOKEN` 读取令牌放入请求头 `X-XSRF-TOKEN`（withXSRFToken，
- *   每次请求时读取，登录、登出后令牌轮换也无需处理）；`Accept: application/json`；没有 Authorization 头与刷新令牌。
- * - 响应：`{ code, data, message }`，`code === 0` 为成功，返回 `data`。
+ *   每次请求时读取，登录、登出后令牌轮换也无需处理）；`Accept: application/json`；没有 Authorization 头与刷新令牌；
+ *   `Accept-Language` 为当前界面语言（`zh-CN` / `en-US`），后端按它返回对应语言的提示（§6.1）。
+ * - 响应：`{ code, data, message }`，`code === 0` 为成功，返回 `data`；422 的 message 为第一条具体错误。
  * - 认证相关的状态码：
  *   - 419 CSRF 令牌失效：重新获取 CSRF Cookie 后重试一次；
  *   - 423 需要确认密码：弹出确认密码框，确认后重试一次；取消时以 CanceledError 结束（不提示）；
@@ -39,12 +40,14 @@ export interface RequestOptions {
 /** 带额外选项的请求配置（先赋给变量再传给 requestClient，避免对象字面量的多余属性检查） */
 export type AppRequestConfig = RequestClientConfig & RequestOptions;
 
-/** 认证相关状态码的处理（由 request.ts 注入，测试中替换为 mock） */
+/** 认证相关状态码的处理与界面语言（由 request.ts 注入，测试中替换为 mock） */
 export interface SessionHandlers {
   /** 423：让用户确认密码；确认成功返回 true，取消返回 false */
   confirmPassword: () => Promise<boolean>;
   /** 401：会话失效或账号已停用 */
   onUnauthorized: () => Promise<void> | void;
+  /** 当前界面语言（如 `zh-CN`），作为请求头 Accept-Language；返回空值时不设置 */
+  locale?: () => string | undefined;
   /** 419：重新获取 CSRF Cookie */
   refreshCsrfToken: () => Promise<unknown>;
   /** 显示错误提示 */
@@ -136,6 +139,17 @@ export function createRequestClient(
     withXSRFToken: true,
     xsrfCookieName: 'XSRF-TOKEN',
     xsrfHeaderName: 'X-XSRF-TOKEN',
+  });
+
+  // 请求头：界面语言（每次请求时读取，切换语言后立即生效）
+  client.addRequestInterceptor({
+    fulfilled: (config) => {
+      const locale = handlers.locale?.();
+      if (locale) {
+        config.headers['Accept-Language'] = locale;
+      }
+      return config;
+    },
   });
 
   const refreshCsrfToken = shared(handlers.refreshCsrfToken);
