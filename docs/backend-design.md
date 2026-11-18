@@ -167,7 +167,7 @@ app/Modules/Content/
 | 默认行为 | 是否受影响 | 处理（均为官方机制） |
 |---|---|---|
 | Policy 自动推断 | **不受影响** | 框架会把模型命名空间中的 `\Models\` 替换为 `\Policies\` 查找，`App\Core\System\Models\User` 自动对应 `App\Core\System\Policies\UserPolicy` |
-| 工厂推断 | **不受影响** | `App\Modules\Content\Models\Article` 默认对应 `Database\Factories\Modules\Content\Models\ArticleFactory`，`make:model ... -f` 也按此生成；只是目录较深，可选用 `Factory::guessFactoryNamesUsing()` 统一扁平化 |
+| 工厂推断 | 模型 → 工厂**不受影响**；工厂 → 模型需补一次配置 | `App\Modules\Content\Models\Article` 默认对应 `Database\Factories\Modules\Content\Models\ArticleFactory`，`make:model ... -f` 也按此生成。反向推断默认回退到 `App\`，在 `AppServiceProvider` 中用 `Factory::guessModelNamesUsing()` 补上对称规则即可 |
 | 观察者、任务、通知、规则、类型转换、枚举、Action | **不受影响** | 无自动发现机制，放在哪里都可用；观察者用 `#[ObservedBy]` 绑定 |
 | 命令自动发现 | 受影响（默认只扫描 `app/Console/Commands`） | 模块 Provider 中 `$this->commands([...])`（包开发方式） |
 | 事件监听自动发现 | 受影响（默认只扫描 `app/Listeners`） | `withEvents(discover: [...])` 列出各模块的 `Listeners` 目录，或在模块 Provider 中显式注册 |
@@ -253,7 +253,8 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 ### 5.7 入口的注册与运行
 
 - 每个入口一个 ServiceProvider（如 `App\Http\Admin\AdminServiceProvider`），在 `bootstrap/providers.php` 中注册，负责本入口的全部配置：加载自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。新增入口 = 新增一个目录 + 一个 Provider，不改动共享文件。
-- `config/core.php` 登记入口清单；进程可按环境变量只加载部分入口，例如 `CORE_APPS=admin,device`。未加载的入口其路由在该进程中不存在。
+- `config/core.php` 登记入口清单；进程可按环境变量只加载部分入口，例如 `CORE_APPS=admin,device`。未设置时加载全部入口；设为空时不加载任何入口（适合只跑队列、调度的进程）。未加载的入口其路由在该进程中不存在。
+- 以不同的 `CORE_APPS` 运行多个进程并使用路由缓存时，每种组合设置不同的 `APP_ROUTES_CACHE`。
 - 对外开放的入口（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
 - 对外开放的入口暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
 
@@ -330,7 +331,8 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
   - 分页：`page`（从 1 开始）、`pageSize`（有上限）；
   - 排序：`sort`，多个字段逗号分隔，降序加 `-`，如 `sort=-created_at,id`；
   - 筛选：`filter[字段]`，如 `filter[status]=active`。
-- 使用 `spatie/laravel-query-builder` 实现，**允许的筛选和排序字段显式白名单**；不在白名单内的参数返回 422。
+- 使用 `spatie/laravel-query-builder` 实现，**允许的筛选和排序字段显式白名单**；不在白名单内的参数返回 422（该包默认抛出 400，统一映射为 422）。`failOnUnknownFields` 只检查请求体，查询参数的白名单由该包负责。
+- `pageSize` 超过上限返回 422，不自动截断。
 - 返回 `{ items, total }`。
 
 ## 7. 认证
@@ -469,7 +471,12 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
 | `#[\Deprecated]` | 废弃公开方法时使用 |
 | `Uri\Rfc3986\Uri` | 网址解析与校验 |
 
-**前提**：落地前确认 Pint、PHPStan / Larastan、Rector、Pest、Scramble 全部支持所用新语法；先由 Rector 批量升级，再人工处理。
+**工具链兼容性（已实测）**：上表 7 项在 Pint、PHPStan / Larastan（max）、Rector、Pest（含架构测试解析）上全部可用；PHPStan 还能静态检出被丢弃的 `#[\NoDiscard]` 返回值，Rector 的 PHP 8.5 规则集会自动改写为 `new X()->m()`、`array_first()`。Pint 的格式化有两处不完善：
+
+- 管道运算符：Pint 不会给 `|>` 补空格，约定**两侧手写空格、每段一行**；
+- `clone(...)`：Pint 会改写为 `clone (...)`，接受这种写法。
+
+Scramble 的兼容性在引入时另行验证。
 
 ### 10.3 常驻内存兼容规则
 
@@ -610,7 +617,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
 | 工具 | 用途 |
 |---|---|
 | laravel/pint | 代码风格（含分组导入规则） |
-| larastan/larastan + phpstan | 静态分析，level 8 起，逐步提高；`phpstan-deprecation-rules` |
+| larastan/larastan + phpstan | 静态分析，level max，不使用 baseline；`phpstan-deprecation-rules` |
 | spaze/phpstan-disallowed-calls | “写必须走 Action”等禁止调用规则（落地前核实） |
 | rector/rector + driftingly/rector-laravel | 语法升级、Laravel 升级 |
 | pestphp/pest 5 + pest-plugin-mutate | 测试、架构测试、变异测试 |
