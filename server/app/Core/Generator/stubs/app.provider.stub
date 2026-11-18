@@ -2,11 +2,12 @@
 
 namespace {{ namespace }};
 
+use App\Http\Middleware\EnsureUserIsEnabled;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\{SubstituteBindings, ThrottleRequests};
 use Illuminate\Support\Facades\{RateLimiter, Route};
-use Illuminate\Support\ServiceProvider;
+{{ statefulImport }}use Illuminate\Support\ServiceProvider;
 
 /**
  * {{ app }} 入口（{{ trustLevel }}，设计文档 §5.2、§5.7）。
@@ -38,11 +39,18 @@ class {{ class }} extends ServiceProvider
     }
 
     /**
-     * {{ key }} 中间件组。认证（Sanctum）在第 4 步加入；本入口专用的中间件放在 Middleware/。
+     * {{ key }} 中间件组（设计文档 §7.1）：
+     *
+     * - {{ authentication }}
+     * - EnsureUserIsEnabled：停用的账号立即失效（401）；
+     * - 限流与路由模型绑定。
+     *
+     * 需要登录的路由加 `auth:sanctum`（见 routes.php）；本入口专用的中间件放在 Middleware/。
      */
     protected function configureMiddleware(): void
     {
         Route::middlewareGroup(self::NAME, [
+            {{ statefulMiddleware }}EnsureUserIsEnabled::class,
             ThrottleRequests::using(self::NAME),
             SubstituteBindings::class,
         ]);

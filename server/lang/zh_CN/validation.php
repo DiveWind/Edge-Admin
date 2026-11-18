@@ -136,6 +136,12 @@ return [
         'name' => '名称',
         'email' => '邮箱',
         'password' => '密码',
+        'username' => '用户名',
+        'avatar' => '头像',
+        'current_password' => '当前密码',
+        'code' => '动态验证码',
+        'recovery_code' => '恢复码',
+        'token' => '重置令牌',
     ],
 
 ];

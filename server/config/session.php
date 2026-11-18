@@ -169,7 +169,8 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // 未设置时生产环境默认开启（设计文档 §7.4：会话 Cookie 线上 Secure）
+    'secure' => env('SESSION_SECURE_COOKIE', env('APP_ENV', 'production') === 'production'),
 
     /*
     |--------------------------------------------------------------------------

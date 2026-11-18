@@ -1,0 +1,62 @@
+<?php
+
+use App\Core\System\Models\User;
+use Tests\Http\Admin\VbenClient;
+
+/*
+|--------------------------------------------------------------------------
+| GET /user/info：当前用户信息（设计文档 §6.2）
+|--------------------------------------------------------------------------
+*/
+
+it('returns 401 for guests', function (): void {
+    $this->getJson('/api/admin/user/info')
+        ->assertUnauthorized()
+        ->assertExactJson(['code' => 401, 'data' => null, 'message' => 'Unauthenticated.']);
+});
+
+it('returns the Vben user info of the logged-in user', function (): void {
+    $user = User::factory()->create([
+        'username' => 'alice',
+        'name' => 'Alice Liddell',
+        'avatar' => 'https://example.com/alice.png',
+    ]);
+    $client = new VbenClient($this);
+    $client->login('alice');
+
+    $client->get('/api/admin/user/info')
+        ->assertOk()
+        ->assertExactJson([
+            'code' => 0,
+            'data' => [
+                'userId' => (string) $user->id,
+                'username' => 'alice',
+                'realName' => 'Alice Liddell',
+                'avatar' => 'https://example.com/alice.png',
+                'roles' => [],
+                'desc' => '',
+                'homePath' => '/analytics',
+            ],
+            'message' => 'ok',
+        ]);
+});
+
+it('returns a null avatar and the configured home path', function (): void {
+    config(['core.apps.admin.home_path' => '/workspace']);
+
+    $this->actingAs(User::factory()->create(['avatar' => null]))
+        ->getJson('/api/admin/user/info')
+        ->assertOk()
+        ->assertJsonPath('data.avatar', null)
+        ->assertJsonPath('data.homePath', '/workspace');
+});
+
+it('accepts Sanctum tokens as well', function (): void {
+    $user = User::factory()->create();
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson('/api/admin/user/info')
+        ->assertOk()
+        ->assertJsonPath('data.userId', (string) $user->id);
+});

@@ -49,7 +49,7 @@ it('creates a policy with every standard method denying by default', function ()
         expect($policy)->toContain("public function {$method}(User \$user, Article \$article): bool\n    {\n        return false;\n    }");
     }
 
-    expect($policy)->toContain("use App\\Core\\System\\Models\\User;\nuse App\\Modules\\Content\\Models\\Article;", 'TODO: 第 5 步')
+    expect($policy)->toContain("use App\\Core\\System\\Models\\User;\nuse App\\Modules\\Content\\Models\\Article;", 'TODO: 在各方法中检查对应的权限码与数据权限')
         ->and(substr_count($policy, 'return false;'))->toBe(10);
 });
 

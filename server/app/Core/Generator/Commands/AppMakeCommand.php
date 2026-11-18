@@ -11,7 +11,7 @@ use Override;
  * core:make-app：新入口 app/Http/<名称>（设计文档 §5.7）：
  *
  * - `<名称>ServiceProvider`（路由、URL 前缀、中间件组、限流器）与 `routes.php`；
- * - `tests/Http/<名称>/<名称>ServiceProviderTest.php`：按 CORE_APPS 加载、路由前缀、限流的基础测试；
+ * - `tests/Http/<名称>/<名称>ServiceProviderTest.php`：按 CORE_APPS 加载、路由前缀、登录、限流的基础测试；
  * - 登记到 config/core.php（入口清单）、bootstrap/providers.php、phpunit.xml 与 .env.example 的 CORE_APPS（幂等）。
  *
  * 默认是受信任的入口（trusted=true，可直接读取模型）；`--restricted` 生成受限的入口（trusted=false，只能通过模块的
@@ -83,7 +83,7 @@ class AppMakeCommand extends CoreGeneratorCommand
         $env = [$this->env().'_PREFIX' => $this->prefix(), $this->env().'_RATE_LIMIT' => (string) self::RATE_LIMIT];
 
         $routes = $this->writeFromStub('app.routes', dirname($path).'/routes.php', $replacements, 'Routes');
-        $test = $this->writeFromStub('app.test', base_path("tests/Http/{$name}/{$name}ServiceProviderTest.php"), $replacements, 'Test');
+        $test = $this->writeFromStub($this->option('restricted') ? 'app.test.restricted' : 'app.test', base_path("tests/Http/{$name}/{$name}ServiceProviderTest.php"), $replacements, 'Test');
 
         $entry = $this->replace($this->files->get($this->resolveStub('app.config')), $replacements);
 
@@ -122,6 +122,13 @@ class AppMakeCommand extends CoreGeneratorCommand
             'access' => $restricted
                 ? '受限的入口：只能通过模块的 Contracts 读写数据，不使用任何模型（设计文档 §5.2，tests/Arch 强制）；对外开放，路由从第一版起带版本号。'
                 : '受信任的入口：可直接读取 Core 与业务模块的模型，写入必须调用模块的 Action（设计文档 §5.2）。',
+            // 认证（设计文档 §7.1）：受信任的入口与后台相同，前端请求使用 Sanctum 会话 Cookie；受限的入口只用 Bearer token
+            'authentication' => $restricted
+                ? '无状态：不启动会话、不校验 CSRF，只用 Sanctum 的 Bearer token 认证；'
+                : 'EnsureFrontendRequestsAreStateful：来自 SANCTUM_STATEFUL_DOMAINS 的前端请求使用会话 Cookie 并校验 CSRF，其他请求只能用 Bearer token；',
+            'authenticatedBy' => $restricted ? 'Bearer token' : '前端的会话 Cookie 或 Bearer token',
+            'statefulImport' => $restricted ? '' : "use Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful;\n",
+            'statefulMiddleware' => $restricted ? '' : "EnsureFrontendRequestsAreStateful::class,\n            ",
         ];
     }
 

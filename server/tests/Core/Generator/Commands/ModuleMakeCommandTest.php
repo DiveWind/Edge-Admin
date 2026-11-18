@@ -44,7 +44,7 @@ it('creates a core module with --core', function (): void {
     $this->artisan('core:make-module', ['name' => 'Monitor', '--core' => true])->assertSuccessful();
 
     expect($this->project->exists('app/Core/Monitor/MonitorServiceProvider.php'))->toBeTrue()
-        ->and($this->project->read('app/Core/Monitor/README.md'))->toContain('内核模块')
+        ->and($this->project->read('app/Core/Monitor/README.md'))->toContain('内核模块', '--module=Monitor --core')
         ->and($this->project->read('bootstrap/providers.php'))->toContain("    GeneratorServiceProvider::class,\n    MonitorServiceProvider::class,\n");
 });
 

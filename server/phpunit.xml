@@ -35,14 +35,21 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Sanctum SPA 认证：测试中的前端地址（tests/Http/Admin/VbenClient.php） -->
+        <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost:5999"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
-        <!-- 测试加载全部入口（新增入口时追加）；CORE_* 都在这里给定，不受本地 .env 影响 -->
+        <!-- CORE_* 都在这里给定，不受本地 .env 影响；CORE_APPS 为全部入口（新增入口时追加） -->
+        <env name="CORE_LOGIN_RATE_LIMIT" value="5"/>
+        <env name="CORE_FRONTEND_URL" value="http://localhost:5999"/>
+        <env name="CORE_RESET_PASSWORD_PATH" value="/#/auth/reset-password"/>
+        <env name="CORE_EMAIL_VERIFICATION" value="false"/>
         <env name="CORE_APPS" value="admin"/>
         <env name="CORE_ADMIN_PREFIX" value="api/admin"/>
         <env name="CORE_ADMIN_RATE_LIMIT" value="120"/>
         <env name="CORE_ADMIN_PAGE_SIZE" value="20"/>
         <env name="CORE_ADMIN_MAX_PAGE_SIZE" value="100"/>
+        <env name="CORE_ADMIN_HOME_PATH" value="/analytics"/>
     </php>
 </phpunit>

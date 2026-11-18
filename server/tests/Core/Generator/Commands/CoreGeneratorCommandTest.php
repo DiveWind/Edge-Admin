@@ -58,6 +58,12 @@ it('publishes its stubs with stub:publish', function (): void {
     expect(array_keys(GeneratorServiceProvider::stubs()))->toContain('action', 'model', 'module.provider', 'app.provider', 'controller.model');
 });
 
+it('does not mention the internal development steps in the stubs', function (): void {
+    foreach (GeneratorServiceProvider::stubs() as $name => $path) {
+        expect(preg_match('/第\s*\d+\s*步/u', (string) file_get_contents($path)))->toBe(0, "stubs/{$name}.stub");
+    }
+});
+
 it('offers its stubs alone under the core-stubs publish tag', function (): void {
     $paths = ServiceProvider::pathsToPublish(GeneratorServiceProvider::class, 'core-stubs');
 
@@ -66,6 +72,7 @@ it('offers its stubs alone under the core-stubs publish tag', function (): void 
 });
 
 it('generates code and edits shared files in the project code style', function (): void {
+    $this->artisan('core:make-app', ['name' => 'portal'])->assertSuccessful();
     $this->artisan('core:make-app', ['name' => 'device', '--restricted' => true])->assertSuccessful();
     $this->artisan('core:make-module', ['name' => 'Device'])->assertSuccessful();
     $this->artisan('core:make-module', ['name' => 'Monitor', '--core' => true])->assertSuccessful();

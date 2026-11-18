@@ -195,6 +195,9 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - 列表接口：请求继承 `App\Http\Admin\Requests\ListRequest`，用 `->paginate($request->pageSize())` 分页，响应自动变为 `{ items, total }`；参数名 `page`、`pageSize`、`sort`、`filter[字段]`。
 - API Resource 逐个列出字段，禁止整模型 `toArray()` 输出；日期字段输出 `toIso8601String()`。
 - 后台入口的路由不带版本号；对外开放的入口（设备、开放平台）从第一版起带 `/v1`。
+- 认证（设计文档 §7）：登录、登出、两步验证、找回密码、修改资料与密码由 Fortify 提供（挂在后台入口下，见 `config/fortify.php`），不自写；
+  需要登录的路由放在 `auth:sanctum` 分组中（会话 Cookie 与 token 都识别）；Fortify 的 Action 在 `app/Core/System/Actions`。
+- 测试中模拟浏览器里的 Vben（会话 Cookie、CSRF、多设备）用 `tests/Http/Admin/VbenClient.php`；只需要“已登录”时用 `actingAs()`。
 
 ### 命名与生成
 

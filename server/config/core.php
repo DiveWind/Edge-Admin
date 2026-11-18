@@ -55,8 +55,32 @@ return [
                 'page_size' => (int) env('CORE_ADMIN_PAGE_SIZE', 20),
                 'max_page_size' => (int) env('CORE_ADMIN_MAX_PAGE_SIZE', 100),
             ],
+
+            // GET /user/info 的 homePath：登录后进入的前端页面（Vben 路由路径，设计文档 §6.2）
+            'home_path' => env('CORE_ADMIN_HOME_PATH', '/analytics'),
         ],
 
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 认证（设计文档 §7）
+    |--------------------------------------------------------------------------
+    |
+    | 后台使用 Sanctum SPA 模式（会话 Cookie）+ Fortify 登录流程；Fortify 的路由挂在后台入口下（config/fortify.php），
+    | 限流器、找回密码链接等在 App\Core\System\SystemServiceProvider 中配置。
+    |
+    | - login_rate_limit：同一“用户名 + IP”每分钟最多登录几次，两步验证（同一待验证用户）同样按此次数；
+    |   以后改由后台的系统参数控制（设计文档 §7.2）；
+    | - frontend_url、reset_password_path：找回密码邮件中的重置链接指向前端页面
+    |   `<frontend_url><reset_password_path>?token=…&email=…`（Vben 默认 hash 路由，故路径以 /#/ 开头）。
+    |
+    */
+
+    'auth' => [
+        'login_rate_limit' => (int) env('CORE_LOGIN_RATE_LIMIT', 5),
+        'frontend_url' => env('CORE_FRONTEND_URL', 'http://localhost:5999'),
+        'reset_password_path' => env('CORE_RESET_PASSWORD_PATH', '/#/auth/reset-password'),
     ],
 
 ];

@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\Generator\GeneratorServiceProvider;
+use App\Core\System\SystemServiceProvider;
 use App\Http\Admin\AdminServiceProvider;
 use App\Providers\AppServiceProvider;
 
@@ -9,6 +10,7 @@ return [
 
     // 内核模块（app/Core）
     GeneratorServiceProvider::class,
+    SystemServiceProvider::class,
 
     // 入口：是否加载由 config('core.apps') / CORE_APPS 决定
     AdminServiceProvider::class,

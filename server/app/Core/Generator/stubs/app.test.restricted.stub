@@ -1,0 +1,79 @@
+<?php
+
+use App\Core\System\Models\User;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Sanctum;
+
+/*
+|--------------------------------------------------------------------------
+| {{ app }} 入口：按 CORE_APPS 加载、路由前缀、登录（Sanctum token，无状态）、限流
+|--------------------------------------------------------------------------
+*/
+
+it('loads the {{ key }} entry when CORE_APPS includes it', function (): void {
+    $this->refreshApplicationWithEnv(['CORE_APPS' => '{{ key }}']);
+
+    expect(Route::has('{{ key }}.ping'))->toBeTrue()
+        ->and(Route::getMiddlewareGroups())->toHaveKey('{{ key }}');
+
+    // 重建应用后内存数据库是空的：用未保存的用户
+    Sanctum::actingAs(User::factory()->make());
+
+    $this->getJson('/{{ prefix }}/ping')->assertOk()->assertExactJson(['pong' => true]);
+});
+
+it('registers nothing for the {{ key }} entry when CORE_APPS does not include it', function (): void {
+    $this->refreshApplicationWithEnv(['CORE_APPS' => '']);
+
+    expect(Route::has('{{ key }}.ping'))->toBeFalse()
+        ->and(Route::getMiddlewareGroups())->not->toHaveKey('{{ key }}');
+
+    $this->getJson('/{{ prefix }}/ping')->assertNotFound();
+});
+
+it('uses the configurable URL prefix', function (): void {
+    $this->refreshApplicationWithEnv(['{{ env }}_PREFIX' => '/custom/{{ key }}/']);
+
+    expect(route('{{ key }}.ping', absolute: false))->toBe('/custom/{{ key }}/ping');
+
+    Sanctum::actingAs(User::factory()->make());
+
+    $this->getJson('/custom/{{ key }}/ping')->assertOk();
+});
+
+it('authenticates with a Bearer token', function (): void {
+    $token = User::factory()->create()->createToken('test')->plainTextToken;
+
+    $this->withToken($token)->getJson('/{{ prefix }}/ping')->assertOk();
+});
+
+it('requires authentication', function (): void {
+    $this->getJson('/{{ prefix }}/ping')->assertUnauthorized();
+    $this->withToken('invalid')->getJson('/{{ prefix }}/ping')->assertUnauthorized();
+});
+
+it('rejects disabled users', function (): void {
+    Sanctum::actingAs(User::factory()->disabled()->create());
+
+    $this->getJson('/{{ prefix }}/ping')->assertUnauthorized();
+});
+
+it('does not start a session, even for requests from the first-party frontend', function (): void {
+    $frontend = 'http://'.Arr::first(config()->array('sanctum.stateful')).'/';
+
+    Sanctum::actingAs(User::factory()->create());
+
+    $this->getJson('/{{ prefix }}/ping', ['Referer' => $frontend])
+        ->assertOk()
+        ->assertCookieMissing(config()->string('session.cookie'));
+});
+
+it('rate limits requests per minute', function (): void {
+    config(['core.apps.{{ key }}.rate_limit' => 1]);
+    Sanctum::actingAs(User::factory()->create());
+
+    $this->getJson('/{{ prefix }}/ping')->assertOk();
+
+    $this->getJson('/{{ prefix }}/ping')->assertTooManyRequests();
+});

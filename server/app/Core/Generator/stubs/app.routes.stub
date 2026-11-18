@@ -12,5 +12,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// 验证入口用的示例路由，接入第一个模块后删除（同时修改 tests/Http/{{ app }}/{{ provider }}Test.php）
-Route::get('ping', fn (): array => ['pong' => true])->name('ping');
+// 需要登录的路由（auth:sanctum：{{ authenticatedBy }}）
+Route::middleware('auth:sanctum')->group(function (): void {
+    // 验证入口用的示例路由，接入第一个模块后删除（同时修改 tests/Http/{{ app }}/{{ provider }}Test.php）
+    Route::get('ping', fn (): array => ['pong' => true])->name('ping');
+});

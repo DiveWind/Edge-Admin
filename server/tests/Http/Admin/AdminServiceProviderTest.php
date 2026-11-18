@@ -38,6 +38,7 @@ describe('CORE_APPS', function (): void {
 
         expect(config('core.apps.admin.enabled'))->toBeFalse()
             ->and(Route::has('admin.ping'))->toBeFalse()
+            ->and(Route::has('login.store'))->toBeFalse()
             ->and(Route::getMiddlewareGroups())->not->toHaveKey('admin');
 
         // 路由不存在，404 也不再是 Vben 格式
@@ -51,7 +52,9 @@ describe('CORE_APPS', function (): void {
 it('uses the configurable URL prefix', function (): void {
     $this->refreshApplicationWithEnv(['CORE_ADMIN_PREFIX' => '/backend/']);
 
-    expect(route('admin.ping', absolute: false))->toBe('/backend/ping');
+    expect(route('admin.ping', absolute: false))->toBe('/backend/ping')
+        ->and(route('login.store', absolute: false))->toBe('/backend/login')
+        ->and(route('admin.sanctum.csrf-cookie', absolute: false))->toBe('/backend/sanctum/csrf-cookie');
 
     $this->getJson('/backend/ping')->assertOk()->assertJsonPath('data.pong', true);
     $this->getJson('/backend/missing')->assertNotFound()->assertJsonPath('code', 404);
@@ -187,4 +190,33 @@ it('provides the response()->vben() macro', function (): void {
     $this->postJson('/api/admin/_test/saved')
         ->assertCreated()
         ->assertExactJson(['code' => 0, 'data' => ['id' => 1], 'message' => '已保存']);
+});
+
+describe('Fortify', function (): void {
+    it('registers the API routes of the enabled features only', function (): void {
+        expect(Route::has('login.store'))->toBeTrue()
+            ->and(Route::has('two-factor.login.store'))->toBeTrue()
+            ->and(Route::has('password.email'))->toBeTrue()
+            ->and(Route::has('user-password.update'))->toBeTrue()
+            ->and(Route::has('register.store'))->toBeFalse()
+            ->and(Route::has('passkey.login'))->toBeFalse()
+            ->and(Route::has('verification.send'))->toBeFalse()
+            // 不注册返回页面的路由
+            ->and(Route::has('login'))->toBeFalse();
+    });
+
+    it('registers the email verification routes when enabled', function (): void {
+        $this->refreshApplicationWithEnv(['CORE_EMAIL_VERIFICATION' => 'true']);
+
+        expect(Route::has('verification.send'))->toBeTrue()
+            ->and(Route::has('verification.verify'))->toBeTrue();
+    });
+
+    it('answers with JSON even when the client does not ask for it', function (): void {
+        User::factory()->create(['username' => 'alice']);
+
+        $this->post('/api/admin/login', ['username' => 'alice', 'password' => 'password'], ['Accept' => 'text/html'])
+            ->assertOk()
+            ->assertExactJson(['code' => 0, 'data' => ['two_factor' => false], 'message' => 'ok']);
+    });
 });

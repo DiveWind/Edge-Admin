@@ -22,7 +22,7 @@ it('creates a trusted entry and registers it in the shared files', function (): 
     expect($this->project->files('app/Http/Portal'))->toBe(['app/Http/Portal/PortalServiceProvider.php', 'app/Http/Portal/routes.php'])
         ->and($this->project->read('app/Http/Portal/PortalServiceProvider.php'))
         ->toContain('namespace App\Http\Portal;', 'class PortalServiceProvider extends ServiceProvider', "public const string NAME = 'portal';", '受信任的入口')
-        ->and($this->project->read('app/Http/Portal/routes.php'))->toContain("Route::get('ping'")
+        ->and($this->project->read('app/Http/Portal/routes.php'))->toContain("Route::middleware('auth:sanctum')->group(", "Route::get('ping'")
         ->and($this->project->read('tests/Http/Portal/PortalServiceProviderTest.php'))->toContain("getJson('/api/portal/ping')");
 
     $config = require $this->project->path('config/core.php');
@@ -46,6 +46,29 @@ it('creates a restricted entry with a versioned prefix', function (): void {
     expect($config['apps']['device'])->toMatchArray(['trusted' => false, 'prefix' => 'api/device/v1'])
         ->and($this->project->read('app/Http/Device/DeviceServiceProvider.php'))->toContain('受限的入口', '只能通过模块的 Contracts')
         ->and($this->project->read('phpunit.xml'))->toContain('<env name="CORE_DEVICE_PREFIX" value="api/device/v1"/>');
+});
+
+it('authenticates a trusted entry like the admin entry: Sanctum sessions for the frontend', function (): void {
+    $this->artisan('core:make-app', ['name' => 'portal'])->assertSuccessful();
+
+    expect($this->project->read('app/Http/Portal/PortalServiceProvider.php'))->toContain(
+        'use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;',
+        "        Route::middlewareGroup(self::NAME, [\n            EnsureFrontendRequestsAreStateful::class,\n            EnsureUserIsEnabled::class,\n            ThrottleRequests::using(self::NAME),",
+    )
+        ->and($this->project->read('tests/Http/Portal/PortalServiceProviderTest.php'))
+        ->toContain("it('requires authentication'", '$this->actingAs(User::factory()->create())', "->assertCookie(config()->string('session.cookie'))")
+        ->not->toContain('Sanctum::actingAs');
+});
+
+it('authenticates a restricted entry with stateless Sanctum tokens only', function (): void {
+    $this->artisan('core:make-app', ['name' => 'device', '--restricted' => true])->assertSuccessful();
+
+    expect($this->project->read('app/Http/Device/DeviceServiceProvider.php'))
+        ->toContain("        Route::middlewareGroup(self::NAME, [\n            EnsureUserIsEnabled::class,\n            ThrottleRequests::using(self::NAME),")
+        ->not->toContain('EnsureFrontendRequestsAreStateful')
+        ->and($this->project->read('app/Http/Device/routes.php'))->toContain("Route::middleware('auth:sanctum')->group(")
+        ->and($this->project->read('tests/Http/Device/DeviceServiceProviderTest.php'))
+        ->toContain("it('requires authentication'", 'Sanctum::actingAs(User::factory()->create());', "->assertCookieMissing(config()->string('session.cookie'))");
 });
 
 it('derives the config key, directory and environment prefix from the name', function (): void {

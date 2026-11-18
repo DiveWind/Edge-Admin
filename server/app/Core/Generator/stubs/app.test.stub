@@ -1,10 +1,12 @@
 <?php
 
+use App\Core\System\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| {{ app }} 入口：按 CORE_APPS 加载、路由前缀、限流
+| {{ app }} 入口：按 CORE_APPS 加载、路由前缀、登录（Sanctum 会话）、限流
 |--------------------------------------------------------------------------
 */
 
@@ -14,7 +16,11 @@ it('loads the {{ key }} entry when CORE_APPS includes it', function (): void {
     expect(Route::has('{{ key }}.ping'))->toBeTrue()
         ->and(Route::getMiddlewareGroups())->toHaveKey('{{ key }}');
 
-    $this->getJson('/{{ prefix }}/ping')->assertOk()->assertExactJson(['pong' => true]);
+    // 重建应用后内存数据库是空的：用未保存的用户
+    $this->actingAs(User::factory()->make())
+        ->getJson('/{{ prefix }}/ping')
+        ->assertOk()
+        ->assertExactJson(['pong' => true]);
 });
 
 it('registers nothing for the {{ key }} entry when CORE_APPS does not include it', function (): void {
@@ -31,11 +37,31 @@ it('uses the configurable URL prefix', function (): void {
 
     expect(route('{{ key }}.ping', absolute: false))->toBe('/custom/{{ key }}/ping');
 
-    $this->getJson('/custom/{{ key }}/ping')->assertOk();
+    $this->actingAs(User::factory()->make())->getJson('/custom/{{ key }}/ping')->assertOk();
+});
+
+it('requires authentication', function (): void {
+    $this->getJson('/{{ prefix }}/ping')->assertUnauthorized();
+});
+
+it('rejects disabled users', function (): void {
+    $this->actingAs(User::factory()->disabled()->create())
+        ->getJson('/{{ prefix }}/ping')
+        ->assertUnauthorized();
+});
+
+it('uses the session cookie for requests from the first-party frontend', function (): void {
+    $frontend = 'http://'.Arr::first(config()->array('sanctum.stateful')).'/';
+
+    $this->actingAs(User::factory()->create())
+        ->getJson('/{{ prefix }}/ping', ['Referer' => $frontend])
+        ->assertOk()
+        ->assertCookie(config()->string('session.cookie'));
 });
 
 it('rate limits requests per minute', function (): void {
     config(['core.apps.{{ key }}.rate_limit' => 1]);
+    $this->actingAs(User::factory()->create());
 
     $this->getJson('/{{ prefix }}/ping')->assertOk();
 

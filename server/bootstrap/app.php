@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\{AssignRequestId, RedirectIfAuthenticated};
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\{Exceptions, Middleware};
 use Illuminate\Support\Facades\Route;
@@ -28,6 +28,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // 没有登录页：未登录不重定向，由异常输出返回 401
         $middleware->redirectGuestsTo(null);
+
+        // 已登录时访问 guest 路由（Fortify 的登录、找回密码等）：期望 JSON 的请求返回 409，不重定向
+        $middleware->alias(['guest' => RedirectIfAuthenticated::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // 异常一律输出 JSON；后台入口的 Vben 格式由 AdminServiceProvider 注册

@@ -2,8 +2,9 @@
 
 namespace App\Http\Admin;
 
-use App\Http\Admin\Middleware\FormatResponse;
+use App\Http\Admin\Middleware\{ForceJson, FormatResponse};
 use App\Http\Admin\Responses\VbenResponse;
+use App\Http\Middleware\EnsureUserIsEnabled;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Request;
@@ -11,6 +12,8 @@ use Illuminate\Routing\Middleware\{SubstituteBindings, ThrottleRequests};
 use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\{RateLimiter, Route};
 use Illuminate\Support\ServiceProvider;
+use Laravel\Fortify\Fortify;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use LogicException;
 use Throwable;
 
@@ -18,7 +21,8 @@ use Throwable;
  * 后台入口（Admin）：给 Vben 使用的后台 API（受信任的入口，设计文档 §5.2、§5.7、§6）。
  *
  * 负责本入口的全部配置：路由（routes.php）、URL 前缀、admin 中间件组、限流器、Vben 响应格式与异常输出。
- * config('core.apps.admin.enabled') 为 false（CORE_APPS 不含 admin）时什么都不注册。
+ * 认证为 Sanctum SPA 模式（会话 Cookie）+ Fortify（设计文档 §7）：Fortify 的路由使用本入口的前缀与中间件组（config/fortify.php）。
+ * config('core.apps.admin.enabled') 为 false（CORE_APPS 不含 admin）时什么都不注册，Fortify 的路由也不注册。
  */
 class AdminServiceProvider extends ServiceProvider
 {
@@ -26,6 +30,16 @@ class AdminServiceProvider extends ServiceProvider
      * 入口名：config/core.php 中的键、中间件组名、限流器名、路由名前缀。
      */
     public const string NAME = 'admin';
+
+    /**
+     * Register any application services.
+     *
+     * Fortify 的路由挂在本入口下（admin 中间件组），本入口不加载时不注册；每次启动时按配置重新设置（静态开关，测试中会重建应用）。
+     */
+    public function register(): void
+    {
+        Fortify::$registersRoutes = config()->boolean('core.apps.'.self::NAME.'.enabled');
+    }
 
     /**
      * Bootstrap any application services.
@@ -43,13 +57,24 @@ class AdminServiceProvider extends ServiceProvider
     }
 
     /**
-     * admin 中间件组。FormatResponse 在最外层，保证组内其他中间件的响应也被包装。
-     * 认证（Sanctum 有状态会话）在第 4 步加入。
+     * admin 中间件组（按顺序）：
+     *
+     * 1. FormatResponse：最外层，组内其他中间件的响应与异常（含 CSRF 的 419、限流的 429、未登录的 401）也被包装为 Vben 格式；
+     * 2. ForceJson：请求一律按 JSON 处理，Fortify 等不会返回重定向；
+     * 3. EnsureFrontendRequestsAreStateful：来自 SANCTUM_STATEFUL_DOMAINS 的请求（按 Referer / Origin）启动会话、
+     *    校验 CSRF（X-XSRF-TOKEN）、修改密码后让其他会话失效（Sanctum 的 AuthenticateSession）；其他请求只能用 Bearer token；
+     * 4. EnsureUserIsEnabled：停用的账号立即失效（401）；
+     * 5. 限流（已登录按用户、未登录按 IP）与路由模型绑定。
+     *
+     * 需要登录的路由加 `auth:sanctum`（会话与 token 都能识别）；它按框架的中间件优先级排在限流之前。
      */
     protected function configureMiddleware(): void
     {
         Route::middlewareGroup(self::NAME, [
             FormatResponse::class,
+            ForceJson::class,
+            EnsureFrontendRequestsAreStateful::class,
+            EnsureUserIsEnabled::class,
             ThrottleRequests::using(self::NAME),
             SubstituteBindings::class,
         ]);

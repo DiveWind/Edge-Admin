@@ -18,6 +18,10 @@ parameters:
 
     tmpDir: storage/framework/cache/phpstan
 
+    # 模型的 casts() 方法按项目约定声明为 array<string, string>，Larastan 默认只看返回类型、推断不出枚举与日期等类型转换；
+    # 解析方法体后 $user->status 为 UserStatus、$user->email_verified_at 为日期对象
+    parseModelCastsMethod: true
+
     # “写必须走 Action”（设计文档 §5.2、§5.6）：入口（app/Http）中禁止调用 Eloquent 的写方法
     disallowedMethodCalls:
         -

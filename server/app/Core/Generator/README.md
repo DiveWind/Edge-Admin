@@ -23,6 +23,6 @@
 
 ## 扩展：完整增删改查（`core:make-module --crud`）
 
-尚未实现，依赖第 5 步建立的 Core 扩展点（菜单与权限节点等）。接入方式：在 `ModuleMakeCommand` 中去掉 `--crud` 的提示，
+尚未实现，依赖 Core 的扩展点（菜单与权限节点等，尚未提供）。接入方式：在 `ModuleMakeCommand` 中去掉 `--crud` 的提示，
 依次调用 `core:make-model`、`core:make-action`（Create / Update / Delete）、`core:make-request`、`core:make-resource`、
 `core:make-controller`，再通过新的 `Editing/*File` 登记权限节点与路由，并按模板生成授权测试。
