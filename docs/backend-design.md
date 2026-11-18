@@ -294,6 +294,8 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 { "code": 422, "data": null, "message": "数据校验失败", "errors": { "username": ["..."] } }
 ```
 
+- **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
+
 ### 6.2 认证与菜单相关接口
 
 | 接口 | 提供方 | 说明 |
@@ -304,16 +306,31 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码 |
 | 两步验证的开启、确认、关闭、恢复码 | Fortify | 个人设置中使用 |
 | `GET /auth/codes` | 自建 | 当前用户的按钮权限码列表 |
-| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录 |
-| `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致：`path`、`component`、`meta { title, icon, order, ... }` |
+| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`、`username`、`realName`、`avatar`、`roles`、`desc`、`homePath` |
+| `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致（见下方“菜单节点”） |
+
+**菜单节点**（Vben 后端路由模式的要求）：
+
+| 字段 | 规则 |
+|---|---|
+| `name` | **全局唯一**，否则前端报错；使用权限节点的权限码 |
+| `path` | 路由路径 |
+| `component` | 目录：`BasicLayout`；页面：相对 `src/views` 的路径，如 `/system/user/list`；内嵌页：`IFrameView` 并设置 `meta.iframeSrc`；外链：设置 `meta.link` |
+| `meta` | `title`、`icon`、`order`、`hideInMenu` 等 Vben 支持的字段 |
 
 Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
+
+找回密码邮件中的重置链接指向前端页面（`ResetPassword::createUrlUsing()`）。
 
 **Vben 侧的调整**（都在 `apps/web` 内，约 4 个文件，共享包不改）：请求携带 Cookie 并自动带 CSRF 令牌；去掉 `Authorization` 请求头与刷新令牌逻辑；登录态改为“已登录标记 + 启动时请求 `/user/info`”；路由守卫改为判断用户信息。
 
 ### 6.3 列表查询
 
-- 参数：分页、排序、筛选，使用 `spatie/laravel-query-builder`，**允许的筛选和排序字段显式白名单**。
+- 参数名：
+  - 分页：`page`（从 1 开始）、`pageSize`（有上限）；
+  - 排序：`sort`，多个字段逗号分隔，降序加 `-`，如 `sort=-created_at,id`；
+  - 筛选：`filter[字段]`，如 `filter[status]=active`。
+- 使用 `spatie/laravel-query-builder` 实现，**允许的筛选和排序字段显式白名单**；不在白名单内的参数返回 422。
 - 返回 `{ items, total }`。
 
 ## 7. 认证
