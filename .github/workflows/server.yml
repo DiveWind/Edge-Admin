@@ -1,0 +1,65 @@
+name: Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  server:
+    name: Lint, analyse, refactor check, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_sqlite, sqlite3
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('server/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # 设计文档 §9：CI 执行 composer audit
+      - name: Audit dependencies
+        run: composer audit
+
+      # Pint（lint）、Larastan（analyse）、Rector --dry-run、Pest（含 tests/Arch）
+      # 测试使用 SQLite 内存库，环境变量全部来自 phpunit.xml，不需要 .env
+      - name: composer ci
+        run: composer ci

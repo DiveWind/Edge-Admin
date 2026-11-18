@@ -1,0 +1,22 @@
+{
+    "The given data was invalid.": "数据校验失败",
+    "Unauthenticated.": "未登录或登录已过期",
+    "This action is unauthorized.": "无权执行此操作",
+    "Too Many Attempts.": "请求过于频繁，请稍后再试",
+    "CSRF token mismatch.": "页面已过期，请刷新后重试",
+    "Bad Request": "请求无效",
+    "Unauthorized": "未登录或登录已过期",
+    "Forbidden": "无权执行此操作",
+    "Not Found": "资源不存在",
+    "Method Not Allowed": "请求方法不被允许",
+    "Conflict": "资源状态冲突",
+    "Content Too Large": "请求内容过大",
+    "Unsupported Media Type": "不支持的请求格式",
+    "Unprocessable Content": "数据校验失败",
+    "Locked": "资源已锁定",
+    "Too Many Requests": "请求过于频繁，请稍后再试",
+    "Internal Server Error": "服务器错误",
+    "Bad Gateway": "网关错误",
+    "Service Unavailable": "服务暂不可用",
+    "Unknown Error": "未知错误"
+}

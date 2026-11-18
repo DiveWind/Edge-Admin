@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <!-- 边界与约定（tests/Arch） -->
+        <testsuite name="Arch">
+            <directory>tests/Arch</directory>
+        </testsuite>
+        <!-- 其余测试，目录与 app/ 对应（Core、Modules、Http、Support、Providers） -->
+        <testsuite name="App">
+            <directory>tests</directory>
+            <exclude>tests/Arch</exclude>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <!-- 断言以英文原文与 UTC 为准，不受 .env 影响（中文提示与其他时区在用例中显式设置） -->
+        <env name="APP_LOCALE" value="en"/>
+        <env name="APP_TIMEZONE" value="UTC"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- 测试加载全部入口（新增入口时追加）；CORE_* 都在这里给定，不受本地 .env 影响 -->
+        <env name="CORE_APPS" value="admin"/>
+        <env name="CORE_ADMIN_PREFIX" value="api/admin"/>
+        <env name="CORE_ADMIN_RATE_LIMIT" value="120"/>
+        <env name="CORE_ADMIN_PAGE_SIZE" value="20"/>
+        <env name="CORE_ADMIN_MAX_PAGE_SIZE" value="100"/>
+    </php>
+</phpunit>

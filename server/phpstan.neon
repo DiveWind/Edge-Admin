@@ -1,0 +1,124 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/spaze/phpstan-disallowed-calls/extension.neon
+
+parameters:
+    # 最高级别；不使用 baseline，不忽略错误
+    level: max
+
+    paths:
+        - app
+        - bootstrap/app.php
+        - bootstrap/providers.php
+        - config
+        - database
+        - lang
+        - routes
+
+    tmpDir: storage/framework/cache/phpstan
+
+    # “写必须走 Action”（设计文档 §5.2、§5.6）：入口（app/Http）中禁止调用 Eloquent 的写方法
+    disallowedMethodCalls:
+        -
+            method:
+                - 'Illuminate\Database\Eloquent\Model::save()'
+                - 'Illuminate\Database\Eloquent\Model::saveQuietly()'
+                - 'Illuminate\Database\Eloquent\Model::saveOrFail()'
+                - 'Illuminate\Database\Eloquent\Model::push()'
+                - 'Illuminate\Database\Eloquent\Model::pushQuietly()'
+                - 'Illuminate\Database\Eloquent\Model::update()'
+                - 'Illuminate\Database\Eloquent\Model::updateQuietly()'
+                - 'Illuminate\Database\Eloquent\Model::updateOrFail()'
+                - 'Illuminate\Database\Eloquent\Model::delete()'
+                - 'Illuminate\Database\Eloquent\Model::deleteQuietly()'
+                - 'Illuminate\Database\Eloquent\Model::deleteOrFail()'
+                - 'Illuminate\Database\Eloquent\Model::forceDelete()'
+                - 'Illuminate\Database\Eloquent\Model::touch()'
+                - 'Illuminate\Database\Eloquent\Model::destroy()'
+                # 经 __call 调用的受保护方法（increment 等）与 SoftDeletes 的方法，PHPStan 解析为模型类自身的方法
+                - 'App\*\Models\*::increment*()'
+                - 'App\*\Models\*::decrement*()'
+                - 'App\*\Models\*::forceDelete*()'
+                - 'App\*\Models\*::restore*()'
+                - 'Illuminate\Database\Eloquent\Builder::create()'
+                - 'Illuminate\Database\Eloquent\Builder::createQuietly()'
+                - 'Illuminate\Database\Eloquent\Builder::createOrFirst()'
+                - 'Illuminate\Database\Eloquent\Builder::forceCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::forceCreateQuietly()'
+                - 'Illuminate\Database\Eloquent\Builder::firstOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::updateOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::incrementOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::insert()'
+                - 'Illuminate\Database\Eloquent\Builder::insertOrIgnore()'
+                - 'Illuminate\Database\Eloquent\Builder::insertGetId()'
+                - 'Illuminate\Database\Eloquent\Builder::upsert()'
+                - 'Illuminate\Database\Eloquent\Builder::update()'
+                - 'Illuminate\Database\Eloquent\Builder::delete()'
+                - 'Illuminate\Database\Eloquent\Builder::forceDelete()'
+                - 'Illuminate\Database\Eloquent\Builder::restore()'
+                - 'Illuminate\Database\Eloquent\Builder::increment()'
+                - 'Illuminate\Database\Eloquent\Builder::decrement()'
+                - 'Illuminate\Database\Eloquent\Builder::touch()'
+                - 'Illuminate\Database\Eloquent\Relations\Relation::create()'
+                - 'Illuminate\Database\Eloquent\Relations\Relation::update()'
+                - 'Illuminate\Database\Eloquent\Relations\Relation::delete()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::save()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::saveMany()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::create()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::createMany()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::forceCreate()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::updateOrCreate()'
+                - 'Illuminate\Database\Eloquent\Relations\HasOneOrMany::firstOrCreate()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::save()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::saveMany()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::create()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::createMany()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::attach()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::detach()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::sync()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::syncWithoutDetaching()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::syncWithPivotValues()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::toggle()'
+                - 'Illuminate\Database\Eloquent\Relations\BelongsToMany::updateExistingPivot()'
+                - 'Illuminate\Database\Query\Builder::insert()'
+                - 'Illuminate\Database\Query\Builder::insertOrIgnore()'
+                - 'Illuminate\Database\Query\Builder::insertGetId()'
+                - 'Illuminate\Database\Query\Builder::insertUsing()'
+                - 'Illuminate\Database\Query\Builder::upsert()'
+                - 'Illuminate\Database\Query\Builder::update()'
+                - 'Illuminate\Database\Query\Builder::updateOrInsert()'
+                - 'Illuminate\Database\Query\Builder::delete()'
+                - 'Illuminate\Database\Query\Builder::truncate()'
+                - 'Illuminate\Database\Query\Builder::increment()'
+                - 'Illuminate\Database\Query\Builder::decrement()'
+            message: '入口只开放接口：写入请调用对应模块的 Action（设计文档 §5.2）'
+            disallowIn:
+                - app/Http/*
+    # 模型上的静态调用（User::create() 等）转发给查询构造器，PHPStan 解析为 Builder 的方法
+    disallowedStaticCalls:
+        -
+            method:
+                - 'Illuminate\Database\Eloquent\Model::destroy()'
+                - 'Illuminate\Database\Eloquent\Builder::truncate()'
+                - 'Illuminate\Database\Eloquent\Builder::create()'
+                - 'Illuminate\Database\Eloquent\Builder::createQuietly()'
+                - 'Illuminate\Database\Eloquent\Builder::createOrFirst()'
+                - 'Illuminate\Database\Eloquent\Builder::forceCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::forceCreateQuietly()'
+                - 'Illuminate\Database\Eloquent\Builder::firstOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::updateOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::incrementOrCreate()'
+                - 'Illuminate\Database\Eloquent\Builder::insert()'
+                - 'Illuminate\Database\Eloquent\Builder::insertOrIgnore()'
+                - 'Illuminate\Database\Eloquent\Builder::insertGetId()'
+                - 'Illuminate\Database\Eloquent\Builder::upsert()'
+                - 'Illuminate\Database\Query\Builder::insert()'
+                - 'Illuminate\Database\Query\Builder::insertOrIgnore()'
+                - 'Illuminate\Database\Query\Builder::insertGetId()'
+                - 'Illuminate\Database\Query\Builder::upsert()'
+                - 'Illuminate\Database\Query\Builder::updateOrInsert()'
+                - 'Illuminate\Database\Query\Builder::truncate()'
+            message: '入口只开放接口：写入请调用对应模块的 Action（设计文档 §5.2）'
+            disallowIn:
+                - app/Http/*
