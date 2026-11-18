@@ -162,7 +162,7 @@ app/Core/System/
 | 迁移 | **不受影响** | 保留在 `database/migrations` |
 | 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向核心的模型 |
 | 多态类型 | **必须第一天配置** | 在 `AppServiceProvider` 中 `Relation::enforceMorphMap()`。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
-| 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Admin/System/Controllers/UserController`；日常使用生成器 |
+| 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Admin/System/Controllers/UserController`；日常使用 `core:make-*` 生成命令（§10.4） |
 
 ## 5. 核心与应用：分层和依赖边界
 
@@ -183,6 +183,7 @@ app/Core/System/
 - Policy 属于核心，**与调用方无关**：禁止出现“判断是哪个应用在调用”的分支。
 - 核心通知应用的唯一方式是事件；应用不被核心直接调用。
 - 受限应用可以使用缓存、日志、限流等**临时或无状态**的基础设施，但需要持久保存的业务数据一律交给核心。
+- 应用之间不直接通信，一律通过核心中转（见 §5.6）。
 
 ### 5.3 各层职责
 
@@ -210,6 +211,27 @@ app/Core/System/
 - `config/core.php` 登记应用清单；进程可按环境变量只加载部分应用，例如 `CORE_APPS=admin,device`。未加载的应用其路由在该进程中不存在。
 - 对外开放的应用（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
 - 对外开放的应用暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
+
+### 5.6 应用之间不直接通信：以“后台管理设备应用的配置”为例
+
+应用之间互不调用，**都通过核心中转**。某个应用的配置、开关这类“可以在后台修改的数据”，属于核心，不属于那个应用。
+
+```
+后台界面
+  → Admin/Device/Controllers          设备管理接口（受信任应用，与 Core/Device 同名对应）
+  → Core/Device/Actions/UpdateDeviceSettings     校验、保存、触发 DeviceSettingsUpdated 事件
+                                                  （核心监听该事件，刷新自己维护的缓存）
+设备请求
+  → Device（应用）
+  → Core\Contracts\DeviceConfig       读取配置（由 Core/Device 实现，返回 Core\Data 中的只读对象）
+```
+
+- `Core/Device` 是“设备”这个业务领域（设备档案、设备配置）；`app/Device` 是“设备接入”这个入口。两者同名，职责不同。
+- 后台不知道设备应用存在；设备应用也不知道后台存在。
+- 简单的几个键值参数，直接使用系统参数模块（按分组，如 `device.*`）；结构化的配置（按设备类型、列表类配置）才单独建核心模块。
+- **两类配置要区分**：
+  - 运行时可改的业务配置（心跳间隔、允许的固件版本、是否暂停接入等）→ 存数据库，按上面的方式在后台管理。“暂停某个应用”也用这种方式：应用的中间件读取核心的开关，暂停时返回 503。
+  - 部署级配置（路由前缀、加载哪些应用、限流阈值等）→ 配置文件与环境变量，改动需重新部署，不做成后台可改。
 
 ## 6. 与 Vben 的接口契约
 
@@ -388,10 +410,20 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 
 ### 10.4 代码生成
 
-- `make:module`：在核心生成业务模块，同时在后台应用生成对应的同名目录；底层编排官方 `make:*` 命令与定制 stub。
-- `make:app`：新建一个应用（目录、ServiceProvider、路由、中间件组、测试目录、架构测试登记）。
-- 生成内容包括：模型、迁移、工厂、Action、Policy（标准方法齐全）、Request、Resource、控制器、权限节点、路由、操作日志文案、**授权测试**、模块 README。
-- **新建文件必须使用生成器**，写入 `CLAUDE.md`。
+提供一套了解本目录结构的生成命令，统一放在 `core:` 命名空间下（`php artisan list core` 可查看全部）。官方 `make:*` 命令仍可使用，但需手写完整路径。
+
+| 命令 | 生成 |
+|---|---|
+| `core:make-app {name}` | 应用目录、ServiceProvider、路由文件、中间件组、测试目录，并登记到 `config/core.php` 与架构测试 |
+| `core:make-module {name}` | 核心模块目录 + 各受信任应用中的同名目录；`--crud --fields=... --soft-deletes` 生成完整增删改查 |
+| `core:make-model {name} --module=` | 模型、迁移、工厂、Policy（标准方法齐全） |
+| `core:make-action` / `core:make-query` / `core:make-policy` / `core:make-enum` | 核心模块中的对应类（`--module=`） |
+| `core:make-contract {name} --module=` | 对受限应用导出的接口、只读数据对象与核心中的实现绑定 |
+| `core:make-controller` / `core:make-request` / `core:make-resource` | 应用中的对应类（`--app= --module=`） |
+
+- 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问、项目 `stubs/` 目录覆盖模板，行为与官方 make 命令一致。
+- 完整增删改查还会生成：权限节点、路由、操作日志文案、**授权测试**、模块 README。
+- **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
 
 ### 10.5 测试
 
@@ -553,7 +585,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 | 枚举选项 | 统一枚举接口 + 选项下发接口 | PHP 枚举 |
 | 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
 | 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
-| 代码生成器 | `make:module`、`make:app`、定制 stub | 官方 `make:*` 命令、`stub:publish` |
+| 代码生成器 | `core:make-*` 命令集（应用、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
 | 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
 
 ## 14. 待决事项
