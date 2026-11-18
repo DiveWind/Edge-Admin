@@ -147,16 +147,22 @@ app/Core/System/
 - **核心叫 `Core`**，业务模块用业务名（`System`、`Monitor`、`Message`、`Content`）。
 - 应用内部的目录与核心模块**同名一一对应**。删除一个业务 = 删除 `Core/<模块>` + 各应用里的同名目录 + 前端对应页面。
 
-### 4.5 偏离 Laravel 默认目录需要的配置
+### 4.5 偏离默认目录：官方支持与需要的配置
 
-| 机制 | 处理 |
-|---|---|
-| 工厂推断 | 模型统一用 `#[UseFactory]` 显式声明 |
-| Policy 推断 | `X\Models` → `X\Policies` 的默认规则可用；不满足时用 `#[UsePolicy]` |
-| 命令、事件监听发现 | `bootstrap/app.php` 中 `withCommands()`、`withEvents(discover: [...])` 指定路径 |
-| 认证用户模型 | `config/auth.php` 指向核心的 User 模型 |
-| 多态类型 | 启用 `Relation::enforceMorphMap()`，库里存短别名 |
-| 官方 make 命令 | 带完整命名空间，如 `make:model Core/System/Models/Dict`；日常用生成器 |
+官方文档（Directory Structure）明确：默认结构只是起点，可以按需组织，“只要 Composer 能自动加载，Laravel 几乎不限制任何类的位置”。核心模块与应用采用官方“包开发”（Package Development）的方式注册自己的路由、命令、语言包和视图。
+
+| 默认行为 | 是否受影响 | 处理（均为官方机制） |
+|---|---|---|
+| Policy 自动推断 | **不受影响** | 框架会把模型命名空间中的 `\Models\` 替换为 `\Policies\` 查找，`App\Core\System\Models\User` 自动对应 `App\Core\System\Policies\UserPolicy` |
+| 工厂推断 | **不受影响** | `App\Core\System\Models\Dict` 默认对应 `Database\Factories\Core\System\Models\DictFactory`，`make:model ... -f` 也按此生成；只是目录较深，可选用 `Factory::guessFactoryNamesUsing()` 统一扁平化 |
+| 观察者、任务、通知、规则、类型转换、枚举、Action | **不受影响** | 无自动发现机制，放在哪里都可用；观察者用 `#[ObservedBy]` 绑定 |
+| 命令自动发现 | 受影响（默认只扫描 `app/Console/Commands`） | 模块 Provider 中 `$this->commands([...])`（包开发方式） |
+| 事件监听自动发现 | 受影响（默认只扫描 `app/Listeners`） | `withEvents(discover: [...])` 列出各模块的 `Listeners` 目录，或在模块 Provider 中显式注册 |
+| 路由、语言包、视图 | 需注册 | Provider 中 `loadRoutesFrom()`、`loadTranslationsFrom()`、`loadViewsFrom()`，路由缓存照常可用 |
+| 迁移 | **不受影响** | 保留在 `database/migrations` |
+| 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向核心的模型 |
+| 多态类型 | **必须第一天配置** | 在 `AppServiceProvider` 中 `Relation::enforceMorphMap()`。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
+| 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Admin/System/Controllers/UserController`；日常使用生成器 |
 
 ## 5. 核心与应用：分层和依赖边界
 
@@ -345,7 +351,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 ### 10.1 Laravel 写法
 
 - 授权：控制器方法上用 `#[Authorize]`；路由文件只描述结构（分组导入、`apiResources`）。
-- 模型：`#[Fillable]`、`#[Hidden]`、`#[UseFactory]`、`#[ObservedBy]` 等 Attribute；`casts()` 方法；禁止 `$fillable` 等属性写法。
+- 模型：`#[Fillable]`、`#[Hidden]`、`#[ObservedBy]` 等 Attribute（工厂、Policy 按默认规则自动推断，不需要时不写 `#[UseFactory]`、`#[UsePolicy]`）；`casts()` 方法；禁止 `$fillable` 等属性写法。
 - 命令：`#[Signature]`、`#[Description]`。队列任务：`#[Tries]`、`#[Backoff]` 等，**队列名不写在任务上**，统一用 `Queue::route()` 集中登记。
 - 统计类数据用 `Cache::flexible()`；请求内缓存用 `Cache::memo()` 或 `#[Scoped]`。
 - 时间：写库前统一转换为应用时区；输出带时区偏移的 ISO 8601。
