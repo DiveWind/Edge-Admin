@@ -30,4 +30,4 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
-    ->in('Arch', 'Http', 'Providers', 'Support');
+    ->in('Arch', 'Core', 'Http', 'Modules', 'Providers', 'Support');

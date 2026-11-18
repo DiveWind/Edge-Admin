@@ -1,0 +1,19 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedData }};
+
+/**
+ * TODO: 说明向受限入口开放的能力。
+ *
+ * {{ module }} 模块向受限入口开放的契约（设计文档 §5.2、§5.8）：参数与返回值只用标量和本模块的 Data，不暴露模型。
+ * 实现为 Services\{{ service }}，在 {{ moduleProvider }} 的 $bindings 中绑定。
+ */
+interface {{ class }}
+{
+    /**
+     * TODO: 按需修改。对外开放的资源使用 ULID，不暴露自增 ID（设计文档 §5.7）。
+     */
+    public function find(string $id): ?{{ data }};
+}

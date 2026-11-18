@@ -1,0 +1,31 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * {{ model }} 的输出格式（{{ app }} 入口）。
+ *
+ * 逐个列出字段，禁止整模型 toArray() 输出；日期字段输出 toIso8601String()（设计文档 §9、§10.1）。
+ *
+ * @mixin {{ model }}
+ */
+class {{ class }} extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
+        ];
+    }
+}

@@ -1,0 +1,36 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedIndexRequest }};
+use {{ namespacedModel }};
+use {{ namespacedResource }};
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
+
+/**
+ * {{ model }} 的接口（{{ app }} 入口）。
+ *
+ * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）；授权由 {{ model }}Policy 判定（默认拒绝）。
+ * 写接口（store、update、destroy）调用 {{ module }} 模块的 Action。路由登记在 {{ app }} 入口的 routes.php。
+ */
+class {{ class }}
+{
+    /**
+     * 列表：page、pageSize、sort、filter[]，响应由入口统一包装。
+     */
+    #[Authorize('viewAny', {{ model }}::class)]
+    public function index({{ indexRequest }} $request): AnonymousResourceCollection
+    {
+        return {{ resource }}::collection({{ model }}::query()->latest('id')->paginate($request->pageSize()));
+    }
+
+    /**
+     * 详情。
+     */
+    #[Authorize('view', '{{ modelVariable }}')]
+    public function show({{ model }} ${{ modelVariable }}): {{ resource }}
+    {
+        return new {{ resource }}(${{ modelVariable }});
+    }
+}

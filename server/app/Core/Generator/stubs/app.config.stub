@@ -1,0 +1,7 @@
+// {{ app }}（{{ trustLevel }}）：TODO 说明这个入口给谁用
+'{{ key }}' => [
+    'enabled' => $enabled('{{ key }}'),
+    'trusted' => {{ trusted }},
+    'prefix' => env('{{ env }}_PREFIX', '{{ prefix }}'),
+    'rate_limit' => (int) env('{{ env }}_RATE_LIMIT', {{ rateLimit }}),
+],

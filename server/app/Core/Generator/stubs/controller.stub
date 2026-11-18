@@ -1,0 +1,14 @@
+<?php
+
+namespace {{ namespace }};
+
+/**
+ * TODO: 说明这组接口。
+ *
+ * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）：只用资源方法（index、show、store、update、destroy）
+ * 或 __invoke；授权写在方法的 #[Authorize] 上；写入调用 {{ module }} 模块的 Action。路由登记在 {{ app }} 入口的 routes.php。
+ */
+class {{ class }}
+{
+    //
+}

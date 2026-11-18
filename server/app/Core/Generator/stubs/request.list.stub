@@ -1,0 +1,26 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedListRequest }};
+
+/**
+ * TODO: 说明这个列表请求。
+ *
+ * 列表查询参数（设计文档 §6.3）：page、pageSize、sort 由 ListRequest 校验，这里追加筛选字段 `filter.<字段>`。
+ */
+class {{ class }} extends ListRequest
+{
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, list<string>>
+     */
+    public function rules(): array
+    {
+        return [
+            ...parent::rules(),
+            // 'filter.status' => ['sometimes', 'string'],
+        ];
+    }
+}

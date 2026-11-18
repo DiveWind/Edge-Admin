@@ -1,0 +1,31 @@
+<?php
+
+namespace {{ namespace }};
+
+use App\Support\Eloquent\Concerns\UsesAppTimezone;
+use {{ namespacedFactory }};
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * TODO: 说明这个模型（多态别名 `{{ morphAlias }}`，见 {{ moduleProvider }}）。
+ *
+ * 写入只在 {{ module }} 模块的 Action 中进行（设计文档 §5.2）；Policy 与工厂按默认规则自动推断。
+ */
+#[Fillable([])]
+class {{ class }} extends Model
+{
+    /** @use HasFactory<{{ factory }}> */
+    use HasFactory, UsesAppTimezone;
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [];
+    }
+}

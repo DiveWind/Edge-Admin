@@ -1,0 +1,25 @@
+<?php
+
+namespace {{ namespace }};
+
+use App\Core\System\Contracts\HasLabel;
+
+/**
+ * TODO: 说明这个枚举。
+ *
+ * 实现 HasLabel：显示名称由后端统一下发给前端（设计文档 §5.5、§10.1）。
+ */
+enum {{ class }}: string implements HasLabel
+{
+    case Example = 'example';
+
+    /**
+     * 显示名称（多语言）。
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Example => __('Example'),
+        };
+    }
+}

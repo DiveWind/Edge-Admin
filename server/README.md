@@ -48,7 +48,9 @@ php artisan schedule:work
 
 ```
 app/
-├── Core/System/Models/User.php       内核模块（用户等通用后台能力）
+├── Core/                             内核模块
+│   ├── Generator/                    core:make-* 生成命令（只在命令行下注册），见下文“代码生成”
+│   └── System/                       用户模型；Contracts/HasLabel（枚举的显示名称）
 ├── Http/
 │   ├── Admin/                        后台入口（给 Vben 用）
 │   │   ├── AdminServiceProvider.php  路由、中间件组、限流、Vben 响应与异常格式
@@ -63,7 +65,38 @@ config/core.php                       入口清单与部署级配置
 tests/                                与 app/ 对应；tests/Arch 为边界与约定测试
 ```
 
-业务模块放在 `app/Modules/<模块>`（目前还没有）。分层与依赖规则见 [`CLAUDE.md`](CLAUDE.md) 与设计文档 §4、§5。
+业务模块放在 `app/Modules/<模块>`（目前还没有，用 `php artisan core:make-module` 创建）。分层与依赖规则见 [`CLAUDE.md`](CLAUDE.md) 与设计文档 §4、§5。
+
+## 代码生成
+
+新建文件使用 `core:make-*` 命令（`php artisan list core` 查看全部，`php artisan <命令> --help` 查看参数）。它们继承官方 `GeneratorCommand`：
+缺少名称或模块时交互提问，`-f|--force` 覆盖已有文件，失败时退出码为 1；生成物直接通过 `composer ci`（Pint、Rector、PHPStan、架构测试）。
+
+```bash
+php artisan core:make-module Content                                   # 业务模块
+php artisan core:make-model Article --module=Content                   # 模型、迁移、工厂、Policy，登记多态别名
+php artisan core:make-action PublishArticle --module=Content           # 写操作
+php artisan core:make-controller Article --module=Content --model=Article   # 后台接口 index / show（连同列表请求与 Resource）
+php artisan core:make-app device --restricted                          # 受限的入口（对外开放，前缀带 /v1）
+php artisan core:make-contract DeviceConfig --module=Content           # 受限入口通过它访问模块的数据
+```
+
+| 命令 | 生成 |
+|---|---|
+| `core:make-app {name} [--restricted]` | `app/Http/<Name>/<Name>ServiceProvider.php`、`routes.php`、`tests/Http/<Name>/<Name>ServiceProviderTest.php`；登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml` 与 `.env.example` 的 `CORE_APPS`。`--restricted`：`trusted=false`，前缀 `api/<name>/v1` |
+| `core:make-module {name} [--core]` | `app/Modules/<Name>/<Name>ServiceProvider.php`（登记到 `bootstrap/providers.php`）与 `README.md`；`--core` 生成到 `app/Core/<Name>`。入口中的同名目录在生成控制器等时创建，不建空目录。`--crud` 尚未提供 |
+| `core:make-model {name} --module=` | `Models/<Name>.php`、`database/migrations/*_create_<表>_table.php`、`database/factories/<与模型相同的路径>Factory.php`、`Policies/<Name>Policy.php`（标准方法齐全，默认拒绝）；在模块 Provider 的 `Relation::morphMap()` 中登记别名 `<模块>.<模型>` |
+| `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy（`core:make-policy --model=` 可指定模型） |
+| `core:make-action` / `core:make-query` / `core:make-enum` / `core:make-data {name} --module=` | `Actions/`（`handle()`）、`Queries/`（只读）、`Enums/`（实现 `HasLabel`）、`Data/<Name>Data`（只读数据对象） |
+| `core:make-contract {name} --module=` | `Contracts/<Name>`（接口）、`Data/<Name>Data`、`Services/<Name>Service`（实现），并在模块 Provider 的 `$bindings` 中绑定 |
+| `core:make-controller {name} --module= [--app=admin] [--model=]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成 `#[Authorize]` 的 `index`（`paginate($request->pageSize())`）与 `show`，并补上缺少的列表请求与 Resource。路由不自动登记，命令会打印要添加的路由 |
+| `core:make-request {name} --module= [--app=admin] [--list]` | `…/Requests/<Name>Request.php`；`--list` 继承入口的 `ListRequest` |
+| `core:make-resource {name} --module= [--app=admin] [--model=]` | `…/Resources/<Name>Resource.php`；`--model` 逐个列出 `id` 与时间字段 |
+
+- 名称自动转为 StudlyCase 并补上后缀（`article` → `ArticleController`），不能带子目录；内核模块（`app/Core`）必须加 `--core`。
+- 受限的入口不能用 `--model`（只能通过模块的 `Contracts` 访问数据）。
+- 修改共享文件是幂等的，重复执行不会重复登记；文件格式不符合预期时命令失败，并打印需要手工粘贴的内容。
+- 模板：`php artisan stub:publish`（连同官方模板）或 `php artisan vendor:publish --tag=core-stubs`（只发布本项目的）复制到 `stubs/core.<名称>.stub`，项目中的模板优先。
 
 ## 配置
 

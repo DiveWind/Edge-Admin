@@ -1,0 +1,43 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| {{ app }} 入口：按 CORE_APPS 加载、路由前缀、限流
+|--------------------------------------------------------------------------
+*/
+
+it('loads the {{ key }} entry when CORE_APPS includes it', function (): void {
+    $this->refreshApplicationWithEnv(['CORE_APPS' => '{{ key }}']);
+
+    expect(Route::has('{{ key }}.ping'))->toBeTrue()
+        ->and(Route::getMiddlewareGroups())->toHaveKey('{{ key }}');
+
+    $this->getJson('/{{ prefix }}/ping')->assertOk()->assertExactJson(['pong' => true]);
+});
+
+it('registers nothing for the {{ key }} entry when CORE_APPS does not include it', function (): void {
+    $this->refreshApplicationWithEnv(['CORE_APPS' => '']);
+
+    expect(Route::has('{{ key }}.ping'))->toBeFalse()
+        ->and(Route::getMiddlewareGroups())->not->toHaveKey('{{ key }}');
+
+    $this->getJson('/{{ prefix }}/ping')->assertNotFound();
+});
+
+it('uses the configurable URL prefix', function (): void {
+    $this->refreshApplicationWithEnv(['{{ env }}_PREFIX' => '/custom/{{ key }}/']);
+
+    expect(route('{{ key }}.ping', absolute: false))->toBe('/custom/{{ key }}/ping');
+
+    $this->getJson('/custom/{{ key }}/ping')->assertOk();
+});
+
+it('rate limits requests per minute', function (): void {
+    config(['core.apps.{{ key }}.rate_limit' => 1]);
+
+    $this->getJson('/{{ prefix }}/ping')->assertOk();
+
+    $this->getJson('/{{ prefix }}/ping')->assertTooManyRequests();
+});

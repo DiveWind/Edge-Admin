@@ -1,0 +1,78 @@
+<?php
+
+namespace {{ namespace }};
+
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\{SubstituteBindings, ThrottleRequests};
+use Illuminate\Support\Facades\{RateLimiter, Route};
+use Illuminate\Support\ServiceProvider;
+
+/**
+ * {{ app }} 入口（{{ trustLevel }}，设计文档 §5.2、§5.7）。
+ *
+ * {{ access }}
+ *
+ * 负责本入口的全部配置：路由（routes.php）、URL 前缀、{{ key }} 中间件组与限流器。
+ * config('core.apps.{{ key }}.enabled') 为 false（CORE_APPS 不含 {{ key }}）时什么都不注册。
+ */
+class {{ class }} extends ServiceProvider
+{
+    /**
+     * 入口名：config/core.php 中的键、中间件组名、限流器名、路由名前缀。
+     */
+    public const string NAME = '{{ key }}';
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        if (! config()->boolean('core.apps.'.self::NAME.'.enabled')) {
+            return;
+        }
+
+        $this->configureMiddleware();
+        $this->configureRateLimiting();
+        $this->configureRoutes();
+    }
+
+    /**
+     * {{ key }} 中间件组。认证（Sanctum）在第 4 步加入；本入口专用的中间件放在 Middleware/。
+     */
+    protected function configureMiddleware(): void
+    {
+        Route::middlewareGroup(self::NAME, [
+            ThrottleRequests::using(self::NAME),
+            SubstituteBindings::class,
+        ]);
+    }
+
+    /**
+     * 每分钟请求上限：已登录按用户计数，未登录按 IP 计数。
+     */
+    protected function configureRateLimiting(): void
+    {
+        RateLimiter::for(self::NAME, function (Request $request): Limit {
+            $user = $request->user()?->getAuthIdentifier();
+
+            return Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.rate_limit'))
+                ->by(is_scalar($user) ? 'user:'.$user : 'ip:'.$request->ip());
+        });
+    }
+
+    /**
+     * 路由：前缀见 config('core.apps.{{ key }}.prefix')，路由名以 `{{ key }}.` 开头。
+     */
+    protected function configureRoutes(): void
+    {
+        if ($this->app->routesAreCached()) {
+            return;
+        }
+
+        Route::middleware(self::NAME)
+            ->prefix(trim(config()->string('core.apps.'.self::NAME.'.prefix'), '/'))
+            ->name(self::NAME.'.')
+            ->group(__DIR__.'/routes.php');
+    }
+}

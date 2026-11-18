@@ -199,9 +199,27 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 ### 命名与生成
 
 - 本脚手架不带品牌名：配置 `config/core.php`、命令前缀 `core:`、环境变量前缀 `CORE_`。
-- 新建文件**优先使用 `php artisan core:make-*` 生成命令**（第 2b 步实现，`php artisan list core` 查看全部）。在此之前使用官方 `make:*` 时，名称写以 `App/` 开头的完整路径，如 `make:model App/Modules/Content/Models/Article`。
-- 测试放在 `tests/` 下与 `app/` 对应的目录（`tests/Http/Admin/...`、`tests/Core/System/...`），不使用 `tests/Feature`、`tests/Unit`。
-- 模型：用 `#[Fillable]`、`#[Hidden]` 等 Attribute 与 `casts()` 方法，不用属性写法；使用 `App\Support\Eloquent\Concerns\UsesAppTimezone`；新的多态类型先在 `AppServiceProvider` 的 morph map 中登记别名；工厂放在 `database/factories/` 下与模型相同的路径。
+- 新建文件**使用 `php artisan core:make-*` 生成命令**（`php artisan list core` 查看全部，用法见 [`README.md`](README.md#代码生成)），生成物直接通过 `composer ci`，不手写骨架：
+
+  | 生成 | 命令 |
+  |---|---|
+  | 入口 `app/Http/<入口>`（登记 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`） | `core:make-app <名称> [--restricted]` |
+  | 模块 `app/Modules/<模块>`（`--core`：`app/Core/<模块>`） | `core:make-module <名称>` |
+  | 模型 + 迁移 + 工厂 + Policy，并登记多态别名 | `core:make-model <名称> --module=<模块>` |
+  | 模块中的类 | `core:make-action` / `make-query` / `make-enum` / `make-policy` / `make-data` / `make-migration` / `make-factory` `<名称> --module=<模块>` |
+  | 向受限入口开放的契约（`Contracts` + `Data` + `Services` 实现，绑定到模块 Provider 的 `$bindings`） | `core:make-contract <名称> --module=<模块>` |
+  | 入口中的类 `app/Http/<入口>/<模块>/{Controllers,Requests,Resources}` | `core:make-controller` / `make-request` / `make-resource` `<名称> --module=<模块> [--app=admin]` |
+
+  - 内核模块必须显式加 `--core`；名称自动转为 StudlyCase 并补上后缀（`Article` → `ArticleController`），不能带子目录。
+  - 共享文件的登记是幂等的；文件格式不符合预期时命令失败并打印需手工粘贴的内容，按提示补上即可，不要为了迁就生成器改乱文件结构。
+  - 路由不自动登记（`core:make-controller` 会打印要加的路由）；`core:make-module --crud`（完整增删改查）在 Core 扩展点就绪后提供。
+  - 模板可在项目中覆盖：`php artisan stub:publish`（或 `vendor:publish --tag=core-stubs`）后修改 `stubs/core.<名称>.stub`。
+  - 没有对应 `core:make-*` 的类型（事件、监听、任务、通知等）才用官方 `make:*`，名称写以 `App/` 开头的完整路径，如 `make:event App/Modules/Content/Events/ArticlePublished`。
+- 测试放在 `tests/` 下与 `app/` 对应的目录（`tests/Http/Admin/...`、`tests/Core/System/...`、`tests/Modules/...`），不使用 `tests/Feature`、`tests/Unit`。
+- 模型：用 `#[Fillable]`、`#[Hidden]` 等 Attribute 与 `casts()` 方法，不用属性写法；使用 `App\Support\Eloquent\Concerns\UsesAppTimezone`；工厂放在 `database/factories/` 下与模型相同的路径。
+- 多态别名：模块的模型在**本模块 Provider** 的 `Relation::morphMap()` 中登记，业务模块为 `<模块>.<模型>`（如 `content.article`），内核模块为 `<模型>`（`core:make-model` 自动完成）；`AppServiceProvider` 只负责 `enforceMorphMap()` 与 Core/System 的 `user`。
+- 枚举实现 `App\Core\System\Contracts\HasLabel`（`label()` 返回多语言的显示名称，`tests/Arch` 强制）。
+- `app/Core/Generator` 是生成命令所在的内核模块（只在命令行下注册），修改生成规则时同步更新它的测试 `tests/Core/Generator`。
 
 ### 常驻内存兼容（设计文档 §10.3）
 

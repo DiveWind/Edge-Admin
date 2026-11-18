@@ -1,0 +1,16 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| {{ app }} 入口路由
+|--------------------------------------------------------------------------
+|
+| 由 {{ provider }} 加载：URL 前缀 config('core.apps.{{ key }}.prefix')，中间件组 {{ key }}，路由名前缀 {{ key }}.。
+| 本文件只描述结构（分组导入各模块的控制器、apiResources）；授权写在控制器方法的 #[Authorize] 上（设计文档 §10.1）。
+|
+*/
+
+// 验证入口用的示例路由，接入第一个模块后删除（同时修改 tests/Http/{{ app }}/{{ provider }}Test.php）
+Route::get('ping', fn (): array => ['pong' => true])->name('ping');

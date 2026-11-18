@@ -1,0 +1,16 @@
+<?php
+
+namespace {{ namespace }};
+
+/**
+ * TODO: 说明这个数据对象。
+ *
+ * {{ module }} 模块对外的只读数据对象：受限入口通过模块的 Contracts 拿到它，不接触模型（设计文档 §5.2）。
+ * 需要修改副本时用 `clone($this, [...])` 实现 withXxx() 方法（§10.2）。
+ */
+final readonly class {{ class }}
+{
+    public function __construct(
+        public string $id,
+    ) {}
+}

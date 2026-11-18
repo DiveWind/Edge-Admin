@@ -1,0 +1,18 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedContract }};
+use {{ namespacedData }};
+
+/**
+ * {{ contract }} 的实现：读取本模块的模型并转换为 {{ data }}；写入调用本模块的 Action。
+ */
+class {{ class }} implements {{ contract }}
+{
+    public function find(string $id): ?{{ data }}
+    {
+        // TODO: 查询本模块的模型并转换为 {{ data }}
+        return null;
+    }
+}

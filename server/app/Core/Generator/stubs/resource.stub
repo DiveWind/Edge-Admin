@@ -1,0 +1,26 @@
+<?php
+
+namespace {{ namespace }};
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * TODO: 说明输出的数据。
+ *
+ * 逐个列出字段，禁止整模型 toArray() 输出；日期字段输出 toIso8601String()（设计文档 §9、§10.1）。
+ */
+class {{ class }} extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            //
+        ];
+    }
+}

@@ -1,0 +1,28 @@
+# {{ module }}
+
+{{ kind }}，目录 `{{ directory }}`。结构与规则见设计文档 §4.3、§5。
+
+## 职责
+
+TODO：本模块负责什么、不负责什么。
+
+## 对外提供
+
+- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：{{ entries }}。
+- 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
+- 事件：TODO（其他模块与入口只能通过事件、`Contracts` / `Data` 使用本模块）。
+
+## 依赖 Core 的能力
+
+TODO：用到的 Core 能力与扩展点（菜单权限、数据权限、系统参数、字典、通知等，设计文档 §5.5）。
+
+## 生成命令
+
+```bash
+php artisan core:make-model <名称> --module={{ module }}       # 模型、迁移、工厂、Policy，登记多态别名
+php artisan core:make-action <名称> --module={{ module }}      # 写操作
+php artisan core:make-query <名称> --module={{ module }}       # 复杂查询、统计
+php artisan core:make-enum <名称> --module={{ module }}        # 枚举（实现 HasLabel）
+php artisan core:make-contract <名称> --module={{ module }}    # 向受限入口开放的契约
+php artisan core:make-controller <名称> --module={{ module }} --model=<模型>   # 后台接口
+```

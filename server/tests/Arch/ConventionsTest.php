@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\System\Contracts\HasLabel;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
@@ -144,9 +145,10 @@ if (($policies = archNamespaces('Core/*/Policies', 'Modules/*/Policies')) !== []
 }
 
 if (($enums = archNamespaces('Core/*/Enums', 'Modules/*/Enums')) !== []) {
-    arch('Enums 目录中都是枚举')
+    arch('Enums 目录中都是枚举，并实现 HasLabel（显示名称由后端统一下发）')
         ->expect($enums)
-        ->toBeEnums();
+        ->toBeEnums()
+        ->toImplement(HasLabel::class);
 }
 
 if (($contracts = archNamespaces('Core/*/Contracts', 'Modules/*/Contracts')) !== []) {

@@ -1,0 +1,21 @@
+<?php
+
+namespace {{ namespace }};
+
+/**
+ * TODO: 说明这个查询。
+ *
+ * Query 只读：复杂查询与统计指标（设计文档 §5.4）。统计类数据用 Cache::flexible()，请求内缓存用 Cache::memo()（§10.1）。
+ */
+class {{ class }}
+{
+    /**
+     * Execute the query.
+     *
+     * @return array<string, mixed>
+     */
+    public function get(): array
+    {
+        return [];
+    }
+}

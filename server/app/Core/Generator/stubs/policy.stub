@@ -1,0 +1,95 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+
+/**
+ * {{ model }} 的授权规则（设计文档 §8.3）：标准方法齐全，默认拒绝。
+ *
+ * TODO: 第 5 步接入菜单权限后，在各方法中检查对应的权限码与数据权限。
+ * 规则与调用方无关：禁止判断是哪个入口在调用；关联操作（如分配、挂载）另加方法单独授权。
+ */
+class {{ class }}
+{
+    /**
+     * Determine whether the user can view any models.
+     */
+    public function viewAny({{ userModel }} $user): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can view the model.
+     */
+    public function view({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can create models.
+     */
+    public function create({{ userModel }} $user): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can update the model.
+     */
+    public function update({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can delete the model.
+     */
+    public function delete({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can restore the model.
+     */
+    public function restore({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can permanently delete the model.
+     */
+    public function forceDelete({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can delete models in bulk.
+     */
+    public function deleteAny({{ userModel }} $user): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can restore models in bulk.
+     */
+    public function restoreAny({{ userModel }} $user): bool
+    {
+        return false;
+    }
+
+    /**
+     * Determine whether the user can permanently delete models in bulk.
+     */
+    public function forceDeleteAny({{ userModel }} $user): bool
+    {
+        return false;
+    }
+}
