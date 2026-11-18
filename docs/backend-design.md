@@ -564,11 +564,11 @@ public function delete(User $actor, User $user): Response
     }
 
     if ($actor->is($user)) {
-        return Response::deny(__('system::user.cannot_delete_self'));
+        return Response::deny(__('You cannot delete yourself.'));
     }
 
     if ($user->isSuperAdmin() && ! $actor->isSuperAdmin()) {
-        return Response::deny(__('system::user.super_admin_only'));
+        return Response::deny(__('Only super admins can manage super admin users.'));
     }
 
     return $user->isVisibleTo($actor) ? Response::allow() : Response::deny();

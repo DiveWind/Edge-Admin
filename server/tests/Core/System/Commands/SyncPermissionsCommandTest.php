@@ -1,0 +1,217 @@
+<?php
+
+use App\Core\System\Contracts\MenuRegistry;
+use App\Core\System\Enums\{PermissionType, Status};
+use App\Core\System\Models\{Permission, Role};
+use App\Core\System\Services\MenuRegistryService;
+
+/*
+|--------------------------------------------------------------------------
+| core:sync-permissions：同步声明的菜单与权限节点（设计文档 §8.2）
+|--------------------------------------------------------------------------
+|
+| 每个测试用一个只含测试声明的 MenuRegistry，System 自己的节点见“同步 System 的节点”。
+|
+*/
+
+/**
+ * 用给定的声明替换容器中的 MenuRegistry。
+ *
+ * @param  list<array<string, mixed>>  $nodes
+ */
+function declareMenus(array $nodes): MenuRegistryService
+{
+    $registry = new MenuRegistryService;
+    $registry->register($nodes);
+    app()->instance(MenuRegistry::class, $registry);
+
+    return $registry;
+}
+
+/**
+ * 测试用的声明：目录 demo，下有菜单 demo.page（按钮 create）与外链 demo.docs。
+ *
+ * @return list<array<string, mixed>>
+ */
+function demoMenus(string $component = '/demo/page/list', string $link = 'https://example.com/docs'): array
+{
+    return [[
+        'name' => 'demo',
+        'type' => 'catalog',
+        'path' => '/demo',
+        'meta' => ['title' => 'demo.title', 'icon' => 'lucide:box', 'order' => 100],
+        'children' => [
+            [
+                'name' => 'demo.page',
+                'type' => 'menu',
+                'path' => '/demo/page',
+                'component' => $component,
+                'meta' => ['title' => 'demo.page.title', 'keepAlive' => true],
+                'buttons' => ['create' => 'common.create'],
+            ],
+            [
+                'name' => 'demo.docs',
+                'type' => 'link',
+                'path' => '/demo/docs',
+                'meta' => ['title' => 'demo.docs.title', 'link' => $link],
+            ],
+        ],
+    ]];
+}
+
+function node(string $name): Permission
+{
+    return Permission::query()->where('name', $name)->sole();
+}
+
+it('creates the declared nodes as built-in nodes and the super-admin role', function (): void {
+    app()->setLocale('zh_CN');
+    declareMenus(demoMenus());
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('新增 4 个，修正 0 个，收编 0 个，转为自定义 0 个')
+        ->expectsOutputToContain('已创建超管角色 super-admin')
+        ->assertSuccessful();
+
+    expect(node('demo'))
+        ->parent_id->toBeNull()
+        ->type->toBe(PermissionType::Catalog)
+        ->title->toBe('demo.title')
+        ->icon->toBe('lucide:box')
+        ->sort->toBe(100)
+        ->status->toBe(Status::Enabled)
+        ->meta->toBeNull()
+        ->is_builtin->toBeTrue()
+        ->and(node('demo.page'))
+        ->parent_id->toBe(node('demo')->id)
+        ->component->toBe('/demo/page/list')
+        ->meta->toBe(['keepAlive' => true])
+        ->and(node('demo.page.create'))
+        ->parent_id->toBe(node('demo.page')->id)
+        ->type->toBe(PermissionType::Button)
+        ->title->toBe('common.create')
+        ->path->toBeNull()
+        ->and(node('demo.docs'))
+        ->type->toBe(PermissionType::Link)
+        ->meta->toBe(['link' => 'https://example.com/docs'])
+        ->and(Role::query()->where('name', Role::SUPER_ADMIN)->sole())
+        ->status->toBe(Status::Enabled)
+        ->title->toBe('超级管理员');
+});
+
+it('is idempotent', function (): void {
+    declareMenus(demoMenus());
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    $before = Permission::query()->orderBy('id')->get()->toArray();
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('菜单与权限节点已是最新，没有变更')
+        ->assertSuccessful();
+
+    expect(Permission::query()->orderBy('id')->get()->toArray())->toBe($before)
+        ->and(Role::query()->count())->toBe(1);
+});
+
+it('keeps the adjustments made by administrators', function (): void {
+    declareMenus(demoMenus());
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    $other = Permission::factory()->create();
+    node('demo.page')->forceFill([
+        'parent_id' => $other->id,
+        'title' => 'Custom title',
+        'icon' => 'lucide:star',
+        'sort' => 5,
+        'status' => Status::Disabled,
+        'meta' => ['keepAlive' => false, 'hideInMenu' => true],
+    ])->save();
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('没有变更')
+        ->assertSuccessful();
+
+    expect(node('demo.page'))
+        ->parent_id->toBe($other->id)
+        ->title->toBe('Custom title')
+        ->icon->toBe('lucide:star')
+        ->sort->toBe(5)
+        ->status->toBe(Status::Disabled)
+        ->meta->toBe(['keepAlive' => false, 'hideInMenu' => true]);
+});
+
+it('corrects the structural fields from the declaration', function (): void {
+    declareMenus(demoMenus());
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    node('demo.page')->forceFill(['type' => PermissionType::Embedded, 'path' => '/moved', 'component' => '/old', 'meta' => ['iframeSrc' => 'https://old.example.com', 'hideInTab' => true]])->save();
+    node('demo.docs')->forceFill(['meta' => ['link' => 'https://old.example.com', 'badge' => 'new']])->save();
+    declareMenus(demoMenus(component: '/demo/page/index', link: 'https://example.com/v2'));
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('新增 0 个，修正 2 个')
+        ->assertSuccessful();
+
+    expect(node('demo.page'))
+        ->type->toBe(PermissionType::Menu)
+        ->path->toBe('/demo/page')
+        ->component->toBe('/demo/page/index')
+        ->meta->toBe(['hideInTab' => true])
+        ->and(node('demo.docs')->meta)->toBe(['badge' => 'new', 'link' => 'https://example.com/v2']);
+});
+
+it('adopts a custom node with the same name', function (): void {
+    $catalog = Permission::factory()->create(['name' => 'demo', 'title' => 'My demo', 'path' => '/custom', 'is_builtin' => false]);
+    declareMenus(demoMenus());
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('新增 3 个，修正 0 个，收编 1 个')
+        ->expectsOutputToContain('收编同名的自定义节点')
+        ->assertSuccessful();
+
+    expect(node('demo'))
+        ->id->toBe($catalog->id)
+        ->is_builtin->toBeTrue()
+        ->path->toBe('/demo')
+        ->title->toBe('My demo')
+        ->and(node('demo.page')->parent_id)->toBe($catalog->id);
+});
+
+it('releases removed built-in nodes as custom nodes and keeps their grants', function (): void {
+    declareMenus(demoMenus());
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    $role = Role::factory()->create();
+    $role->givePermissionTo('demo', 'demo.docs');
+    $menus = demoMenus();
+    unset($menus[0]['children'][1]);
+    declareMenus([[...$menus[0], 'children' => array_values($menus[0]['children'])]]);
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('转为自定义 1 个')
+        ->expectsOutputToContain('demo.docs')
+        ->assertSuccessful();
+
+    expect(node('demo.docs')->is_builtin)->toBeFalse()
+        ->and($role->permissions()->pluck('name')->sort()->values()->all())->toBe(['demo', 'demo.docs']);
+});
+
+it('does not recreate an existing super-admin role', function (): void {
+    declareMenus([]);
+    $role = Role::factory()->superAdmin()->disabled()->create(['title' => 'Root']);
+
+    $this->artisan('core:sync-permissions')
+        ->doesntExpectOutputToContain('已创建超管角色')
+        ->assertSuccessful();
+
+    expect(Role::query()->sole())
+        ->id->toBe($role->id)
+        ->title->toBe('Root');
+});
+
+it('syncs the nodes declared by the System module', function (): void {
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+
+    expect(Permission::query()->orderBy('id')->pluck('name')->all())->toBe([
+        'system',
+        'system.user', 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password',
+        'system.role', 'system.role.create', 'system.role.update', 'system.role.delete', 'system.role.status',
+        'system.menu', 'system.menu.create', 'system.menu.update', 'system.menu.delete',
+    ])->and(node('system.menu')->component)->toBe('/system/menu/list');
+});

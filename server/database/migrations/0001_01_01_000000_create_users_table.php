@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('password');
             $table->string('avatar', 2048)->nullable();
             $table->string('status', 16)->default('enabled')->index();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->rememberToken();
             $table->timestamps();
         });

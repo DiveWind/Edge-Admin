@@ -23,6 +23,9 @@
 
 ## 扩展：完整增删改查（`core:make-module --crud`）
 
-尚未实现，依赖 Core 的扩展点（菜单与权限节点等，尚未提供）。接入方式：在 `ModuleMakeCommand` 中去掉 `--crud` 的提示，
+尚未实现。Core 的菜单与权限扩展点已提供（`App\Core\System\Contracts\MenuRegistry`，模块的 `resources/menus.php`，见 `app/Core/System/README.md`）。
+接入方式：在 `ModuleMakeCommand` 中去掉 `--crud` 的提示，
 依次调用 `core:make-model`、`core:make-action`（Create / Update / Delete）、`core:make-request`、`core:make-resource`、
-`core:make-controller`，再通过新的 `Editing/*File` 登记权限节点与路由，并按模板生成授权测试。
+`core:make-controller`，再通过新的 `Editing/*File` 把权限节点写入模块的 `resources/menus.php`（§8.2 的声明格式，菜单节点 + `buttons`）、登记路由，并按模板生成授权测试。
+
+`core:make-policy` 生成的 Policy 已按 §8.3 的标准写法检查权限码（`<模块>.<模型>`，`--permission=` 可指定），并提示需要声明的权限码。

@@ -144,3 +144,32 @@ function archFunctionCalls(string $code, array $functions): array
 
     return $calls;
 }
+
+/**
+ * 文件中以字符串字面量作为第一个参数的方法 / 函数 / Attribute 调用（如 `->can('system.user')`、`#[Authorize('update', ...)]`），
+ * 返回调用名、参数（去掉引号）与行号。
+ *
+ * @param  list<string>  $names  调用名（区分大小写）
+ * @return list<array{name: string, argument: string, line: int}>
+ */
+function archStringArgumentCalls(string $code, array $names): array
+{
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($code),
+        fn (PhpToken $token): bool => ! $token->isIgnorable(),
+    ));
+
+    $calls = [];
+
+    foreach ($tokens as $index => $token) {
+        $argument = $tokens[$index + 2] ?? null;
+
+        if ($token->is(T_STRING) && in_array($token->text, $names, true)
+            && ($tokens[$index + 1] ?? null)?->text === '('
+            && $argument?->is(T_CONSTANT_ENCAPSED_STRING)) {
+            $calls[] = ['name' => $token->text, 'argument' => stripslashes(substr($argument->text, 1, -1)), 'line' => $token->line];
+        }
+    }
+
+    return $calls;
+}

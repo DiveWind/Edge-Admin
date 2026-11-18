@@ -3,12 +3,16 @@
 namespace App\Core\System;
 
 use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPassword, UpdateUserProfileInformation};
-use App\Core\System\Models\User;
+use App\Core\System\Commands\SyncPermissionsCommand;
+use App\Core\System\Contracts\MenuRegistry;
+use App\Core\System\Models\{Permission, Role, User};
+use App\Core\System\Services\{MenuRegistryService, PermissionRegistry};
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\CanResetPassword;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\{JsonResponse, Request};
-use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\{Gate, RateLimiter};
 use Illuminate\Support\{ServiceProvider, Str};
 use Laravel\Fortify\Fortify;
 
@@ -20,9 +24,21 @@ use Laravel\Fortify\Fortify;
  *
  * 认证（设计文档 §7）：Fortify 的登录校验与各 Action、登录 / 两步验证的限流器、找回密码邮件中的前端链接。
  * Fortify 的路由挂在后台入口下（config/fortify.php，由 AdminServiceProvider 决定是否注册）。
+ *
+ * 菜单与权限（设计文档 §8.1、§8.2）：MenuRegistry 扩展点（本模块的节点见 resources/menus.php）、同步命令 core:sync-permissions、
+ * 基于 PermissionRegistry 的 Gate::before。
  */
 class SystemServiceProvider extends ServiceProvider
 {
+    /**
+     * 单例：只保存启动时注册的静态声明（菜单与权限节点），不保存请求数据。
+     *
+     * @var array<class-string, class-string>
+     */
+    public array $singletons = [
+        MenuRegistry::class => MenuRegistryService::class,
+    ];
+
     /**
      * Register any application services.
      */
@@ -34,11 +50,41 @@ class SystemServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot(MenuRegistry $menus): void
     {
+        Relation::morphMap([
+            'permission' => Permission::class,
+            'role' => Role::class,
+        ]);
+
+        $menus->register(require __DIR__.'/resources/menus.php');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([SyncPermissionsCommand::class]);
+        }
+
+        $this->configureAuthorization();
         $this->configureFortify();
         $this->configureRateLimiting();
         $this->configurePasswordReset();
+    }
+
+    /**
+     * 权限判定（设计文档 §8.1）：Gate::before 只处理权限码。
+     *
+     * - ability 是已登记的权限码（permissions 表中有，不看格式）：在用户的有效权限码中为 true，否则为 false
+     *   （节点或其任一祖先停用时，超管也为 false）；
+     * - 其他 ability（Policy 方法名等）返回 null，交给 Policy：超管只对权限码直接放行，同样受 Policy 中记录级规则的约束。
+     *
+     * spatie 自带的 Gate 检查已关闭（config/permission.php 的 register_permission_check_method）。
+     */
+    protected function configureAuthorization(): void
+    {
+        Gate::before(function (User $user, string $ability): ?bool {
+            $registry = resolve(PermissionRegistry::class);
+
+            return $registry->isRegistered($ability) ? $registry->allows($user, $ability) : null;
+        });
     }
 
     /**

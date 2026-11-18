@@ -2,7 +2,7 @@
 
 namespace App\Core\System\Actions;
 
-use App\Core\System\Enums\UserStatus;
+use App\Core\System\Enums\Status;
 use App\Core\System\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +21,7 @@ class DisableUser
     public function handle(User $user): void
     {
         DB::transaction(function () use ($user): void {
-            $user->forceFill(['status' => UserStatus::Disabled])->save();
+            $user->forceFill(['status' => Status::Disabled])->save();
 
             $this->revokeSessions->handle($user);
         });

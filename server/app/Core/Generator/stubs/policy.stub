@@ -4,11 +4,16 @@ namespace {{ namespace }};
 
 use {{ namespacedModel }};
 use {{ namespacedUserModel }};
+use Illuminate\Auth\Access\Response;
 
 /**
  * {{ model }} 的授权规则（设计文档 §8.3）：标准方法齐全，默认拒绝。
  *
- * TODO: 在各方法中检查对应的权限码与数据权限（设计文档 §8.3、§8.4）。
+ * 标准写法：先检查权限码 `$actor->can('<权限码>')`，再做业务保护，最后检查数据范围；不通过时返回带提示文案的 Response::deny()（403）。
+ * 权限码在模块的 resources/menus.php 中声明（§8.2，未声明的权限码由 tests/Arch 拦截）：菜单节点 `{{ permission }}` 是查看 / 列表权限，
+ * 按钮 `{{ permission }}.create`、`{{ permission }}.update`、`{{ permission }}.delete` 是写操作。
+ *
+ * TODO: 按业务补充保护规则（§8.6）与数据范围（§8.4）；启用软删除时为 restore、forceDelete 检查对应的权限码。
  * 规则与调用方无关：禁止判断是哪个入口在调用；关联操作（如分配、挂载）另加方法单独授权。
  */
 class {{ class }}
@@ -16,80 +21,80 @@ class {{ class }}
     /**
      * Determine whether the user can view any models.
      */
-    public function viewAny({{ userModel }} $user): bool
+    public function viewAny({{ userModel }} $actor): Response
     {
-        return false;
+        return $actor->can('{{ permission }}') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can view the model.
      */
-    public function view({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    public function view({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
-        return false;
+        return $actor->can('{{ permission }}') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can create models.
      */
-    public function create({{ userModel }} $user): bool
+    public function create({{ userModel }} $actor): Response
     {
-        return false;
+        return $actor->can('{{ permission }}.create') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can update the model.
      */
-    public function update({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    public function update({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
-        return false;
+        return $actor->can('{{ permission }}.update') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    public function delete({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
-        return false;
+        return $actor->can('{{ permission }}.delete') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    public function restore({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
-        return false;
+        return Response::deny();
     }
 
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete({{ userModel }} $user, {{ model }} ${{ modelVariable }}): bool
+    public function forceDelete({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
-        return false;
+        return Response::deny();
     }
 
     /**
      * Determine whether the user can delete models in bulk.
      */
-    public function deleteAny({{ userModel }} $user): bool
+    public function deleteAny({{ userModel }} $actor): Response
     {
-        return false;
+        return $actor->can('{{ permission }}.delete') ? Response::allow() : Response::deny();
     }
 
     /**
      * Determine whether the user can restore models in bulk.
      */
-    public function restoreAny({{ userModel }} $user): bool
+    public function restoreAny({{ userModel }} $actor): Response
     {
-        return false;
+        return Response::deny();
     }
 
     /**
      * Determine whether the user can permanently delete models in bulk.
      */
-    public function forceDeleteAny({{ userModel }} $user): bool
+    public function forceDeleteAny({{ userModel }} $actor): Response
     {
-        return false;
+        return Response::deny();
     }
 }

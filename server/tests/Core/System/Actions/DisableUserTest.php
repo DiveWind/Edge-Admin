@@ -1,7 +1,7 @@
 <?php
 
 use App\Core\System\Actions\DisableUser;
-use App\Core\System\Enums\UserStatus;
+use App\Core\System\Enums\Status;
 use App\Core\System\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -22,9 +22,9 @@ it('disables the user and revokes the sessions and tokens', function (): void {
 
     resolve(DisableUser::class)->handle($user);
 
-    expect($user->refresh()->status)->toBe(UserStatus::Disabled)
+    expect($user->refresh()->status)->toBe(Status::Disabled)
         ->and(DB::table('sessions')->pluck('user_id')->all())->toBe([$other->id])
         ->and($user->tokens()->count())->toBe(0)
-        ->and($other->refresh()->status)->toBe(UserStatus::Enabled)
+        ->and($other->refresh()->status)->toBe(Status::Enabled)
         ->and($other->tokens()->count())->toBe(1);
 });

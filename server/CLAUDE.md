@@ -199,6 +199,14 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   需要登录的路由放在 `auth:sanctum` 分组中（会话 Cookie 与 token 都识别）；Fortify 的 Action 在 `app/Core/System/Actions`。
 - 测试中模拟浏览器里的 Vben（会话 Cookie、CSRF、多设备）用 `tests/Http/Admin/VbenClient.php`；只需要“已登录”时用 `actingAs()`。
 
+### 授权（设计文档 §8）
+
+- 菜单与权限节点在模块的 `resources/menus.php` 中声明，在模块 Provider 的 `boot()` 中注册到 `App\Core\System\Contracts\MenuRegistry`，
+  由 `php artisan core:sync-permissions` 写入 `permissions` 表；权限码即节点的 `name`（小写点分，如 `system.user.create`）。
+- 判定一律走 `can()` / Gate / Policy：`Gate::before` 对已登记的权限码按 `PermissionRegistry` 判定（停用节点、停用角色不生效），其他 ability 交给 Policy。
+  **禁止** spatie 的判定 API（`hasRole()`、`hasPermissionTo()` 等，PHPStan 拦截）与 `role:` / `permission:` 中间件；是否超管用 `isSuperAdmin()`。
+- 控制器方法用 `#[Authorize(...)]` 声明授权；只需登录的路由列在 `tests/Arch/AuthorizationTest.php` 的 `LOGIN_ONLY_ROUTES` 中。代码里用到的权限码必须已声明（`tests/Arch` 检查）。
+
 ### 命名与生成
 
 - 本脚手架不带品牌名：配置 `config/core.php`、命令前缀 `core:`、环境变量前缀 `CORE_`。
@@ -215,7 +223,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
   - 内核模块必须显式加 `--core`；名称自动转为 StudlyCase 并补上后缀（`Article` → `ArticleController`），不能带子目录。
   - 共享文件的登记是幂等的；文件格式不符合预期时命令失败并打印需手工粘贴的内容，按提示补上即可，不要为了迁就生成器改乱文件结构。
-  - 路由不自动登记（`core:make-controller` 会打印要加的路由）；`core:make-module --crud`（完整增删改查）在 Core 扩展点就绪后提供。
+  - 路由不自动登记（`core:make-controller` 会打印要加的路由）；`core:make-module --crud`（完整增删改查）尚未提供。
   - 模板可在项目中覆盖：`php artisan stub:publish`（或 `vendor:publish --tag=core-stubs`）后修改 `stubs/core.<名称>.stub`。
   - 没有对应 `core:make-*` 的类型（事件、监听、任务、通知等）才用官方 `make:*`，名称写以 `App/` 开头的完整路径，如 `make:event App/Modules/Content/Events/ArticlePublished`。
 - 测试放在 `tests/` 下与 `app/` 对应的目录（`tests/Http/Admin/...`、`tests/Core/System/...`、`tests/Modules/...`），不使用 `tests/Feature`、`tests/Unit`。

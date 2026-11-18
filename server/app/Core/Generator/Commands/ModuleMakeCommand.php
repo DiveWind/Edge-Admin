@@ -14,12 +14,12 @@ use Override;
  * 不建空目录：模块内的 Models、Actions 等目录，以及各受信任入口中的同名目录（app/Http/<入口>/<名称>），
  * 都在用 core:make-* 生成其中的类时创建（git 不保存空目录）。
  *
- * `--crud`（完整增删改查：权限节点、菜单、路由、授权测试）依赖 Core 的菜单与权限扩展点（尚未提供），目前只给出提示。
+ * `--crud`（完整增删改查：权限节点、菜单、路由、授权测试）尚未实现，目前只给出提示。
  */
 #[Signature('core:make-module
     {name : 模块名，如 Content}
     {--core : 生成内核模块（app/Core），极少使用，需显式指定}
-    {--crud : 生成完整增删改查（尚未实现，依赖 Core 的扩展点）}
+    {--crud : 生成完整增删改查（尚未实现）}
     {--f|force : 文件已存在时覆盖}')]
 #[Description('生成模块：ServiceProvider（登记到 bootstrap/providers.php）与 README.md')]
 class ModuleMakeCommand extends CoreGeneratorCommand
@@ -50,7 +50,7 @@ class ModuleMakeCommand extends CoreGeneratorCommand
     protected function inputError(): ?string
     {
         if ($this->option('crud')) {
-            return '完整增删改查（--crud）尚未实现：它要登记权限节点与菜单、路由并生成授权测试，依赖 Core 的菜单与权限扩展点（尚未提供，设计文档 §5.5、§10.4）。'
+            return '完整增删改查（--crud）尚未实现：它要把权限节点写入模块的 resources/menus.php、登记路由并生成授权测试（设计文档 §8.2、§10.4）。'
                 .'目前请先生成模块，再分别使用 core:make-model、core:make-action、core:make-controller --model 等命令。';
         }
 

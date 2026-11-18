@@ -36,21 +36,55 @@ it('creates the model, migration, factory and policy and registers the morph ali
         );
 });
 
-it('creates a policy with every standard method denying by default', function (): void {
-    $this->artisan('core:make-model', ['name' => 'Article', '--module' => 'Content'])->assertSuccessful();
+it('creates a policy with every standard method that checks the permission codes first', function (): void {
+    $this->artisan('core:make-model', ['name' => 'Article', '--module' => 'Content'])
+        ->expectsOutputToContain('app/Modules/Content/resources/menus.php')
+        ->expectsOutputToContain('content.article.create、content.article.update、content.article.delete')
+        ->assertSuccessful();
 
     $policy = $this->project->read('app/Modules/Content/Policies/ArticlePolicy.php');
+    $checks = [
+        'viewAny' => [false, "\$actor->can('content.article')"],
+        'view' => [true, "\$actor->can('content.article')"],
+        'create' => [false, "\$actor->can('content.article.create')"],
+        'update' => [true, "\$actor->can('content.article.update')"],
+        'delete' => [true, "\$actor->can('content.article.delete')"],
+        'deleteAny' => [false, "\$actor->can('content.article.delete')"],
+    ];
 
-    foreach (['viewAny', 'create', 'deleteAny', 'restoreAny', 'forceDeleteAny'] as $method) {
-        expect($policy)->toContain("public function {$method}(User \$user): bool\n    {\n        return false;\n    }");
+    foreach ($checks as $method => [$withModel, $check]) {
+        $parameters = $withModel ? 'User $actor, Article $article' : 'User $actor';
+
+        expect($policy)->toContain("public function {$method}({$parameters}): Response\n    {\n        return {$check} ? Response::allow() : Response::deny();\n    }");
     }
 
-    foreach (['view', 'update', 'delete', 'restore', 'forceDelete'] as $method) {
-        expect($policy)->toContain("public function {$method}(User \$user, Article \$article): bool\n    {\n        return false;\n    }");
+    foreach (['restore' => true, 'forceDelete' => true, 'restoreAny' => false, 'forceDeleteAny' => false] as $method => $withModel) {
+        $parameters = $withModel ? 'User $actor, Article $article' : 'User $actor';
+
+        expect($policy)->toContain("public function {$method}({$parameters}): Response\n    {\n        return Response::deny();\n    }");
     }
 
-    expect($policy)->toContain("use App\\Core\\System\\Models\\User;\nuse App\\Modules\\Content\\Models\\Article;", 'TODO: 在各方法中检查对应的权限码与数据权限')
-        ->and(substr_count($policy, 'return false;'))->toBe(10);
+    expect($policy)->toContain("use App\\Core\\System\\Models\\User;\nuse App\\Modules\\Content\\Models\\Article;\nuse Illuminate\\Auth\\Access\\Response;", '菜单节点 `content.article` 是查看 / 列表权限')
+        ->and(substr_count($policy, 'public function '))->toBe(10);
+});
+
+it('uses the permission code given with --permission', function (): void {
+    $this->artisan('core:make-model', ['name' => 'ArticleCategory', '--module' => 'Content'])->assertSuccessful();
+
+    expect($this->project->read('app/Modules/Content/Policies/ArticleCategoryPolicy.php'))->toContain("\$actor->can('content.article_category.update')");
+
+    $this->artisan('core:make-policy', ['name' => 'ArticleCategory', '--module' => 'Content', '--permission' => 'content.category', '--force' => true])->assertSuccessful();
+
+    expect($this->project->read('app/Modules/Content/Policies/ArticleCategoryPolicy.php'))->toContain("\$actor->can('content.category.update')")
+        ->not->toContain('content.article_category');
+});
+
+it('rejects an invalid permission code', function (): void {
+    $this->artisan('core:make-model', ['name' => 'Article', '--module' => 'Content'])->assertSuccessful();
+
+    $this->artisan('core:make-policy', ['name' => 'Article', '--module' => 'Content', '--permission' => 'Content.Article', '--force' => true])
+        ->expectsOutputToContain('权限码“Content.Article”不合法')
+        ->assertFailed();
 });
 
 it('appends further models to the morph map with grouped imports', function (): void {
@@ -162,5 +196,5 @@ it('generates a policy for the model given with --model', function (): void {
 
     $this->artisan('core:make-policy', ['name' => 'ArticleReview', '--model' => 'Article', '--module' => 'Content'])->assertSuccessful();
 
-    expect($this->project->read('app/Modules/Content/Policies/ArticleReviewPolicy.php'))->toContain('class ArticleReviewPolicy', 'public function view(User $user, Article $article): bool');
+    expect($this->project->read('app/Modules/Content/Policies/ArticleReviewPolicy.php'))->toContain('class ArticleReviewPolicy', 'public function view(User $actor, Article $article): Response');
 });

@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Admin\System\Controllers\UserInfoController;
+use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, UserInfoController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -24,4 +24,6 @@ Route::get('sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])->name('
 
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('user/info', UserInfoController::class)->name('user.info');
+    Route::get('auth/codes', AuthCodesController::class)->name('auth.codes');
+    Route::get('menu/all', MenuAllController::class)->name('menu.all');
 });

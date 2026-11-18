@@ -1,6 +1,6 @@
 <?php
 
-use App\Core\System\Models\User;
+use App\Core\System\Models\{Role, User};
 use Tests\Http\Admin\VbenClient;
 
 /*
@@ -75,4 +75,17 @@ it('accepts Sanctum tokens as well', function (): void {
         ->getJson('/api/admin/user/info')
         ->assertOk()
         ->assertJsonPath('data.userId', (string) $user->id);
+});
+
+it('returns the identifiers of the enabled roles only', function (): void {
+    $user = User::factory()->create()->assignRole(
+        Role::factory()->superAdmin()->create(),
+        Role::factory()->create(['name' => 'editor']),
+        Role::factory()->disabled()->create(['name' => 'auditor']),
+    );
+
+    $this->actingAs($user)
+        ->getJson('/api/admin/user/info')
+        ->assertOk()
+        ->assertJsonPath('data.roles', ['super-admin', 'editor']);
 });

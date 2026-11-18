@@ -2,7 +2,7 @@
 
 namespace Database\Factories\Core\System\Models;
 
-use App\Core\System\Enums\UserStatus;
+use App\Core\System\Enums\Status;
 use App\Core\System\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -36,7 +36,8 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'avatar' => null,
-            'status' => UserStatus::Enabled,
+            'status' => Status::Enabled,
+            'created_by' => null,
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
@@ -72,7 +73,7 @@ class UserFactory extends Factory
     public function disabled(): static
     {
         return $this->state(fn (array $attributes): array => [
-            'status' => UserStatus::Disabled,
+            'status' => Status::Disabled,
         ]);
     }
 }

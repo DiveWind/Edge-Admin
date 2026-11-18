@@ -1,6 +1,6 @@
 <?php
 
-use App\Core\System\Enums\UserStatus;
+use App\Core\System\Enums\Status;
 use App\Core\System\Models\User;
 use Illuminate\Support\Facades\{DB, Hash};
 use Tests\Http\Admin\VbenClient;
@@ -47,7 +47,7 @@ describe('profile information', function (): void {
 
         expect($this->user->refresh())
             ->username->toBe('alice')
-            ->status->toBe(UserStatus::Enabled);
+            ->status->toBe(Status::Enabled);
     });
 
     it('validates the input', function (array $input, string $field): void {

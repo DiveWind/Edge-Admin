@@ -112,8 +112,8 @@ php artisan core:make-contract DeviceConfig --module=Content           # 受限�
 |---|---|
 | `core:make-app {name} [--restricted]` | `app/Http/<Name>/<Name>ServiceProvider.php`、`routes.php`、`tests/Http/<Name>/<Name>ServiceProviderTest.php`；登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml` 与 `.env.example` 的 `CORE_APPS`。路由默认要求登录（`auth:sanctum`），受信任的入口与后台相同使用 Sanctum 会话。`--restricted`：`trusted=false`，前缀 `api/<name>/v1`，只用 Bearer token（无状态） |
 | `core:make-module {name} [--core]` | `app/Modules/<Name>/<Name>ServiceProvider.php`（登记到 `bootstrap/providers.php`）与 `README.md`；`--core` 生成到 `app/Core/<Name>`。入口中的同名目录在生成控制器等时创建，不建空目录。`--crud` 尚未提供 |
-| `core:make-model {name} --module=` | `Models/<Name>.php`、`database/migrations/*_create_<表>_table.php`、`database/factories/<与模型相同的路径>Factory.php`、`Policies/<Name>Policy.php`（标准方法齐全，默认拒绝）；在模块 Provider 的 `Relation::morphMap()` 中登记别名 `<模块>.<模型>` |
-| `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy（`core:make-policy --model=` 可指定模型） |
+| `core:make-model {name} --module=` | `Models/<Name>.php`、`database/migrations/*_create_<表>_table.php`、`database/factories/<与模型相同的路径>Factory.php`、`Policies/<Name>Policy.php`（标准方法齐全：先检查权限码 `<模块>.<模型>` 及其 `.create` / `.update` / `.delete`，软删除相关方法默认拒绝；需在模块的 `resources/menus.php` 中声明这些权限码）；在模块 Provider 的 `Relation::morphMap()` 中登记别名 `<模块>.<模型>` |
+| `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy（`core:make-policy --model=` 可指定模型，`--permission=` 指定权限码） |
 | `core:make-action` / `core:make-query` / `core:make-enum` / `core:make-data {name} --module=` | `Actions/`（`handle()`）、`Queries/`（只读）、`Enums/`（实现 `HasLabel`）、`Data/<Name>Data`（只读数据对象） |
 | `core:make-contract {name} --module=` | `Contracts/<Name>`（接口）、`Data/<Name>Data`、`Services/<Name>Service`（实现），并在模块 Provider 的 `$bindings` 中绑定 |
 | `core:make-controller {name} --module= [--app=admin] [--model=]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成 `#[Authorize]` 的 `index`（`paginate($request->pageSize())`）与 `show`，并补上缺少的列表请求与 Resource。路由不自动登记，命令会打印要添加的路由 |

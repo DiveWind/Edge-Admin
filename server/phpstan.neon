@@ -99,6 +99,24 @@ parameters:
             message: '入口只开放接口：写入请调用对应模块的 Action（设计文档 §5.2）'
             disallowIn:
                 - app/Http/*
+    # 授权只走 Gate（设计文档 §5.6、§8.1）：禁止直接调用 spatie 的判定 API，它们不看节点与角色的停用状态。
+    # 用 *:: 匹配：这些方法来自 spatie 的 HasRoles / HasPermissions（trait 嵌套，Role 还覆盖了 hasPermissionTo），方法名足够独特
+        -
+            method:
+                - '*::hasRole()'
+                - '*::hasAnyRole()'
+                - '*::hasAllRoles()'
+                - '*::hasExactRoles()'
+                - '*::hasPermissionTo()'
+                - '*::checkPermissionTo()'
+                - '*::hasAnyPermission()'
+                - '*::hasAllPermissions()'
+                - '*::hasDirectPermission()'
+                - '*::hasAnyDirectPermission()'
+                - '*::hasAllDirectPermissions()'
+                - '*::getAllPermissions()'
+                - '*::getPermissionsViaRoles()'
+            message: '授权只走 Gate：用 can() / Gate / Policy 判定，是否超管用 isSuperAdmin()；spatie 的判定 API 绕过停用节点与停用角色（设计文档 §8.1）'
     # 模型上的静态调用（User::create() 等）转发给查询构造器，PHPStan 解析为 Builder 的方法
     disallowedStaticCalls:
         -
