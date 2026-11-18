@@ -301,13 +301,13 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
 | 接口 | 提供方 | 说明 |
 |---|---|---|
-| `GET /sanctum/csrf-cookie` | Sanctum | 登录前获取 CSRF 令牌 |
-| `POST /login`、`POST /logout` | Fortify | 开启两步验证时，登录返回“需要两步验证”的标记 |
+| `GET /sanctum/csrf-cookie` | Sanctum（登记在后台入口下） | 登录前获取 CSRF 令牌（`XSRF-TOKEN` Cookie） |
+| `POST /login`、`POST /logout` | Fortify | 登录只接受 `username`、`password`、`remember`；返回 `{ two_factor: true/false }` |
 | `POST /two-factor-challenge` | Fortify | 提交动态码或恢复码完成登录 |
-| `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码 |
-| 两步验证的开启、确认、关闭、恢复码 | Fortify | 个人设置中使用 |
+| `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码；返回 `{ message }` |
+| 两步验证的开启、确认、关闭、二维码、密钥、恢复码；确认密码；修改资料、修改密码 | Fortify | 个人设置中使用 |
 | `GET /auth/codes` | 自建 | 当前用户的按钮权限码列表 |
-| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`、`username`、`realName`、`avatar`、`roles`、`desc`、`homePath` |
+| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`（字符串）、`username`、`realName`、`avatar`（可为 null）、`roles`、`desc`、`homePath` |
 | `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致（见下方“菜单节点”） |
 
 **菜单节点**（Vben 后端路由模式的要求）：
@@ -319,7 +319,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | `component` | 目录：`BasicLayout`；页面：相对 `src/views` 的路径，如 `/system/user/list`；内嵌页：`IFrameView` 并设置 `meta.iframeSrc`；外链：设置 `meta.link` |
 | `meta` | `title`、`icon`、`order`、`hideInMenu` 等 Vben 支持的字段 |
 
-Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
+Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径均相对后台入口前缀（默认 `/api/admin`）。
+
+**认证相关的其他状态码**：401 未登录或账号已停用；409 已登录时请求只限未登录的接口（如再次登录）；419 CSRF 令牌失效，前端重新获取 CSRF Cookie 后重试；423 需要先确认密码；429 登录过于频繁（带 `Retry-After`）。
 
 找回密码邮件中的重置链接指向前端页面（`ResetPassword::createUrlUsing()`）。
 
@@ -358,7 +360,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
 | 找回密码、重置密码 | 邮件链接重置 |
 | 邮箱验证 | 按需开启 |
 | 敏感操作前确认密码 | 如关闭两步验证、修改安全设置 |
-| 修改个人资料、修改密码 | 修改密码后让其他设备下线（`Auth::logoutOtherDevices()`） |
+| 修改个人资料、修改密码 | 修改密码后让其他设备下线：database 会话驱动下直接删除该用户的其他会话并吊销全部 token；其他驱动由 Sanctum 的 `AuthenticateSession` 在下次请求时注销 |
 | 注册 | **关闭** |
 | Passkeys | Fortify 已集成；依赖的 `laravel/passkeys` 仍为 0.x，**暂不开启** |
 
@@ -374,7 +376,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
 
 ### 7.4 安全措施
 
-- 会话 Cookie：`HttpOnly`、线上 `Secure`、`SameSite=Lax`；CSRF 由 Sanctum 处理。
+- 会话 Cookie：`HttpOnly`、线上 `Secure`、`SameSite=Lax`；CSRF 由 Sanctum 处理。 Laravel 13 的 CSRF 校验认可浏览器的 `Sec-Fetch-Site: same-origin`；前端与 API 不同子域时仍必须携带 `X-XSRF-TOKEN`。
 - token：设置过期时间；启用 Sanctum `token_prefix` 便于识别泄露；用 abilities 限定权限范围；定时清理过期 token。
 - 改密码、禁用账号、强制下线时，吊销对应的会话与 token。
 
@@ -504,6 +506,7 @@ Scramble 的兼容性在引入时另行验证。
 
 - 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问，行为与官方 make 命令一致；失败时退出码为 1。
 - 模板覆盖：项目中的 `stubs/core.<名称>.stub` 优先于命令自带模板，可用 `php artisan vendor:publish --tag=core-stubs` 发布后修改。
+- 生成的入口默认要求登录：受信任入口使用会话（同 Admin），受限入口使用 token（无会话）。
 - 路由不自动登记：生成控制器后命令会打印需要添加的路由；生成器本身是内核模块 `app/Core/Generator`，只在命令行下注册。
 - 完整增删改查还会生成：权限节点、路由、操作日志文案、**授权测试**、模块 README。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
@@ -540,7 +543,7 @@ Scramble 的兼容性在引入时另行验证。
 
 **默认：Nginx（或 Caddy）+ PHP-FPM**
 
-- 后台接口、`/sanctum/*`、`/storage/*`、`/up` → PHP-FPM；
+- 后台接口（含 CSRF Cookie 接口）、`/storage/*`、`/up` → PHP-FPM；
 - 其他路径 → `web/dist` 静态文件，找不到时回退到 `index.html`；
 - 带哈希的静态资源长期缓存，`index.html` 不缓存。
 
@@ -588,8 +591,8 @@ Scramble 的兼容性在引入时另行验证。
 | 包 | 用途 |
 |---|---|
 | laravel/framework 13 | 框架 |
-| laravel/fortify 1.43 | **完整使用**：登录、两步验证、找回密码、邮箱验证、确认密码、个人资料 |
-| laravel/sanctum | SPA 会话认证 + token |
+| laravel/fortify 1.43 | **完整使用**：登录、两步验证、找回密码、邮箱验证、确认密码、个人资料（连带安装 laravel/passkeys 0.3，功能关闭） |
+| laravel/sanctum 4.5 | SPA 会话认证 + token |
 | laravel/pulse 1.11 | 生产性能监控 |
 | laravel/octane 2.25 | 可选：常驻内存运行（FrankenPHP） |
 | laravel/horizon 5.52 | 可选：Redis 队列管理（需 pcntl，Linux） |
