@@ -13,7 +13,7 @@
 2. [设计原则](#2-设计原则)
 3. [技术栈](#3-技术栈)
 4. [仓库与目录结构](#4-仓库与目录结构)
-5. [核心与应用：分层和依赖边界](#5-核心与应用分层和依赖边界)
+5. [分层与依赖边界](#5-分层与依赖边界)
 6. [与 Vben 的接口契约](#6-与-vben-的接口契约)
 7. [认证](#7-认证)
 8. [授权与数据权限](#8-授权与数据权限)
@@ -32,7 +32,7 @@
 
 - **克隆即拥有全部代码**：与 Laravel 官方 Starter Kit 相同，使用者在此基础上直接开发业务，而不是以“框架包”的形式依赖和升级。
 - 提供 RBAC、数据权限、动态菜单、日志、通知、字典、参数、附件、定时任务等后台通用能力。
-- 支持一个核心加多个独立入口（多应用），例如后台 API、设备接入 API、开放平台 API。
+- 三类代码各归其位：**内核（Core）**放通用后台能力、尽量不改；**业务模块（Modules）**放项目业务；**入口（Http）**只开放接口，支持多个独立入口，例如后台 API、设备接入 API、开放平台 API。
 - **尽量少自建基础设施**：能用 Laravel 官方能力或社区事实标准实现的，一律不自己写；必须自建的部分全部登记在 [§13](#13-自建基础设施清单)。
 
 **不做的事**
@@ -44,7 +44,8 @@
 
 1. **官方优先，少自建。** Laravel 官方包能做的，不引入第三方；官方没有的，用社区事实标准（spatie）；都没有的才自己写，并登记在 §13。
 2. **前后端彻底分离。** 后端只提供数据和规则，界面完全由前端决定。
-3. **业务规则只有一份，在核心里。** 无论从后台、设备、命令行还是队列进入，执行的都是同一套规则。
+3. **业务规则只有一份，在模块里。** 无论从后台、设备、命令行还是队列进入，执行的都是同一套规则；入口只开放接口。
+8. **内核尽量不改。** 业务模块通过 Core 的扩展点接入，不修改 Core 的文件。
 4. **默认拒绝。** 授权、数据权限、多租户隔离一律 fail-closed：缺规则 = 不允许。
 5. **规范要能被机器检查。** 能用 Pest 架构测试、PHPStan、Pint、Rector 强制的约定，就不只写在文档里。
 6. **选定一种写法就全项目统一，并写进代码生成器。** 一致性比选哪一种更重要。
@@ -83,48 +84,58 @@
 
 ### 4.2 `server/` 目录
 
+`app/` 下每个顶层目录就是一类代码：
+
+| 目录 | 是什么 | 改动频率 |
+|---|---|---|
+| `Core/` | 脚手架内核：每个项目都需要的通用后台能力 | 很少，尽量不改 |
+| `Modules/` | 业务模块：项目自己的业务 | 频繁 |
+| `Http/` | 入口：只负责对外开放接口（路由、控制器、参数校验、输出格式） | 随业务变化 |
+| `Support/` | 与业务无关的共享基础件 | 很少 |
+
 ```
 server/
 ├── app/
-│   ├── Core/                         核心：拥有数据库、模型、业务规则
-│   │   ├── Contracts/                ← 对受限应用导出的接口
-│   │   ├── Data/                     ← 对受限应用导出的只读数据对象（readonly）
-│   │   ├── Events/                   ← 对外导出的领域事件
+│   ├── Core/                         内核（尽量不改）
 │   │   ├── System/                   用户、角色、菜单权限、字典、参数、附件
 │   │   ├── Monitor/                  日志、在线会话、定时任务、系统监控
-│   │   ├── Message/                  公告、通知
-│   │   └── Content/                  文章（业务对接示范，可整块删除）
+│   │   └── Message/                  公告、通知
 │   │
-│   ├── Admin/                        应用：后台 API（受信任），给 Vben 用
-│   │   ├── System/                   ← 与 Core/System 一一对应
-│   │   │   ├── Controllers/
-│   │   │   ├── Requests/
-│   │   │   └── Resources/
-│   │   ├── Monitor/  Message/  Content/
-│   │   ├── Http/Middleware/          整个后台应用共用的中间件（响应包装等）
-│   │   ├── routes/api.php
-│   │   └── AdminServiceProvider.php  注册本应用的路由、中间件组、限流器等
+│   ├── Modules/                      业务模块
+│   │   ├── Content/                  文章（业务对接示范，可整块删除）
+│   │   └── Device/                   示例：设备档案、设备配置（以后加）
 │   │
-│   ├── Device/                       应用：设备接入（受限，以后加）
+│   ├── Http/                         入口
+│   │   ├── Admin/                    后台 API（受信任），给 Vben 用
+│   │   │   ├── System/  Monitor/  Message/     ← 对应 Core 的模块
+│   │   │   ├── Content/  Device/               ← 对应业务模块
+│   │   │   │   ├── Controllers/
+│   │   │   │   ├── Requests/
+│   │   │   │   └── Resources/
+│   │   │   ├── Middleware/           本入口专用的中间件（Vben 响应包装等）
+│   │   │   ├── routes.php
+│   │   │   └── AdminServiceProvider.php
+│   │   ├── Device/                   设备接入 API（受限，以后加）
+│   │   └── Middleware/               多个入口共用的中间件（Laravel 默认位置）
 │   │
-│   └── Support/                      与业务无关的跨应用基础件
+│   └── Support/                      共享基础件（基类、通用工具）
 │
 ├── bootstrap/  config/  database/  lang/  public/  storage/
 ├── routes/console.php                只放调度定义
-├── stubs/                            定制后的官方 stub + 生成器模板
+├── stubs/                            定制后的官方 stub + 生成命令模板
 └── tests/
-    ├── Core/{System,Monitor,Message,Content}/
-    ├── Admin/
-    ├── Device/
+    ├── Core/{System,Monitor,Message}/
+    ├── Modules/{Content,Device}/
+    ├── Http/{Admin,Device}/
     └── Arch/                         边界与约定测试
 ```
 
-### 4.3 核心业务模块内部
+### 4.3 模块内部结构
 
-每个模块结构相同，按需创建子目录，不建空目录：
+Core 与 Modules 下的模块结构相同，按需创建子目录，不建空目录：
 
 ```
-app/Core/System/
+app/Modules/Content/
 ├── Models/            Eloquent 模型
 ├── Actions/           写操作用例（一个类一个用例，handle() 方法）
 ├── Policies/          授权规则
@@ -132,115 +143,147 @@ app/Core/System/
 ├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
 ├── Rules/  Casts/
+├── Contracts/  Data/  需要向受限入口开放时才有：接口与只读数据对象
 ├── resources/
-│   ├── lang/          模块自己的语言包（命名空间 system::）
+│   ├── lang/          模块自己的语言包（命名空间 content::）
 │   └── views/         邮件、PDF、导出模板（不对外访问）
-├── README.md          模块说明：职责、对外提供什么
-└── SystemServiceProvider.php
+├── README.md          模块说明：职责、对外提供什么、依赖了 Core 的哪些能力
+└── ContentServiceProvider.php    注册本模块的命令、监听、语言包、视图，并通过扩展点接入 Core（§5.5）
 ```
 
 需要浏览器直接下载的文件放 `resources/public`，部署时 `vendor:publish` 到 `public/vendor/<模块>`。**`app/` 目录绝不对外访问**；Web 根目录只能是 `public/` 和前端构建产物。
 
 ### 4.4 命名约定
 
-- **应用按“给谁用”命名**：后台（`Admin`）、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……
-- **核心叫 `Core`**，业务模块用业务名（`System`、`Monitor`、`Message`、`Content`）。
-- 应用内部的目录与核心模块**同名一一对应**。删除一个业务 = 删除 `Core/<模块>` + 各应用里的同名目录 + 前端对应页面。
+- **入口按“给谁用”命名**：后台（`Admin`）、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……
+- **Core 的模块**：`System`、`Monitor`、`Message`。**业务模块**用业务名（`Content`、`Device`、`Order`……）。
+- 入口内部的目录与模块**同名一一对应**。删除一个业务 = 删除 `Modules/<模块>` + 各入口里的同名目录 + 前端对应页面，Core 不受影响。
+- `App\Modules\Device`（设备业务）与 `App\Http\Device`（设备接入入口）同名，但命名空间不同、职责不同。
 
 ### 4.5 偏离默认目录：官方支持与需要的配置
 
-官方文档（Directory Structure）明确：默认结构只是起点，可以按需组织，“只要 Composer 能自动加载，Laravel 几乎不限制任何类的位置”。核心模块与应用采用官方“包开发”（Package Development）的方式注册自己的路由、命令、语言包和视图。
+官方文档（Directory Structure）明确：默认结构只是起点，可以按需组织，“只要 Composer 能自动加载，Laravel 几乎不限制任何类的位置”。模块与入口采用官方“包开发”（Package Development）的方式注册自己的路由、命令、语言包和视图。
 
 | 默认行为 | 是否受影响 | 处理（均为官方机制） |
 |---|---|---|
 | Policy 自动推断 | **不受影响** | 框架会把模型命名空间中的 `\Models\` 替换为 `\Policies\` 查找，`App\Core\System\Models\User` 自动对应 `App\Core\System\Policies\UserPolicy` |
-| 工厂推断 | **不受影响** | `App\Core\System\Models\Dict` 默认对应 `Database\Factories\Core\System\Models\DictFactory`，`make:model ... -f` 也按此生成；只是目录较深，可选用 `Factory::guessFactoryNamesUsing()` 统一扁平化 |
+| 工厂推断 | **不受影响** | `App\Modules\Content\Models\Article` 默认对应 `Database\Factories\Modules\Content\Models\ArticleFactory`，`make:model ... -f` 也按此生成；只是目录较深，可选用 `Factory::guessFactoryNamesUsing()` 统一扁平化 |
 | 观察者、任务、通知、规则、类型转换、枚举、Action | **不受影响** | 无自动发现机制，放在哪里都可用；观察者用 `#[ObservedBy]` 绑定 |
 | 命令自动发现 | 受影响（默认只扫描 `app/Console/Commands`） | 模块 Provider 中 `$this->commands([...])`（包开发方式） |
 | 事件监听自动发现 | 受影响（默认只扫描 `app/Listeners`） | `withEvents(discover: [...])` 列出各模块的 `Listeners` 目录，或在模块 Provider 中显式注册 |
 | 路由、语言包、视图 | 需注册 | Provider 中 `loadRoutesFrom()`、`loadTranslationsFrom()`、`loadViewsFrom()`，路由缓存照常可用 |
 | 迁移 | **不受影响** | 保留在 `database/migrations` |
-| 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向核心的模型 |
+| 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向 Core 的模型 |
 | 多态类型 | **必须第一天配置** | 在 `AppServiceProvider` 中 `Relation::enforceMorphMap()`。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
-| 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Admin/System/Controllers/UserController`；日常使用 `core:make-*` 生成命令（§10.4） |
+| 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Http/Admin/System/Controllers/UserController`；日常使用 `core:make-*` 生成命令（§10.4） |
 
-## 5. 核心与应用：分层和依赖边界
+## 5. 分层与依赖边界
 
-### 5.1 三档访问权限
+### 5.1 四类代码的依赖方向
 
-| 谁 | 读数据 | 写数据 |
+```
+Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
+      └───────────────→───────────────┘
+```
+
+| 类别 | 可以依赖 | 不能依赖 |
 |---|---|---|
-| **Core** | 随意 | 随意（规则的拥有者） |
-| **受信任的应用**（后台） | 直接使用核心模型：查询、路由模型绑定、API Resource 输出 | **必须调用核心的 Action**，禁止直接 `save()` / `update()` / `delete()` / `create()` |
-| **受限的应用**（Device 等） | 只能通过 `Core\Contracts` 拿 `Core\Data` | 只能通过 `Core\Contracts` |
+| Core | Support | Modules、Http |
+| Modules | Core、Support | Http；其他业务模块（默认不允许，需要时通过事件或对方的 Contracts） |
+| Http（入口） | Core、Modules、Support（按信任级别，见 §5.2） | 其他入口 |
+| Support | 框架本身 | 其他三类 |
 
-理由：后台要用的几乎是核心全部数据，强制走接口等于用接口重写一遍 Eloquent；受限应用只需要两三个能力，且不应知道内部结构。
+“领域层”指 Core 与 Modules 的合称：所有模型、业务规则、授权规则都在领域层，入口只开放接口。
 
-### 5.2 依赖规则
+### 5.2 入口的两档访问权限
 
-- 核心不依赖任何应用。应用之间互不依赖。
-- 应用里不得定义模型、迁移和业务规则。
-- Policy 属于核心，**与调用方无关**：禁止出现“判断是哪个应用在调用”的分支。
-- 核心通知应用的唯一方式是事件；应用不被核心直接调用。
-- 受限应用可以使用缓存、日志、限流等**临时或无状态**的基础设施，但需要持久保存的业务数据一律交给核心。
-- 应用之间不直接通信，一律通过核心中转（见 §5.6）。
+| 入口 | 读数据 | 写数据 |
+|---|---|---|
+| **受信任的入口**（Admin） | 直接使用 Core 与 Modules 的模型：查询、路由模型绑定、API Resource 输出 | **必须调用对应模块的 Action**，禁止直接 `save()` / `update()` / `delete()` / `create()` |
+| **受限的入口**（Device 等） | 只能通过模块导出的 `Contracts` 拿 `Data` | 只能通过 `Contracts` |
 
-### 5.3 各层职责
+理由：后台要用的几乎是全部数据，强制走接口等于用接口重写一遍 Eloquent；受限入口只需要两三个能力，且不应知道内部结构。
+
+### 5.3 依赖规则
+
+- Core 不依赖 Modules 和入口；Modules 不依赖入口；入口之间互不依赖。
+- 入口里不得定义模型、迁移和业务规则：**入口只开放接口**。
+- Modules 可以直接使用 Core（如关联用户、读取系统参数、使用数据权限 trait），但**不修改 Core 的代码**；需要 Core 配合的，一律通过扩展点（§5.5）。
+- Policy 属于模块，**与调用方无关**：禁止出现“判断是哪个入口在调用”的分支。
+- 模块通知入口的唯一方式是事件；入口不被模块直接调用。
+- 受限入口可以使用缓存、日志、限流等**临时或无状态**的基础设施，但需要持久保存的业务数据一律交给模块。
+- 入口之间不直接通信，一律通过模块中转（§5.8）。
+
+### 5.4 各层职责
 
 | 层 | 职责 | 不做 |
 |---|---|---|
-| Controller（应用） | 授权声明 → 调用 Action / 查询 → 返回 Resource | 业务逻辑、事务 |
-| Form Request（应用） | 输入格式校验（必填、长度、类型、白名单字段） | 业务约束 |
-| API Resource（应用） | 按该应用的前端格式输出，**逐个列出字段** | 查询 |
-| Action（核心） | 写入、事务、业务约束（唯一性、状态流转、引用检查）、触发事件 | 依赖 HTTP 层 |
-| Query（核心） | 复杂查询、统计指标（独立类，统一缓存策略） | 写数据 |
-| Policy（核心） | 记录级授权、数据权限判定 | 依赖调用方 |
-| Contracts / Data（核心） | 受限应用的唯一入口 | 暴露模型 |
+| Controller（入口） | 授权声明 → 调用 Action / 查询 → 返回 Resource | 业务逻辑、事务 |
+| Form Request（入口） | 输入格式校验（必填、长度、类型、白名单字段） | 业务约束 |
+| API Resource（入口） | 按该入口的前端格式输出，**逐个列出字段** | 查询 |
+| Action（模块） | 写入、事务、业务约束（唯一性、状态流转、引用检查）、触发事件 | 依赖 HTTP 层 |
+| Query（模块） | 复杂查询、统计指标（独立类，统一缓存策略） | 写数据 |
+| Policy（模块） | 记录级授权、数据权限判定 | 依赖调用方 |
+| Contracts / Data（模块） | 受限入口的唯一入口 | 暴露模型 |
 
-所有写入都经过 Action（保证“写只有一个入口”）；单表、无副作用的 Action 由生成器自动生成，不增加手写成本。
+所有写入都经过 Action（保证“写只有一个入口”）；单表、无副作用的 Action 由生成命令自动生成，不增加手写成本。
 
-### 5.4 强制手段
+### 5.5 Core 的扩展点
 
-- **Pest 架构测试**：上述依赖规则；后台应用不得依赖 `DB` 门面；应用内不得出现模型；受限应用不得依赖核心模型。
-- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止后台应用中调用模型写方法（落地前核实版本）。
+业务模块通过以下扩展点接入 Core，**不修改 Core 的任何文件**。扩展点的接口放在提供它的 Core 模块中（如 `Core/System/Contracts`），由业务模块在自己的 ServiceProvider 里注册。
+
+| 扩展点 | 业务模块怎么用 |
+|---|---|
+| 菜单与权限节点 | 注册本模块的目录、菜单、按钮权限节点；由同步命令统一写入 |
+| 数据权限范围提供者 | 注册新的数据范围（如按部门、区域），角色表单中自动出现 |
+| 系统参数分组 | 注册本模块的参数分组与默认值 |
+| 字典类型 | 声明本模块用到的字典类型与初始字典项 |
+| 日志 | 写入 activitylog 时使用本模块的日志名；操作日志文案放在模块语言包中 |
+| 通知 | 定义本模块的通知类，统一出现在通知中心 |
+| 异步导出 | 实现导出接口，即接入统一的异步导出、完成通知与下载 |
+| 枚举选项 | 枚举实现统一接口，即可由选项接口下发给前端 |
+| Core 事件 | 监听 Core 发出的事件（如用户被删除），清理本模块的数据 |
+
+### 5.6 强制手段
+
+- **Pest 架构测试**：§5.1、§5.3 的依赖规则；入口不得依赖 `DB` 门面；入口内不得出现模型；受限入口不得依赖任何 `Models` 命名空间；Core 不得依赖 `App\Modules`。
+- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Http` 中调用模型写方法（落地前核实版本）。
 - **代码审查清单**写入 `CONTRIBUTING.md`。
 
-### 5.5 应用的注册与运行
+### 5.7 入口的注册与运行
 
-- 每个应用一个 ServiceProvider（如 `AdminServiceProvider`），在 `bootstrap/providers.php` 中注册，负责本应用的全部入口配置：加载自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。新增应用 = 新增一个目录 + 一个 Provider，不改动共享文件。
-- `config/core.php` 登记应用清单；进程可按环境变量只加载部分应用，例如 `CORE_APPS=admin,device`。未加载的应用其路由在该进程中不存在。
-- 对外开放的应用（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
-- 对外开放的应用暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
+- 每个入口一个 ServiceProvider（如 `App\Http\Admin\AdminServiceProvider`），在 `bootstrap/providers.php` 中注册，负责本入口的全部配置：加载自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。新增入口 = 新增一个目录 + 一个 Provider，不改动共享文件。
+- `config/core.php` 登记入口清单；进程可按环境变量只加载部分入口，例如 `CORE_APPS=admin,device`。未加载的入口其路由在该进程中不存在。
+- 对外开放的入口（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
+- 对外开放的入口暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
 
-### 5.6 应用之间不直接通信：以“后台管理设备应用的配置”为例
+### 5.8 入口之间不直接通信：以“后台管理设备配置”为例
 
-应用之间互不调用，**都通过核心中转**。某个应用的配置、开关这类“可以在后台修改的数据”，属于核心，不属于那个应用。
+入口之间互不调用，**都通过模块中转**。某个入口的配置、开关这类“可以在后台修改的数据”，属于对应的业务模块，不属于那个入口，也不进 Core。
 
 ```
 后台界面
-  → Admin/Device/Controllers          设备管理接口（受信任应用，与 Core/Device 同名对应）
-  → Core/Device/Actions/UpdateDeviceSettings     校验、保存、触发 DeviceSettingsUpdated 事件
-                                                  （核心监听该事件，刷新自己维护的缓存）
+  → Http/Admin/Device/Controllers                 设备管理接口
+  → Modules/Device/Actions/UpdateDeviceSettings   校验、保存、触发 DeviceSettingsUpdated 事件
 设备请求
-  → Device（应用）
-  → Core\Contracts\DeviceConfig       读取配置（由 Core/Device 实现，返回 Core\Data 中的只读对象）
+  → Http/Device                                   设备接入入口
+  → Modules\Device\Contracts\DeviceConfig         读取配置（返回 Modules\Device\Data 中的只读对象）
 ```
 
-- `Core/Device` 是“设备”这个业务领域（设备档案、设备配置）；`app/Device` 是“设备接入”这个入口。两者同名，职责不同。
-- 后台不知道设备应用存在；设备应用也不知道后台存在。
-- 简单的几个键值参数，直接使用系统参数模块（按分组，如 `device.*`）；结构化的配置（按设备类型、列表类配置）才单独建核心模块。
+- 全程不改 Core；后台不知道设备入口存在，设备入口也不知道后台存在。
+- 简单的几个键值参数，直接使用系统参数（模块注册一个参数分组，如 `device.*`）；结构化的配置（按设备类型、列表类配置）才在模块中建表。
 - **两类配置要区分**：
-  - 运行时可改的业务配置（心跳间隔、允许的固件版本、是否暂停接入等）→ 存数据库，按上面的方式在后台管理。“暂停某个应用”也用这种方式：应用的中间件读取核心的开关，暂停时返回 503。
-  - 部署级配置（路由前缀、加载哪些应用、限流阈值等）→ 配置文件与环境变量，改动需重新部署，不做成后台可改。
+  - 运行时可改的业务配置（心跳间隔、允许的固件版本、是否暂停接入等）→ 存数据库，按上面的方式在后台管理。“暂停某个入口”也用这种方式：入口的中间件读取模块的开关，暂停时返回 503。
+  - 部署级配置（路由前缀、加载哪些入口、限流阈值等）→ 配置文件与环境变量，改动需重新部署，不做成后台可改。
 
 ## 6. 与 Vben 的接口契约
 
-以下约定只属于**后台应用**；其他应用可以有自己的格式。
+以下约定只属于**后台入口（Admin）**；其他入口可以有自己的格式。
 
 ### 6.1 响应格式
 
 - **HTTP 状态码照常使用**（200 / 201 / 204 / 401 / 403 / 404 / 419 / 422 / 429 / 500）。
-- 响应体统一包装为 Vben 默认格式，由后台应用的中间件 + 响应宏完成，控制器与 Fortify 无感知：
+- 响应体统一包装为 Vben 默认格式，由后台入口的中间件 + 响应宏完成，控制器与 Fortify 无感知：
 
 ```json
 // 成功
@@ -264,7 +307,7 @@ app/Core/System/
 | `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录 |
 | `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致：`path`、`component`、`meta { title, icon, order, ... }` |
 
-Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
+Fortify 路由前缀与后台入口一致（`fortify.prefix`）。
 
 **Vben 侧的调整**（都在 `apps/web` 内，约 4 个文件，共享包不改）：请求携带 Cookie 并自动带 CSRF 令牌；去掉 `Authorization` 请求头与刷新令牌逻辑；登录态改为“已登录标记 + 启动时请求 `/user/info`”；路由守卫改为判断用户信息。
 
@@ -359,7 +402,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 
 本脚手架不内置部门、岗位。需要时按以下步骤自行加入，不改动现有的数据权限机制：
 
-1. 新建一个模块（如 `Organization`）：部门树模型与迁移（`departments` 表含 `parent_id`），用户表增加 `department_id`。
+1. 在 `Modules` 下新建一个模块（如 `Organization`）：部门树模型与迁移（`departments` 表含 `parent_id`），用户表增加 `department_id`。
 2. 需要按部门隔离的业务表增加 `department_id`，创建记录时自动填入当前用户的部门（模型事件或 Action 中处理）。
 3. 实现一个范围提供者，提供“本部门”“本部门及下级”“自定义部门”三种范围；“自定义部门”通过角色与部门的关联表实现。
 4. 注册该提供者后，角色表单中自动出现这些范围选项。
@@ -391,7 +434,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 - 统计类数据用 `Cache::flexible()`；请求内缓存用 `Cache::memo()` 或 `#[Scoped]`。
 - 时间：写库前统一转换为应用时区；输出带时区偏移的 ISO 8601。
 - 枚举：实现统一的 `HasLabel`（多语言）/ `HasColor`（语义色，如 success / warning）接口，由后端统一下发选项。
-- 统计指标、复杂查询做成核心模块里独立的 Query 类。
+- 统计指标、复杂查询做成模块里独立的 Query 类。
 - 软删除是整套功能：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数生成。
 - 导出：`simple-excel` + 队列 + 完成通知，标准异步导出。
 - 对接第三方 API 时统一使用 Saloon（不作为默认依赖）。
@@ -427,12 +470,12 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 
 | 命令 | 生成 |
 |---|---|
-| `core:make-app {name}` | 应用目录、ServiceProvider、路由文件、中间件组、测试目录，并登记到 `config/core.php` 与架构测试 |
-| `core:make-module {name}` | 核心模块目录 + 各受信任应用中的同名目录；`--crud --fields=... --soft-deletes` 生成完整增删改查 |
+| `core:make-app {name}` | 入口目录（`app/Http/<Name>`）、ServiceProvider、路由文件、中间件组、测试目录，并登记到 `config/core.php` 与架构测试 |
+| `core:make-module {name}` | 业务模块（`app/Modules/<Name>`）+ 各受信任入口中的同名目录；`--crud --fields=... --soft-deletes` 生成完整增删改查 |
 | `core:make-model {name} --module=` | 模型、迁移、工厂、Policy（标准方法齐全） |
-| `core:make-action` / `core:make-query` / `core:make-policy` / `core:make-enum` | 核心模块中的对应类（`--module=`） |
-| `core:make-contract {name} --module=` | 对受限应用导出的接口、只读数据对象与核心中的实现绑定 |
-| `core:make-controller` / `core:make-request` / `core:make-resource` | 应用中的对应类（`--app= --module=`） |
+| `core:make-action` / `core:make-query` / `core:make-policy` / `core:make-enum` | 模块中的对应类（`--module=`） |
+| `core:make-contract {name} --module=` | 模块向受限入口导出的接口、只读数据对象与实现绑定 |
+| `core:make-controller` / `core:make-request` / `core:make-resource` | 入口中的对应类（`--app= --module=`） |
 
 - 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问、项目 `stubs/` 目录覆盖模板，行为与官方 make 命令一致。
 - 完整增删改查还会生成：权限节点、路由、操作日志文案、**授权测试**、模块 README。
@@ -443,7 +486,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 - Pest；`tests/` 目录与 `app/` 对应。
 - `tests/Pest.php` 提供统一辅助：以某权限登录、断言无权限返回 403、断言数据权限过滤。
 - 每个接口至少覆盖：成功、无权限 403、数据权限之外 403/404、校验失败 422。
-- 核心安全模块（认证、权限、数据权限）运行 Pest 变异测试。
+- 安全相关模块（认证、权限、数据权限）运行 Pest 变异测试。
 - CI 在 Linux + PHP 8.5 下运行全部测试，并在 Octane 下额外运行一遍，确保可无缝切换。
 
 ## 11. 运行、开发与部署
@@ -598,7 +641,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 | 枚举选项 | 统一枚举接口 + 选项下发接口 | PHP 枚举 |
 | 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
 | 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
-| 代码生成器 | `core:make-*` 命令集（应用、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
+| 代码生成器 | `core:make-*` 命令集（入口、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
 | 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
 
 ## 14. 待决事项
