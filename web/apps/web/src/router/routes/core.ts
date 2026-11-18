@@ -57,20 +57,11 @@ const coreRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'CodeLogin',
-        path: 'code-login',
-        component: () => import('#/views/_core/authentication/code-login.vue'),
+        name: 'TwoFactorChallenge',
+        path: 'two-factor',
+        component: () => import('#/views/_core/authentication/two-factor.vue'),
         meta: {
-          title: $t('page.auth.codeLogin'),
-        },
-      },
-      {
-        name: 'QrCodeLogin',
-        path: 'qrcode-login',
-        component: () =>
-          import('#/views/_core/authentication/qrcode-login.vue'),
-        meta: {
-          title: $t('page.auth.qrcodeLogin'),
+          title: $t('page.auth.twoFactor'),
         },
       },
       {
@@ -83,11 +74,13 @@ const coreRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'Register',
-        path: 'register',
-        component: () => import('#/views/_core/authentication/register.vue'),
+        // 找回密码邮件中的重置链接指向本页：/#/auth/reset-password?token=…&email=…
+        name: 'ResetPassword',
+        path: 'reset-password',
+        component: () =>
+          import('#/views/_core/authentication/reset-password.vue'),
         meta: {
-          title: $t('page.auth.register'),
+          title: $t('page.auth.resetPassword'),
         },
       },
     ],

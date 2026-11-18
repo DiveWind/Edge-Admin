@@ -1,4 +1,5 @@
 import type {
+  ExtendedFormApi,
   VbenFormProps as FormProps,
   VbenFormSchema as FormSchema,
 } from '@vben/common-ui';
@@ -42,7 +43,35 @@ async function initSetupVbenForm() {
 }
 const useVbenForm = useForm<ComponentType, ComponentPropsMap>;
 
-export { initSetupVbenForm, useVbenForm, z };
+/**
+ * 把接口 422 的字段错误（`{ 字段: [错误] }`）显示到表单对应字段下；表单中没有的字段忽略。
+ * 表单字段名与接口字段名一致（如 current_password、password_confirmation）。
+ * @returns 是否回填了至少一个字段
+ */
+function setFormErrors(
+  formApi: ExtendedFormApi | undefined,
+  errors: Record<string, string[]> | undefined,
+): boolean {
+  if (!formApi || !errors) {
+    return false;
+  }
+  const fields = new Set(
+    (formApi.getState()?.schema ?? []).map((item) => item.fieldName),
+  );
+  const matched = Object.fromEntries(
+    Object.entries(errors).filter(
+      ([field, messages]) => fields.has(field) && messages.length > 0,
+    ),
+  );
+  formApi.form.setErrors(
+    Object.fromEntries(
+      Object.entries(matched).map(([field, messages]) => [field, messages[0]]),
+    ),
+  );
+  return Object.keys(matched).length > 0;
+}
+
+export { initSetupVbenForm, setFormErrors, useVbenForm, z };
 
 export type VbenFormSchema = FormSchema<ComponentType, ComponentPropsMap>;
 export type VbenFormProps = FormProps<ComponentType, ComponentPropsMap>;

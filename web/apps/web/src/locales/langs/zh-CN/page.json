@@ -1,15 +1,16 @@
 {
   "auth": {
     "login": "登录",
-    "register": "注册",
-    "codeLogin": "验证码登录",
-    "qrcodeLogin": "二维码登录",
+    "twoFactor": "两步验证",
     "forgetPassword": "忘记密码",
-    "profile": "个人中心"
+    "resetPassword": "重置密码",
+    "profile": "个人中心",
+    "pageTitle": "后台管理系统",
+    "pageDesc": "统一的账号、权限与数据管理"
   },
   "dashboard": {
-    "title": "概览",
-    "analytics": "分析页",
-    "workspace": "工作台"
+    "title": "工作台",
+    "welcome": "你好，{0}",
+    "description": "欢迎回来，祝你工作顺利。"
   }
 }

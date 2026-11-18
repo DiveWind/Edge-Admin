@@ -9,7 +9,7 @@
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 安装依赖；`postinstall` 自动构建内部包 stub |
-| `pnpm dev` | 启动 `apps/web`（http://localhost:5999，`/api` 经 Vite 代理） |
+| `pnpm dev` | 启动 `apps/web`（http://localhost:5999，`/api` 经 Vite 代理到 `http://localhost:8000`，即 `php artisan serve`） |
 | `pnpm build` / `pnpm preview` | 构建 / 预览 `apps/web`，产物在 `apps/web/dist` |
 | `pnpm dev:play` / `pnpm build:play` | 启动 / 构建 `playground`（仅参考） |
 | `pnpm check:type` | `vue-tsc` 类型检查 |
@@ -28,7 +28,7 @@ apps/web/                 本项目的应用（包名 web；只在这里写业�
   vite.config.ts          开发代理
   src/
     adapter/              UI 库适配层（见下）：component/、form.ts、vxe-table.ts
-    api/                  接口：request.ts（请求客户端与拦截器）、core/（登录、用户、菜单），业务接口按模块分文件
+    api/                  接口：client.ts（请求客户端与拦截器）、request.ts（注入 store 与界面的 requestClient）、core/（认证、用户、两步验证、菜单），业务接口按模块分文件
     layouts/              BasicLayout（顶栏、用户菜单、通知）与 AuthPageLayout
     locales/              应用级国际化：langs/{zh-CN,en-US}/*.json，dayjs 与 antdv-next 语言包切换
     router/               routes/core.ts（登录、404 等基础路由）、routes/modules/*.ts（静态菜单路由）、guard.ts、access.ts
@@ -48,7 +48,7 @@ scripts/                  vsh（lint、check-dep、check-circular 等）与 clea
 ### 框架代码不改名、尽量不改
 
 - `packages/`、`internal/`、`scripts/` 是 Vben 框架代码。**`@vben/*`、`@vben-core/*` 包名一律不改**，改了就无法合并上游。
-- 定制优先放在 `apps/web` 内完成：偏好设置（`preferences.ts`）、请求拦截（`api/request.ts`）、登录流程（`store/auth.ts`）、路由守卫（`router/guard.ts`）、组件适配（`adapter/`）。确需改共享包时，改动要小，并在 `README.md` 的“相对上游的裁剪与改动”中登记。
+- 定制优先放在 `apps/web` 内完成：偏好设置（`preferences.ts`）、请求拦截（`api/client.ts`、`api/request.ts`）、登录流程（`store/auth.ts`）、路由守卫（`router/guard.ts`）、组件适配（`adapter/`）。确需改共享包时，改动要小，并在 `README.md` 的“相对上游的裁剪与改动”中登记。
 - 不手动改 `pnpm-lock.yaml`。新增依赖：版本写进 `pnpm-workspace.yaml` 的 `catalog`，`package.json` 里写 `"catalog:"`。
 
 ### UI：只用 Vben 体系 + antdv-next
@@ -67,7 +67,9 @@ scripts/                  vsh（lint、check-dep、check-circular 等）与 clea
 
 - 接口函数写在 `src/api/` 下（按模块分文件，用 `requestClient`），类型用 `namespace XxxApi` 声明，字段、路径、权限码严格按契约。
 - `requestClient` 已按契约解包 `{ code, data, message }`（`code === 0` 为成功），页面拿到的就是 `data`。
-- 当前 `apps/web` 仍使用上游 Nitro mock 与 Bearer token 流程；对接 Laravel 时按 §6.2 / §7 改为 Sanctum 会话 Cookie + Fortify，只改 `apps/web` 内的文件（`api/request.ts`、`api/core/*`、`store/auth.ts`、`router/guard.ts`、`preferences.ts`、`vite.config.ts`、`.env*`），共享包不改。
+- 认证为 Sanctum 会话 Cookie + Fortify（§6.2 / §7）：请求携带 Cookie 与 `X-XSRF-TOKEN`，没有 Authorization 头与刷新令牌；419 重新获取 CSRF Cookie 后重试一次，423 弹出确认密码框后重试，401 清除已登录标记回登录页（`api/client.ts`）。“已登录标记”是 access store 的 `accessToken` 字段中的固定值（`store/auth.ts` 的 `SESSION_MARKER`），启动时用 `GET /user/info` 确认会话（`router/guard.ts`）。
+- 422 的字段错误用 `setFormErrors(formApi, getValidationErrors(error))` 回填到表单（表单字段名与接口字段名一致）；调用方自行处理的状态码用 `AppRequestConfig` 的 `silentError` 关闭自动提示。
+- 菜单与按钮权限暂为前端静态路由模式（`routes/modules/*.ts`），`GET /auth/codes`、`GET /menu/all` 接入前不要请求。
 - 接口、字段、权限码有变动，先改 `../docs/backend-design.md`，再改代码。
 
 ### playground 只作参考

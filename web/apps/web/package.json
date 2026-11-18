@@ -35,5 +35,8 @@
     "pinia": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "axios-mock-adapter": "catalog:"
   }
 }

@@ -62,7 +62,7 @@ function setupAccessGuard(router: Router) {
       return true;
     }
 
-    // accessToken 检查
+    // 已登录标记检查（标记的含义见 store/auth.ts 的 SESSION_MARKER）
     if (!accessStore.accessToken) {
       // 明确声明忽略权限访问权限，则可以访问
       if (to.meta.ignoreAccess) {
@@ -90,9 +90,26 @@ function setupAccessGuard(router: Router) {
       return true;
     }
 
+    // 启动（刷新）后首次进入：用 GET /user/info 确认会话仍然有效，失败（401、网络异常等）时清除标记回登录页
+    let userInfo = userStore.userInfo;
+    if (!userInfo) {
+      try {
+        userInfo = await authStore.fetchUserInfo();
+      } catch {
+        accessStore.setAccessToken(null);
+        return {
+          path: LOGIN_PATH,
+          query:
+            to.fullPath === preferences.app.defaultHomePath
+              ? {}
+              : { redirect: encodeURIComponent(to.fullPath) },
+          replace: true,
+        };
+      }
+    }
+
     // 生成路由表
     // 当前登录用户拥有的角色标识列表
-    const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
     const userRoles = userInfo.roles ?? [];
 
     // 生成菜单和路由

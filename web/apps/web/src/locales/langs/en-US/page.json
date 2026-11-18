@@ -1,15 +1,16 @@
 {
   "auth": {
     "login": "Login",
-    "register": "Register",
-    "codeLogin": "Code Login",
-    "qrcodeLogin": "Qr Code Login",
+    "twoFactor": "Two-Factor Authentication",
     "forgetPassword": "Forget Password",
-    "profile": "Profile"
+    "resetPassword": "Reset Password",
+    "profile": "Profile",
+    "pageTitle": "Admin Console",
+    "pageDesc": "Unified accounts, permissions and data management"
   },
   "dashboard": {
-    "title": "Dashboard",
-    "analytics": "Analytics",
-    "workspace": "Workspace"
+    "title": "Workspace",
+    "welcome": "Hello, {0}",
+    "description": "Welcome back. Have a productive day."
   }
 }

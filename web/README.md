@@ -33,7 +33,7 @@
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 安装依赖（`postinstall` 会构建内部包的 stub） |
-| `pnpm dev` | 启动 `apps/web` 开发服务器（端口 5999，`/api` 由 Vite 代理） |
+| `pnpm dev` | 启动 `apps/web` 开发服务器（端口 5999，`/api` 由 Vite 代理到 `http://localhost:8000`，路径不改写） |
 | `pnpm build` | 构建 `apps/web`，产物在 `apps/web/dist`（同时生成 `dist.zip`） |
 | `pnpm build:analyze` | 构建 `apps/web` 并生成体积分析报告 |
 | `pnpm preview` | 预览 `apps/web` 的构建产物（需先 `pnpm build`） |
@@ -70,7 +70,7 @@ web/
 
 - 写新页面时可对照 `playground/src/views/**` 的用法；
 - 发布前删除 `playground/` 与 `apps/backend-mock/`（并移除 `pnpm-workspace.yaml` 中的 `playground`、根脚本 `dev:play` / `build:play`、`internal/lint-configs` 里对 `apps/backend-mock` 的规则覆盖）；
-- `apps/web` 目前仍使用上游的 Nitro mock（`.env.development` 中 `VITE_NITRO_MOCK=true`），对接 Laravel 后端后关闭。
+- `apps/web` 已对接 Laravel 后端，不再使用 Nitro mock（`.env.development` 中 `VITE_NITRO_MOCK=false`）。
 
 ## 相对上游的裁剪与改动
 
@@ -88,7 +88,9 @@ web/
 
 - `apps/web-antdv-next` → `apps/web`，包名 `@vben/web-antdv-next` → `web`，版本 `0.0.0`。
 - `apps/web/.env`：标题 `Admin`、命名空间 `admin-web`（不含 UI 库名）。
-- `apps/web/.env.production`：接口地址由上游公开演示服务 `https://mock-napi.vben.pro/api` 改为同源 `/api`。
+- `apps/web/.env*`：接口地址由上游公开演示服务 `https://mock-napi.vben.pro/api` 改为同源 `/api/admin`（后端后台入口前缀）；路由统一为 hash 模式（找回密码邮件链接为 `/#/auth/reset-password`）。
+- `apps/web` 认证改为 Sanctum 会话 Cookie + Fortify：请求层、登录 / 两步验证 / 找回与重置密码页、个人中心（资料、密码、两步验证）；删除上游演示路由与页面（`vben`、`demos`、分析页与工作台示例、验证码 / 扫码登录、注册、关于）、布局中的文档 / GitHub / 问题帮助菜单与 mock 通知；logo、默认头像改为本地文件（`public/`），版权方为应用标题。
+- `apps/web/package.json`：开发依赖 `axios-mock-adapter`（请求层单元测试）。
 - `apps/web/index.html`：去掉上游注入的百度统计脚本。
 - 根 `package.json`：包名 `web-workspace`，脚本见上表；`.npmrc` 改为官方源。
 
@@ -97,7 +99,7 @@ web/
 - `packages/styles` 中 `antd` / `ele` / `naive` 的样式重置 CSS 与导出（纯 CSS，不依赖对应 UI 库）；
 - `packages/icons` 的 TDesign 图标、`packages/@core/base/shared` 中各 UI 版本演示站地址常量；
 - 共享包中提到 element-plus / naive-ui 的注释与出处说明；`cspell.json` 中的相关单词；
-- `apps/web` 与 `playground` 中上游自带的演示路由与文案（如“Vben”菜单里指向其他 UI 版本演示站的外链），在对接后端菜单时一并清理。
+- `playground` 中上游自带的演示路由与文案（发布前随 playground 一并删除）。
 
 内部包名 `@vben/*`、`@vben-core/*` 一律不改（框架内部代码，改名后无法合并上游）。
 

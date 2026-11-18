@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import { Profile } from '@vben/common-ui';
 import { useUserStore } from '@vben/stores';
 
+import { $t } from '#/locales';
+
 import ProfileBase from './base-setting.vue';
-import ProfileNotificationSetting from './notification-setting.vue';
 import ProfilePasswordSetting from './password-setting.vue';
 import ProfileSecuritySetting from './security-setting.vue';
 
@@ -13,37 +14,32 @@ const userStore = useUserStore();
 
 const tabsValue = ref<string>('basic');
 
-const tabs = ref([
+const tabs = computed(() => [
   {
-    label: '基本设置',
+    label: $t('auth.profile.basic'),
     value: 'basic',
   },
   {
-    label: '安全设置',
-    value: 'security',
-  },
-  {
-    label: '修改密码',
+    label: $t('auth.profile.password'),
     value: 'password',
   },
   {
-    label: '新消息提醒',
-    value: 'notice',
+    label: $t('auth.profile.security'),
+    value: 'security',
   },
 ]);
 </script>
 <template>
   <Profile
     v-model:model-value="tabsValue"
-    title="个人中心"
+    :title="$t('page.auth.profile')"
     :user-info="userStore.userInfo"
     :tabs="tabs"
   >
     <template #content>
       <ProfileBase v-if="tabsValue === 'basic'" />
-      <ProfileSecuritySetting v-if="tabsValue === 'security'" />
       <ProfilePasswordSetting v-if="tabsValue === 'password'" />
-      <ProfileNotificationSetting v-if="tabsValue === 'notice'" />
+      <ProfileSecuritySetting v-if="tabsValue === 'security'" />
     </template>
   </Profile>
 </template>

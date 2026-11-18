@@ -640,6 +640,10 @@ importers:
       vue-router:
         specifier: 'catalog:'
         version: 5.0.7(@vue/compiler-sfc@3.5.34)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3))
+    devDependencies:
+      axios-mock-adapter:
+        specifier: 'catalog:'
+        version: 2.1.0(axios@1.16.1)
 
   internal/lint-configs/eslint-config:
     dependencies:
