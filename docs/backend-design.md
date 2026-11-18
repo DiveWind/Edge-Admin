@@ -83,8 +83,6 @@
 
 ### 4.2 `server/` 目录
 
-> **待确认**：本节及 §4.3、§4.5、§5.5 的目录方案，正在评估“尽量回归 Laravel 默认目录”的替代方案（见 [§14](#14-待决事项)），确认后更新。以下为当前方案。
-
 ```
 server/
 ├── app/
@@ -97,7 +95,7 @@ server/
 │   │   ├── Message/                  公告、通知
 │   │   └── Content/                  文章（业务对接示范，可整块删除）
 │   │
-│   ├── Admin/                        应用：后台 API（受信任），给 Vben 用；名称待定
+│   ├── Admin/                        应用：后台 API（受信任），给 Vben 用
 │   │   ├── System/                   ← 与 Core/System 一一对应
 │   │   │   ├── Controllers/
 │   │   │   ├── Requests/
@@ -105,7 +103,7 @@ server/
 │   │   ├── Monitor/  Message/  Content/
 │   │   ├── Http/Middleware/          整个后台应用共用的中间件（响应包装等）
 │   │   ├── routes/api.php
-│   │   └── AdminServiceProvider.php  （是否需要，待确认）
+│   │   └── AdminServiceProvider.php  注册本应用的路由、中间件组、限流器等
 │   │
 │   ├── Device/                       应用：设备接入（受限，以后加）
 │   │
@@ -145,7 +143,7 @@ app/Core/System/
 
 ### 4.4 命名约定
 
-- **应用按“给谁用”命名**：后台、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……后台应用的名称待定。
+- **应用按“给谁用”命名**：后台（`Admin`）、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……
 - **核心叫 `Core`**，业务模块用业务名（`System`、`Monitor`、`Message`、`Content`）。
 - 应用内部的目录与核心模块**同名一一对应**。删除一个业务 = 删除 `Core/<模块>` + 各应用里的同名目录 + 前端对应页面。
 
@@ -202,8 +200,8 @@ app/Core/System/
 
 ### 5.5 应用的注册与运行
 
-- 每个应用有自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。注册方式（独立 ServiceProvider 还是 `bootstrap/app.php`）待确认。
-- `config/starter.php` 登记应用清单；进程可按环境变量只加载部分应用，例如 `APPS=admin,device`。未加载的应用其路由在该进程中不存在。
+- 每个应用一个 ServiceProvider（如 `AdminServiceProvider`），在 `bootstrap/providers.php` 中注册，负责本应用的全部入口配置：加载自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。新增应用 = 新增一个目录 + 一个 Provider，不改动共享文件。
+- `config/core.php` 登记应用清单；进程可按环境变量只加载部分应用，例如 `CORE_APPS=admin,device`。未加载的应用其路由在该进程中不存在。
 - 对外开放的应用（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
 - 对外开放的应用暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
 
@@ -322,6 +320,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 ### 8.4 数据权限
 
 - 默认提供两种范围：**全部**、**仅本人**（按 `created_by`）；多角色取并集。
+- 职责划分：**角色决定能做什么（功能权限），范围提供者决定能看哪些数据（数据权限）**。多角色取并集只会让可见范围变大，不会变得更细；更细的范围需要新增一个数据维度（即新增提供者）。
 - **不内置部门等组织维度**。数据权限通过“范围提供者”接口实现：业务需要按部门、区域、门店等维度控制时，新增一个提供者并在角色上选用即可，不改动脚手架代码。
 - 通过模型 trait 提供 `visibleTo()` 查询范围与 `isVisibleTo()` 单条判定，Policy 复用同一规则。
 - **所有查询入口**都必须经过数据权限：列表、详情、**下拉选项接口**、导出、统计、全局搜索。
@@ -384,7 +383,7 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 ### 10.4 代码生成
 
 - `make:module`：在核心生成业务模块，同时在后台应用生成对应的同名目录；底层编排官方 `make:*` 命令与定制 stub。
-- `make:app`：新建一个应用（路由、中间件组、测试目录、架构测试登记）。
+- `make:app`：新建一个应用（目录、ServiceProvider、路由、中间件组、测试目录、架构测试登记）。
 - 生成内容包括：模型、迁移、工厂、Action、Policy（标准方法齐全）、Request、Resource、控制器、权限节点、路由、操作日志文案、**授权测试**、模块 README。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`。
 
@@ -555,9 +554,6 @@ Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
 
 | 事项 | 现状 |
 |---|---|
-| 目录方案 | 是否尽量回归 Laravel 默认目录（核心放 `app/Models` 等默认位置，应用按 `Http` 子目录区分），以降低开发与学习成本 |
-| 应用注册方式 | 每个应用一个 ServiceProvider，还是统一在 `bootstrap/app.php` 中注册 |
-| 后台应用的名称 | 目前暂用 `Admin` |
 | 迁移文件位置 | 建议保留在 `database/migrations`（官方命令默认位置，全局顺序可控） |
 | 附件 | 暂保留自建，需要缩略图时换 medialibrary |
 | PHP 8.5 工具链兼容性 | 待在 8.5 环境实测 |
