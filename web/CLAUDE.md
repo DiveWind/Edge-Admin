@@ -31,8 +31,8 @@ apps/web/                 本项目的应用（包名 web；只在这里写业�
     api/                  接口：client.ts（请求客户端与拦截器）、request.ts（注入 store 与界面的 requestClient）、core/（认证、用户、两步验证、菜单），业务接口按模块分文件
     layouts/              BasicLayout（顶栏、用户菜单、通知）与 AuthPageLayout
     locales/              应用级国际化：langs/{zh-CN,en-US}/*.json，dayjs 与 antdv-next 语言包切换
-    router/               routes/core.ts（登录、404 等基础路由）、routes/modules/*.ts（静态菜单路由）、guard.ts、access.ts
-    store/                应用级 store（auth：登录、登出、拉取用户信息）
+    router/               routes/core.ts（登录、404 等基础路由）、routes/modules/*.ts（静态路由：工作台、个人中心）、guard.ts、access.ts（生成路由与菜单）
+    store/                应用级 store（auth：登录、登出、拉取用户信息与权限码）
     views/                页面；_core/ 为登录、个人中心、异常页等基础页面
     preferences.ts        覆盖 Vben 偏好设置（defineOverridesPreferences）
     bootstrap.ts / main.ts / app.vue
@@ -59,7 +59,8 @@ scripts/                  vsh（lint、check-dep、check-circular 等）与 clea
 - **表格**：`useVbenVxeGrid` 与相关类型从 `#/adapter/vxe-table` 引入；全局表格配置（分页字段 `items` / `total`、单元格渲染器）在该文件中统一设置。
 - **弹窗 / 抽屉 / 页面容器**：`useVbenModal`、`useVbenDrawer`、`Page` 等从 `@vben/common-ui` 引入。
 - **其他基础组件**：`Button`、`Card`、`Tag`、`Spin`、`Modal.confirm`、`message`、`notification` 等可直接从 `antdv-next` 引入（Vben 自己的页面也是这样用的）；需要统一默认行为的组件放进适配层。
-- **权限控制**：按钮级用 `v-access:code="['权限码']"`、`<AccessControl :codes="['权限码']" type="code">` 或 `useAccess().hasAccessByCodes(['权限码'])`（`@vben/access`）；权限码来自 `GET /auth/codes`，以后端定义为准，不要自造。
+- **表格单元格渲染器**（`adapter/vxe-table.ts`）：`CellTag`、`CellSwitch` 默认按状态 `'enabled'` / `'disabled'` 显示与切换（§6.4）；`CellOperation` 为操作列，`attrs.onClick({ code, row })`（类型 `OnActionClickFn`），按钮属性可写成 `(row) => 值`（`show`、`disabled`），`code: 'delete'` 自带确认框。
+- **权限控制**：见下文“菜单与按钮权限”。
 - **文案**：一律走 `$t()`，写在 `src/locales/langs/{zh-CN,en-US}/*.json`，两种语言同时补齐。
 - **样式**：优先 Tailwind 工具类与 antdv-next 组件属性；不写全局样式覆盖。
 
@@ -69,8 +70,38 @@ scripts/                  vsh（lint、check-dep、check-circular 等）与 clea
 - `requestClient` 已按契约解包 `{ code, data, message }`（`code === 0` 为成功），页面拿到的就是 `data`；请求头 `Accept-Language` 为当前界面语言（`zh-CN` / `en-US`），后端的提示文案随之切换（§6.1）。
 - 认证为 Sanctum 会话 Cookie + Fortify（§6.2 / §7）：请求携带 Cookie 与 `X-XSRF-TOKEN`，没有 Authorization 头与刷新令牌；419 重新获取 CSRF Cookie 后重试一次，423 弹出确认密码框后重试，401 清除已登录标记回登录页（`api/client.ts`）。“已登录标记”是 access store 的 `accessToken` 字段中的固定值（`store/auth.ts` 的 `SESSION_MARKER`），启动时用 `GET /user/info` 确认会话（`router/guard.ts`）。
 - 422 的字段错误用 `setFormErrors(formApi, getValidationErrors(error))` 回填到表单（表单字段名与接口字段名一致）；调用方自行处理的状态码用 `AppRequestConfig` 的 `silentError` 关闭自动提示。
-- 菜单与按钮权限暂为前端静态路由模式（`routes/modules/*.ts`），`GET /auth/codes`、`GET /menu/all` 接入前不要请求。
+- 列表页：查询参数用 `toListParams(page, formValues)`（`api/list.ts`）生成 `{ page, pageSize, filter }`，空值自动去掉，数组（时间区间、多选）合并为 `起,止`；序列化为 `filter[字段]=值`（§6.3）。返回值类型 `ListApi.Result<T>`（`{ items, total }`）。
 - 接口、字段、权限码有变动，先改 `../docs/backend-design.md`，再改代码。
+
+### 菜单与按钮权限
+
+- 路由模式为 `mixed`（`preferences.ts`，§6.2）：`routes/modules/*.ts` 只放所有登录用户都有的页面（工作台、个人中心），不写 `meta.authority`；其余菜单全部由 `GET /menu/all` 下发，与静态路由按 `name` 合并（`router/access.ts`）。不要为后端菜单再写静态路由。
+- **页面文件路径与后端菜单节点的 `component` 一一对应**：`component: '/system/user/list'` 即 `src/views/system/user/list.vue`；找不到文件时显示 404 页。页面私有组件放在页面目录的 `modules/` 下（不会出现在菜单管理的组件列表 `componentKeys` 中）。
+- 菜单标题 `meta.title` 是 i18n key（如 `system.user.title`），后端内置节点的 key（含按钮标题）写在 `src/locales/langs/*/system.json` 等文件中；Vben 自带的 `common.create` 等不重复定义。
+- **权限码就是后端节点的 `name`**（`system.user`、`system.user.create`……，见 §6.2、§6.5），以后端定义为准，不要自造。`GET /auth/codes` 在登录时与启动时（拿到 `/user/info` 之后）重新拉取，登出时清空（`store/auth.ts`、`router/guard.ts`）。
+- 按钮权限写法：
+  - 普通按钮：`<Button v-access:code="'system.user.create'">`（多个码满足其一用数组）；
+  - 表格操作列：`CellOperation` 的 `show` 配合 `useAccess().hasAccessByCodes`：
+
+    ```ts
+    const { hasAccessByCodes } = useAccess();
+    // columns 中
+    {
+      cellRender: {
+        attrs: { nameField: 'username', onClick: onActionClick },
+        name: 'CellOperation',
+        options: [
+          { code: 'edit', show: () => hasAccessByCodes(['system.user.update']) },
+          { code: 'delete', show: () => hasAccessByCodes(['system.user.delete']) },
+        ],
+      },
+      field: 'operation',
+      fixed: 'right',
+      title: $t('system.operation'),
+    }
+    ```
+
+  - 需要整块隐藏时用 `<AccessControl :codes="['…']" type="code">`（`@vben/access`）。
 
 ### playground 只作参考
 

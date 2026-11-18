@@ -15,6 +15,7 @@ import { defineStore } from 'pinia';
 
 import {
   confirmPasswordApi,
+  getAccessCodesApi,
   getCsrfCookieApi,
   getUserInfoApi,
   loginApi,
@@ -119,13 +120,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * 登录成功：设置已登录标记，获取用户信息，跳转到 redirect 参数或 homePath。
-   * 菜单与按钮权限暂用前端静态路由模式（GET /auth/codes 第 5 步才有）。
+   * 登录成功：设置已登录标记，并行获取用户信息与权限码，跳转到 redirect 参数或 homePath。
+   * 菜单由路由守卫生成（GET /menu/all）。
    */
   async function completeLogin(onSuccess?: () => Promise<void> | void) {
     accessStore.setAccessToken(SESSION_MARKER);
-    const userInfo = await fetchUserInfo();
-    accessStore.setAccessCodes([]);
+    const [userInfo] = await Promise.all([fetchUserInfo(), fetchAccessCodes()]);
 
     if (accessStore.loginExpired) {
       accessStore.setLoginExpired(false);
@@ -247,6 +247,16 @@ export const useAuthStore = defineStore('auth', () => {
     return userInfo;
   }
 
+  /**
+   * 重新拉取权限码：accessCodes 持久化在 localStorage 中，登录时与启动时（拿到用户信息后）都要刷新，
+   * 否则会沿用上一次的权限（§6.2）。登出与 401 时由 resetAllStores() 清空。
+   */
+  async function fetchAccessCodes() {
+    const codes = await getAccessCodesApi();
+    accessStore.setAccessCodes(codes);
+    return codes;
+  }
+
   function $reset() {
     loginLoading.value = false;
   }
@@ -256,6 +266,7 @@ export const useAuthStore = defineStore('auth', () => {
     authLogin,
     authTwoFactor,
     confirmPassword,
+    fetchAccessCodes,
     fetchUserInfo,
     handleUnauthorized,
     loginLoading,

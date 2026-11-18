@@ -11,6 +11,8 @@ const asset = (file: string) => `${import.meta.env.BASE_URL}${file}`;
 export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
+    // 混合模式：静态路由（routes/modules，所有登录用户都有的页面）与 GET /menu/all 下发的菜单按 name 合并（§6.2）
+    accessMode: 'mixed',
     // 未设置头像时使用的本地默认头像
     defaultAvatar: asset('avatar.svg'),
     name: import.meta.env.VITE_APP_TITLE,

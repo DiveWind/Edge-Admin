@@ -100,7 +100,7 @@ export async function resetPasswordApi(params: AuthApi.ResetPasswordParams) {
 }
 
 /**
- * 获取用户权限码（GET /auth/codes，第 5 步由后端提供；目前未调用）
+ * 当前用户的有效权限码（目录、菜单、按钮的节点 name），登录时与启动时都重新拉取（§6.2）
  */
 export async function getAccessCodesApi() {
   return requestClient.get<string[]>('/auth/codes');

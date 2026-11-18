@@ -1,15 +1,31 @@
+/**
+ * vxe-table 适配层：全局表格配置与单元格渲染器（cellRender: { name: 'CellXxx' }）。
+ *
+ * - CellImage / CellLink：图片、链接按钮；
+ * - CellTag：按 options 显示标签，默认 enabled / disabled 两种状态（§6.4）；
+ * - CellSwitch：开关，默认值 'enabled' / 'disabled'；attrs.beforeChange(newVal, row) 返回 false 时不切换；
+ * - CellOperation：操作列按钮，attrs.onClick({ code, row })；options 中每项的属性可以是 (row) => 值，
+ *   常用 show（如 () => hasAccessByCodes(['system.user.update'])）与 disabled；code 为 delete 的按钮自带确认框。
+ */
 import type { VxeTableGridOptions } from '@vben/plugins/vxe-table';
+import type { Recordable } from '@vben/types';
 
 import type { ComponentPropsMap, ComponentType } from './component';
 
 import { h } from 'vue';
 
+import { IconifyIcon } from '@vben/icons';
+import { $te } from '@vben/locales';
 import {
   setupVbenVxeTable,
   useVbenVxeGrid as useGrid,
 } from '@vben/plugins/vxe-table';
+import { get, isFunction, isString } from '@vben/utils';
 
-import { Button, Image } from 'antdv-next';
+import { objectOmit } from '@vueuse/core';
+import { Button, Image, Popconfirm, Switch, Tag } from 'antdv-next';
+
+import { $t } from '#/locales';
 
 import { useVbenForm } from './form';
 
@@ -43,6 +59,13 @@ setupVbenVxeTable({
       } as VxeTableGridOptions,
     });
 
+    // 热更新时本文件会重新执行：先删除已注册的渲染器，避免重复注册报错
+    vxeUI.renderer.forEach((_item, key) => {
+      if (key.startsWith('Cell')) {
+        vxeUI.renderer.delete(key);
+      }
+    });
+
     // 表格配置项可以用 cellRender: { name: 'CellImage' },
     vxeUI.renderer.add('CellImage', {
       renderTableDefault(renderOpts, params) {
@@ -64,6 +87,201 @@ setupVbenVxeTable({
       },
     });
 
+    // 单元格渲染：Tag。默认按状态显示（enabled 成功色、disabled 错误色），其他取值用 options 指定
+    vxeUI.renderer.add('CellTag', {
+      renderTableDefault({ options, props }, { column, row }) {
+        const value = get(row, column.field);
+        const tagOptions = options ?? [
+          { color: 'success', label: $t('common.enabled'), value: 'enabled' },
+          { color: 'error', label: $t('common.disabled'), value: 'disabled' },
+        ];
+        const tagItem = tagOptions.find((item) => item.value === value);
+        return h(
+          Tag,
+          {
+            ...props,
+            ...objectOmit(tagItem ?? {}, ['label']),
+          },
+          { default: () => tagItem?.label ?? value },
+        );
+      },
+    });
+
+    // 单元格渲染：Switch。默认值为状态字符串；attrs.beforeChange(newVal, row) 中调用接口，返回 false 时不切换
+    vxeUI.renderer.add('CellSwitch', {
+      renderTableDefault({ attrs, props }, { column, row }) {
+        const loadingKey = `__loading_${column.field}`;
+        const finallyProps = {
+          checkedChildren: $t('common.enabled'),
+          checkedValue: 'enabled',
+          unCheckedChildren: $t('common.disabled'),
+          unCheckedValue: 'disabled',
+          ...props,
+          checked: row[column.field],
+          loading: row[loadingKey] ?? false,
+          'onUpdate:checked': onChange,
+        };
+        async function onChange(newVal: any) {
+          row[loadingKey] = true;
+          try {
+            const result = await attrs?.beforeChange?.(newVal, row);
+            if (result !== false) {
+              row[column.field] = newVal;
+            }
+          } finally {
+            row[loadingKey] = false;
+          }
+        }
+        return h(Switch, finallyProps);
+      },
+    });
+
+    /**
+     * 单元格渲染：操作按钮。options 为按钮列表（默认 ['edit', 'delete']），字符串取预设或 common.<code> 的文案；
+     * 对象形式的每个属性可以是 (row) => 值（show、disabled 等），show 为 false 时不显示。
+     * attrs：onClick({ code, row })、nameField（删除确认中显示的字段，默认 name）、nameTitle（确认框标题中的名称）
+     */
+    vxeUI.renderer.add('CellOperation', {
+      renderTableDefault({ attrs, options, props }, { column, row }) {
+        const defaultProps = { size: 'small', type: 'link', ...props };
+        let align: string;
+        switch (column.align) {
+          case 'center': {
+            align = 'center';
+            break;
+          }
+          case 'left': {
+            align = 'start';
+            break;
+          }
+          default: {
+            align = 'end';
+            break;
+          }
+        }
+        const presets: Recordable<Recordable<any>> = {
+          delete: {
+            danger: true,
+            text: $t('common.delete'),
+          },
+          edit: {
+            text: $t('common.edit'),
+          },
+        };
+        const operations: Array<Recordable<any>> = (
+          options || ['edit', 'delete']
+        )
+          .map((opt) => {
+            if (isString(opt)) {
+              return presets[opt]
+                ? { code: opt, ...presets[opt], ...defaultProps }
+                : {
+                    code: opt,
+                    text: $te(`common.${opt}`) ? $t(`common.${opt}`) : opt,
+                    ...defaultProps,
+                  };
+            }
+            return { ...defaultProps, ...presets[opt.code], ...opt };
+          })
+          .map((opt) => {
+            const optBtn: Recordable<any> = {};
+            Object.keys(opt).forEach((key) => {
+              optBtn[key] = isFunction(opt[key]) ? opt[key](row) : opt[key];
+            });
+            return optBtn;
+          })
+          .filter((opt) => opt.show !== false);
+
+        function renderBtn(opt: Recordable<any>, listen = true) {
+          return h(
+            Button,
+            {
+              ...props,
+              ...opt,
+              icon: undefined,
+              onClick: listen
+                ? () =>
+                    attrs?.onClick?.({
+                      code: opt.code,
+                      row,
+                    })
+                : undefined,
+            },
+            {
+              default: () => {
+                const content = [];
+                if (opt.icon) {
+                  content.push(
+                    h(IconifyIcon, { class: 'size-5', icon: opt.icon }),
+                  );
+                }
+                content.push(opt.text);
+                return content;
+              },
+            },
+          );
+        }
+
+        function renderConfirm(opt: Recordable<any>) {
+          let viewportWrapper: HTMLElement | null = null;
+          return h(
+            Popconfirm,
+            {
+              /**
+               * 固定列中的确认框：以固定列为容器会被挤压，以表格主体为容器会被固定列遮挡，以 body 为容器又不随表格滚动。
+               * 折中方案：容器用 body，弹出期间禁止表格滚动。
+               */
+              getPopupContainer(el) {
+                viewportWrapper = el.closest('.vxe-table--viewport-wrapper');
+                return document.body;
+              },
+              placement: 'topLeft',
+              title: $t('ui.actionTitle.delete', [attrs?.nameTitle || '']),
+              ...props,
+              ...opt,
+              icon: undefined,
+              onOpenChange: (open: boolean) => {
+                if (open) {
+                  viewportWrapper?.style.setProperty('pointer-events', 'none');
+                } else {
+                  viewportWrapper?.style.removeProperty('pointer-events');
+                }
+              },
+              onConfirm: () => {
+                attrs?.onClick?.({
+                  code: opt.code,
+                  row,
+                });
+              },
+            },
+            {
+              default: () => renderBtn({ ...opt }, false),
+              description: () =>
+                h(
+                  'div',
+                  { class: 'truncate' },
+                  $t('ui.actionMessage.deleteConfirm', [
+                    row[attrs?.nameField || 'name'],
+                  ]),
+                ),
+            },
+          );
+        }
+
+        const btns = operations.map((opt) =>
+          opt.code === 'delete' ? renderConfirm(opt) : renderBtn(opt),
+        );
+        return h(
+          'div',
+          {
+            class: 'flex table-operations',
+            style: { justifyContent: align },
+          },
+          btns,
+        );
+      },
+    });
+
     // 这里可以自行扩展 vxe-table 的全局配置，比如自定义格式化
     // vxeUI.formats.add
   },
@@ -74,4 +292,12 @@ export const useVbenVxeGrid = <T extends Record<string, any>>(
   ...rest: Parameters<typeof useGrid<T, ComponentType, ComponentPropsMap>>
 ) => useGrid<T, ComponentType, ComponentPropsMap>(...rest);
 
+/** CellOperation 的点击参数：code 为按钮标识，row 为当前行 */
+export type OnActionClickParams<T = Recordable<any>> = {
+  code: string;
+  row: T;
+};
+export type OnActionClickFn<T = Recordable<any>> = (
+  params: OnActionClickParams<T>,
+) => void;
 export type * from '@vben/plugins/vxe-table';

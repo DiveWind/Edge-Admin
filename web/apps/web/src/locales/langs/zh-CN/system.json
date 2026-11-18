@@ -1,0 +1,21 @@
+{
+  "title": "系统管理",
+  "status": "状态",
+  "createdAt": "创建时间",
+  "operation": "操作",
+  "user": {
+    "title": "用户管理",
+    "name": "用户",
+    "changeStatus": "启用 / 停用",
+    "resetPassword": "重置密码"
+  },
+  "role": {
+    "title": "角色管理",
+    "name": "角色",
+    "changeStatus": "启用 / 停用"
+  },
+  "menu": {
+    "title": "菜单管理",
+    "name": "菜单"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "title": "System",
+  "status": "Status",
+  "createdAt": "Created At",
+  "operation": "Actions",
+  "user": {
+    "title": "Users",
+    "name": "User",
+    "changeStatus": "Enable / Disable",
+    "resetPassword": "Reset Password"
+  },
+  "role": {
+    "title": "Roles",
+    "name": "Role",
+    "changeStatus": "Enable / Disable"
+  },
+  "menu": {
+    "title": "Menus",
+    "name": "Menu"
+  }
+}

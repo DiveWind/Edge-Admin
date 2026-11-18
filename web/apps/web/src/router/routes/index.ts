@@ -34,4 +34,18 @@ const coreRouteNames = traverseTreeValues(coreRoutes, (route) => route.name);
 
 /** 有权限校验的路由列表，包含动态路由和静态路由 */
 const accessRoutes = [...dynamicRoutes, ...staticRoutes];
-export { accessRoutes, coreRouteNames, routes };
+
+/**
+ * 可作为菜单节点 component 的页面路径（相对 src/views、不带 .vue，如 /system/user/list），供菜单管理表单选择。
+ * 排除页面私有组件（modules/）与基础页面（_core/：登录、异常页、个人中心等，已有静态路由）
+ */
+const componentKeys: string[] = Object.keys(
+  import.meta.glob('../../views/**/*.vue'),
+)
+  .filter((item) => !item.includes('/modules/') && !item.includes('/_core/'))
+  .map((v) => {
+    const path = v.replace('../../views/', '/');
+    return path.endsWith('.vue') ? path.slice(0, -4) : path;
+  });
+
+export { accessRoutes, componentKeys, coreRouteNames, routes };

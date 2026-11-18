@@ -90,11 +90,13 @@ function setupAccessGuard(router: Router) {
       return true;
     }
 
-    // 启动（刷新）后首次进入：用 GET /user/info 确认会话仍然有效，失败（401、网络异常等）时清除标记回登录页
+    // 启动（刷新）后首次进入：用 GET /user/info 确认会话仍然有效，再重新拉取权限码（localStorage 中的可能已过期）；
+    // 失败（401、网络异常等）时清除标记回登录页。刚登录时两者已由 completeLogin 获取，不重复请求
     let userInfo = userStore.userInfo;
     if (!userInfo) {
       try {
         userInfo = await authStore.fetchUserInfo();
+        await authStore.fetchAccessCodes();
       } catch {
         accessStore.setAccessToken(null);
         return {

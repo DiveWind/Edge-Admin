@@ -47,6 +47,7 @@ vi.mock('#/locales', () => ({ $t: (key: string) => key }));
 
 vi.mock('#/api', () => ({
   confirmPasswordApi: vi.fn(),
+  getAccessCodesApi: vi.fn(),
   getCsrfCookieApi: vi.fn(),
   getUserInfoApi: vi.fn(),
   loginApi: vi.fn(),
@@ -68,6 +69,8 @@ const userInfo = {
   userId: '1',
   username: 'admin',
 };
+
+const codes = ['system', 'system.user', 'system.user.create'];
 
 const error = (code: number, extra = {}) => ({
   code,
@@ -91,6 +94,7 @@ describe('auth store', () => {
     setRoute('/auth/login');
     vi.mocked(api.getCsrfCookieApi).mockResolvedValue(null);
     vi.mocked(api.getUserInfoApi).mockResolvedValue(userInfo as any);
+    vi.mocked(api.getAccessCodesApi).mockResolvedValue(codes);
     vi.mocked(api.logoutApi).mockResolvedValue(null);
   });
 
@@ -109,6 +113,10 @@ describe('auth store', () => {
         calls.push('info');
         return userInfo as any;
       });
+      vi.mocked(api.getAccessCodesApi).mockImplementation(async () => {
+        calls.push('codes');
+        return codes;
+      });
       const store = useAuthStore();
 
       const result = await store.authLogin({
@@ -118,7 +126,7 @@ describe('auth store', () => {
         username: 'admin',
       });
 
-      expect(calls).toEqual(['csrf', 'login', 'info']);
+      expect(calls).toEqual(['csrf', 'login', 'info', 'codes']);
       expect(api.loginApi).toHaveBeenCalledWith({
         password: 'password',
         remember: true,
@@ -127,6 +135,7 @@ describe('auth store', () => {
       expect(result).toEqual({ twoFactor: false, userInfo });
       expect(useAccessStore().accessToken).toBe(SESSION_MARKER);
       expect(useUserStore().userInfo).toEqual(userInfo);
+      expect(useAccessStore().accessCodes).toEqual(codes);
       expect(router.push).toHaveBeenCalledWith('/analytics');
       expect(ui.notification.success).toHaveBeenCalled();
       expect(store.loginLoading).toBe(false);
@@ -163,7 +172,26 @@ describe('auth store', () => {
         query: { redirect: 'x' },
       });
       expect(api.getUserInfoApi).not.toHaveBeenCalled();
+      expect(api.getAccessCodesApi).not.toHaveBeenCalled();
       expect(useAccessStore().accessToken).toBeNull();
+    });
+
+    it('requests the user info and the access codes in parallel, replacing stale codes', async () => {
+      useAccessStore().setAccessCodes(['stale.code']);
+      vi.mocked(api.loginApi).mockResolvedValue({ two_factor: false });
+      let resolveInfo: (value: any) => void = () => {};
+      vi.mocked(api.getUserInfoApi).mockReturnValue(
+        new Promise((resolve) => {
+          resolveInfo = resolve;
+        }),
+      );
+
+      const login = useAuthStore().authLogin({ password: 'p', username: 'u' });
+      await vi.waitFor(() => expect(api.getAccessCodesApi).toHaveBeenCalled());
+      resolveInfo(userInfo);
+      await login;
+
+      expect(useAccessStore().accessCodes).toEqual(codes);
     });
 
     it('enters the system when already logged in (409)', async () => {
@@ -202,6 +230,7 @@ describe('auth store', () => {
         recovery_code: 'abc-def',
       });
       expect(useAccessStore().accessToken).toBe(SESSION_MARKER);
+      expect(useAccessStore().accessCodes).toEqual(codes);
       expect(router.push).toHaveBeenCalledWith('/analytics');
     });
 
@@ -230,6 +259,14 @@ describe('auth store', () => {
     });
   });
 
+  it('refreshes the persisted access codes', async () => {
+    useAccessStore().setAccessCodes(['stale.code']);
+
+    await expect(useAuthStore().fetchAccessCodes()).resolves.toEqual(codes);
+
+    expect(useAccessStore().accessCodes).toEqual(codes);
+  });
+
   describe('logout', () => {
     it('clears the marker before calling the API, then returns to the login page', async () => {
       setRoute('/profile');
@@ -252,12 +289,14 @@ describe('auth store', () => {
 
     it('still clears the local state when the API fails', async () => {
       useAccessStore().setAccessToken(SESSION_MARKER);
+      useAccessStore().setAccessCodes(codes);
       useUserStore().setUserInfo(userInfo as any);
       vi.mocked(api.logoutApi).mockRejectedValue(error(401));
 
       await useAuthStore().logout(false);
 
       expect(useAccessStore().accessToken).toBeNull();
+      expect(useAccessStore().accessCodes).toEqual([]);
       expect(useUserStore().userInfo).toBeNull();
       expect(router.replace).toHaveBeenCalledWith({
         path: '/auth/login',
