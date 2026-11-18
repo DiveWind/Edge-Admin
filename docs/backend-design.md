@@ -4,7 +4,7 @@
 > 现有代码的实际情况见 [architecture.md](architecture.md)、[backend-guide.md](backend-guide.md)。
 > 两者冲突时：已实施的行为以现有文档为准，新开发按本文执行。
 >
-> - 项目名：**待定**（现名 Edge Admin 与已有开源项目重名，开源前更换，见 [§13](#13-待决事项)）。文中暂用“本框架”。
+> - 定位为**脚手架（Starter）**，不设品牌名；文中称“本脚手架”。
 > - 库版本号核查于 2026-11，落地时以 Packagist / npm 当时的最新稳定版为准。
 
 ## 目录
@@ -21,30 +21,34 @@
 10. [编码规范](#10-编码规范)
 11. [运行、开发与部署](#11-运行开发与部署)
 12. [依赖清单](#12-依赖清单)
-13. [待决事项](#13-待决事项)
-14. [附录：设计来源与取舍](#14-附录设计来源与取舍)
+13. [自建基础设施清单](#13-自建基础设施清单)
+14. [待决事项](#14-待决事项)
 
 ---
 
 ## 1. 定位
 
-一个**纯 API 的 Laravel 后台框架**，默认适配 [Vben Admin 5](https://github.com/vbenjs/vue-vben-admin)（antdv-next 版），但本身不绑定任何前端。
+一个 **Laravel + Vben 的中后台脚手架（Starter）**：纯 API 后端，默认适配 [Vben Admin 5](https://github.com/vbenjs/vue-vben-admin)（antdv-next 版），但不绑定任何前端。
 
+- **克隆即拥有全部代码**：与 Laravel 官方 Starter Kit 相同，使用者在此基础上直接开发业务，而不是以“框架包”的形式依赖和升级。
 - 提供 RBAC、数据权限、动态菜单、日志、通知、字典、参数、附件、定时任务等后台通用能力。
 - 支持一个核心加多个独立入口（多应用），例如后台 API、设备接入 API、开放平台 API。
-- 目标是**可开源的通用级框架**：依赖少、几乎全为官方或社区事实标准，规范可被测试和工具强制执行。
+- **尽量少自建基础设施**：能用 Laravel 官方能力或社区事实标准实现的，一律不自己写；必须自建的部分全部登记在 [§13](#13-自建基础设施清单)。
 
-**不做的事**：不渲染页面（没有 Blade 后台、没有 Livewire）；不在后端定义前端的表单、表格、布局。
+**不做的事**
+
+- 不渲染页面（没有 Blade 后台、没有 Livewire）；不在后端定义前端的表单、表格、布局。
+- 不内置部门、岗位等组织架构。需要时由业务按需加入，数据权限预留了扩展点（见 [§8.4](#84-数据权限)）。
 
 ## 2. 设计原则
 
-1. **官方优先。** Laravel 官方包能做的，不引入第三方；官方没有的，用社区事实标准（spatie）；都没有的才自己写。
-2. **前后端彻底分离。** 后端只提供数据和规则，界面完全由前端决定。参考 Nova、Filament 这类“前后端一体”的产品时，只借鉴后端部分。
+1. **官方优先，少自建。** Laravel 官方包能做的，不引入第三方；官方没有的，用社区事实标准（spatie）；都没有的才自己写，并登记在 §13。
+2. **前后端彻底分离。** 后端只提供数据和规则，界面完全由前端决定。
 3. **业务规则只有一份，在核心里。** 无论从后台、设备、命令行还是队列进入，执行的都是同一套规则。
 4. **默认拒绝。** 授权、数据权限、多租户隔离一律 fail-closed：缺规则 = 不允许。
 5. **规范要能被机器检查。** 能用 Pest 架构测试、PHPStan、Pint、Rector 强制的约定，就不只写在文档里。
 6. **选定一种写法就全项目统一，并写进代码生成器。** 一致性比选哪一种更重要。
-7. **为常驻内存而写。** 代码默认运行在 Octane（FrankenPHP worker 模式）下。
+7. **默认 PHP-FPM，常驻内存安全。** 默认以 PHP-FPM 运行；所有代码都按常驻内存安全来写，可无缝切换到 Octane + FrankenPHP。
 
 ## 3. 技术栈
 
@@ -52,13 +56,13 @@
 |---|---|
 | 语言 | PHP 8.5 |
 | 框架 | Laravel 13 |
-| 运行时 | Laravel Octane + FrankenPHP（worker 模式，内嵌 Caddy） |
-| 认证 | Laravel Sanctum（token 模式） |
+| 运行时 | 默认 PHP-FPM（Nginx 或 Caddy）；可无缝切换到 Laravel Octane + FrankenPHP |
+| 认证 | Laravel Fortify（登录全流程）+ Sanctum（后台用会话 Cookie，设备 / App 用 token） |
 | 授权 | Gate + Policy + spatie/laravel-permission |
 | 数据库 | MySQL / PostgreSQL / SQLite（代码不写方言 SQL） |
-| 缓存 / 队列 | Redis（生产）；database 驱动（开发可用） |
-| 前端（默认适配） | Vben Admin 5 + antdv-next，独立仓库目录 `web/` |
-| 开发环境 | Linux：Sail；Windows：WSL2（或 Sail） |
+| 会话 / 缓存 / 队列 | 开发：database 驱动；生产：Redis |
+| 前端（默认适配） | Vben Admin 5 + antdv-next，独立目录 `web/` |
+| 开发环境 | Herd、Sail、本机 PHP 均可；验证 FrankenPHP 时用 Sail 或 WSL2 |
 
 ## 4. 仓库与目录结构
 
@@ -69,7 +73,7 @@
 ├── server/          Laravel 后端（本文主体）
 ├── web/             Vben 前端（monorepo，保留 apps/web 与 playground）
 ├── docs/            项目文档
-├── deploy/          Caddyfile、Dockerfile、Supervisor 配置等部署文件
+├── deploy/          Nginx / Caddyfile、Dockerfile、Supervisor 等部署文件
 ├── .github/         CI、Issue / PR 模板
 ├── README.md  CLAUDE.md  AGENTS.md  LICENSE  CHANGELOG.md  CONTRIBUTING.md  SECURITY.md
 └── .mcp.json        Laravel Boost MCP（php server/artisan boost:mcp）
@@ -79,6 +83,8 @@
 
 ### 4.2 `server/` 目录
 
+> **待确认**：本节及 §4.3、§4.5、§5.5 的目录方案，正在评估“尽量回归 Laravel 默认目录”的替代方案（见 [§14](#14-待决事项)），确认后更新。以下为当前方案。
+
 ```
 server/
 ├── app/
@@ -86,12 +92,12 @@ server/
 │   │   ├── Contracts/                ← 对受限应用导出的接口
 │   │   ├── Data/                     ← 对受限应用导出的只读数据对象（readonly）
 │   │   ├── Events/                   ← 对外导出的领域事件
-│   │   ├── System/                   用户、角色、菜单权限、部门、岗位、字典、参数、附件
-│   │   ├── Monitor/                  登录 / 操作 / 数据变更日志、在线会话、定时任务、系统信息
+│   │   ├── System/                   用户、角色、菜单权限、字典、参数、附件
+│   │   ├── Monitor/                  日志、在线会话、定时任务、系统监控
 │   │   ├── Message/                  公告、通知
 │   │   └── Content/                  文章（业务对接示范，可整块删除）
 │   │
-│   ├── Admin/                        应用：后台 API（受信任），给 Vben 用
+│   ├── Admin/                        应用：后台 API（受信任），给 Vben 用；名称待定
 │   │   ├── System/                   ← 与 Core/System 一一对应
 │   │   │   ├── Controllers/
 │   │   │   ├── Requests/
@@ -99,12 +105,9 @@ server/
 │   │   ├── Monitor/  Message/  Content/
 │   │   ├── Http/Middleware/          整个后台应用共用的中间件（响应包装等）
 │   │   ├── routes/api.php
-│   │   └── AdminServiceProvider.php
+│   │   └── AdminServiceProvider.php  （是否需要，待确认）
 │   │
 │   ├── Device/                       应用：设备接入（受限，以后加）
-│   │   ├── Http/ ...
-│   │   ├── routes/api.php
-│   │   └── DeviceServiceProvider.php
 │   │
 │   └── Support/                      与业务无关的跨应用基础件
 │
@@ -138,28 +141,24 @@ app/Core/System/
 └── SystemServiceProvider.php
 ```
 
-模块资源通过 ServiceProvider 注册：`loadTranslationsFrom()`、`loadViewsFrom()`，使用时带命名空间，如 `__('system::messages.x')`。需要浏览器直接下载的文件放 `resources/public`，部署时 `vendor:publish` 到 `public/vendor/<模块>`。
-
-**`app/` 目录绝不对外访问**；Web 根目录只能是 `public/` 和前端构建产物。
+需要浏览器直接下载的文件放 `resources/public`，部署时 `vendor:publish` 到 `public/vendor/<模块>`。**`app/` 目录绝不对外访问**；Web 根目录只能是 `public/` 和前端构建产物。
 
 ### 4.4 命名约定
 
-- **应用按“给谁用”命名**：`Admin`（管理员后台）、`Device`（设备）、`Portal`（用户端）、`Open`（开放平台）、`Merchant`（商户后台）……
-- **核心叫 `Core`**，业务模块用复数含义的业务名（`System`、`Monitor`、`Message`、`Content`）。
+- **应用按“给谁用”命名**：后台、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……后台应用的名称待定。
+- **核心叫 `Core`**，业务模块用业务名（`System`、`Monitor`、`Message`、`Content`）。
 - 应用内部的目录与核心模块**同名一一对应**。删除一个业务 = 删除 `Core/<模块>` + 各应用里的同名目录 + 前端对应页面。
 
-### 4.5 偏离 Laravel 默认目录的代价与处理
-
-核心不在 `app/Models` 等默认位置，以下约定需显式配置：
+### 4.5 偏离 Laravel 默认目录需要的配置
 
 | 机制 | 处理 |
 |---|---|
 | 工厂推断 | 模型统一用 `#[UseFactory]` 显式声明 |
 | Policy 推断 | `X\Models` → `X\Policies` 的默认规则可用；不满足时用 `#[UsePolicy]` |
 | 命令、事件监听发现 | `bootstrap/app.php` 中 `withCommands()`、`withEvents(discover: [...])` 指定路径 |
-| 认证用户模型 | `config/auth.php` 指向 `App\Core\System\Models\User` |
+| 认证用户模型 | `config/auth.php` 指向核心的 User 模型 |
 | 多态类型 | 启用 `Relation::enforceMorphMap()`，库里存短别名 |
-| 官方 make 命令 | 带完整命名空间，如 `make:model Core/System/Models/Dept`；日常用生成器 |
+| 官方 make 命令 | 带完整命名空间，如 `make:model Core/System/Models/Dict`；日常用生成器 |
 
 ## 5. 核心与应用：分层和依赖边界
 
@@ -168,10 +167,10 @@ app/Core/System/
 | 谁 | 读数据 | 写数据 |
 |---|---|---|
 | **Core** | 随意 | 随意（规则的拥有者） |
-| **受信任的应用**（Admin） | 直接使用核心模型：查询、路由模型绑定、API Resource 输出 | **必须调用核心的 Action**，禁止直接 `save()` / `update()` / `delete()` / `create()` |
+| **受信任的应用**（后台） | 直接使用核心模型：查询、路由模型绑定、API Resource 输出 | **必须调用核心的 Action**，禁止直接 `save()` / `update()` / `delete()` / `create()` |
 | **受限的应用**（Device 等） | 只能通过 `Core\Contracts` 拿 `Core\Data` | 只能通过 `Core\Contracts` |
 
-理由：Admin 要用的几乎是核心全部数据，强制走接口等于用接口重写一遍 Eloquent；受限应用只需要两三个能力，且不应知道内部结构。
+理由：后台要用的几乎是核心全部数据，强制走接口等于用接口重写一遍 Eloquent；受限应用只需要两三个能力，且不应知道内部结构。
 
 ### 5.2 依赖规则
 
@@ -188,34 +187,34 @@ app/Core/System/
 | Controller（应用） | 授权声明 → 调用 Action / 查询 → 返回 Resource | 业务逻辑、事务 |
 | Form Request（应用） | 输入格式校验（必填、长度、类型、白名单字段） | 业务约束 |
 | API Resource（应用） | 按该应用的前端格式输出，**逐个列出字段** | 查询 |
-| Action（核心） | 多步写入、事务、业务约束（唯一性、状态流转、引用检查）、触发事件 | 依赖 HTTP 层 |
+| Action（核心） | 写入、事务、业务约束（唯一性、状态流转、引用检查）、触发事件 | 依赖 HTTP 层 |
 | Query（核心） | 复杂查询、统计指标（独立类，统一缓存策略） | 写数据 |
 | Policy（核心） | 记录级授权、数据权限判定 | 依赖调用方 |
 | Contracts / Data（核心） | 受限应用的唯一入口 | 暴露模型 |
 
-单表、无副作用的增删改也必须经过 Action（保证“写只有一个入口”），由生成器自动生成，不增加手写成本。
+所有写入都经过 Action（保证“写只有一个入口”）；单表、无副作用的 Action 由生成器自动生成，不增加手写成本。
 
 ### 5.4 强制手段
 
-- **Pest 架构测试**：上述依赖规则；`App\Admin` 不得依赖 `DB` 门面；应用内不得出现 `Models` 命名空间；`App\Device` 不得依赖 `App\Core\*\Models`。
-- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Admin` 中调用模型写方法（落地前核实版本）。
+- **Pest 架构测试**：上述依赖规则；后台应用不得依赖 `DB` 门面；应用内不得出现模型；受限应用不得依赖核心模型。
+- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止后台应用中调用模型写方法（落地前核实版本）。
 - **代码审查清单**写入 `CONTRIBUTING.md`。
 
 ### 5.5 应用的注册与运行
 
-- 每个应用在自己的 ServiceProvider 中注册：路由（前缀或域名）、中间件组、认证守卫、限流器、异常输出格式。
-- `config/edge.php`（随项目改名）登记应用清单；进程按环境变量只加载部分应用，例如 `APPS=admin,device`。未加载的应用其路由在该进程中不存在。
-- 对外开放的应用（Device、开放平台）路由**从第一版起带版本号** `/v1`；Admin 只服务自家前端，不带版本号。
+- 每个应用有自己的路由文件、URL 前缀（或域名）、中间件组、认证方式、限流器、异常输出格式。注册方式（独立 ServiceProvider 还是 `bootstrap/app.php`）待确认。
+- `config/starter.php` 登记应用清单；进程可按环境变量只加载部分应用，例如 `APPS=admin,device`。未加载的应用其路由在该进程中不存在。
+- 对外开放的应用（Device、开放平台）路由**从第一版起带版本号** `/v1`；后台只服务自家前端，不带版本号。
 - 对外开放的应用暴露的资源使用 **ULID**（`HasUlids`），不暴露自增 ID。
 
 ## 6. 与 Vben 的接口契约
 
-以下约定只属于 **Admin 应用**；其他应用可以有自己的格式。
+以下约定只属于**后台应用**；其他应用可以有自己的格式。
 
 ### 6.1 响应格式
 
-- **HTTP 状态码照常使用**（200 / 201 / 204 / 401 / 403 / 404 / 422 / 429 / 500）。
-- 响应体统一包装为 Vben 默认格式，由 Admin 的中间件 + 响应宏完成，控制器无感知：
+- **HTTP 状态码照常使用**（200 / 201 / 204 / 401 / 403 / 404 / 419 / 422 / 429 / 500）。
+- 响应体统一包装为 Vben 默认格式，由后台应用的中间件 + 响应宏完成，控制器与 Fortify 无感知：
 
 ```json
 // 成功
@@ -226,19 +225,22 @@ app/Core/System/
 { "code": 422, "data": null, "message": "数据校验失败", "errors": { "username": ["..."] } }
 ```
 
-- 不引入响应格式包，自己实现（约 30 行）。
-
 ### 6.2 认证与菜单相关接口
 
-| 接口 | 说明 |
-|---|---|
-| `POST /auth/login` | 返回 `accessToken`；开启两步验证时返回挑战凭证（见 §7.3） |
-| `POST /auth/logout` | 吊销当前 token |
-| `GET /auth/codes` | 当前用户的按钮权限码列表 |
-| `GET /user/info` | 当前用户信息 |
-| `GET /menu/all` | 当前用户可见的菜单树，结构与 Vben 路由一致：`path`、`component`、`meta { title, icon, order, ... }` |
+| 接口 | 提供方 | 说明 |
+|---|---|---|
+| `GET /sanctum/csrf-cookie` | Sanctum | 登录前获取 CSRF 令牌 |
+| `POST /login`、`POST /logout` | Fortify | 开启两步验证时，登录返回“需要两步验证”的标记 |
+| `POST /two-factor-challenge` | Fortify | 提交动态码或恢复码完成登录 |
+| `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码 |
+| 两步验证的开启、确认、关闭、恢复码 | Fortify | 个人设置中使用 |
+| `GET /auth/codes` | 自建 | 当前用户的按钮权限码列表 |
+| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录 |
+| `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致：`path`、`component`、`meta { title, icon, order, ... }` |
 
-Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
+Fortify 路由前缀与后台应用一致（`fortify.prefix`）。
+
+**Vben 侧的调整**（都在 `apps/web` 内，约 4 个文件，共享包不改）：请求携带 Cookie 并自动带 CSRF 令牌；去掉 `Authorization` 请求头与刷新令牌逻辑；登录态改为“已登录标记 + 启动时请求 `/user/info`”；路由守卫改为判断用户信息。
 
 ### 6.3 列表查询
 
@@ -249,37 +251,44 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 
 ### 7.1 方案
 
-**Sanctum token 模式**，后台、App、设备统一使用。
-
-- 不使用 JWT：无法立即吊销，后台必需的“强制下线、禁用立即生效”会变弱。
-- 不使用 Cookie 会话：已确认前后端可能跨域部署，且 Vben 默认即 token 模式。
-- 以后做开放平台、第三方授权登录时，再引入 **Passport**（OAuth2）。
-
-### 7.2 功能拆分
-
-| 功能 | 实现 |
+| 调用方 | 方式 |
 |---|---|
-| 登录、登出、发 token | 自己实现（Fortify 基于会话，不适用 token 模式） |
-| 登录限流 | 只累计失败、成功清零；次数由系统参数控制 |
-| 找回密码、邮箱验证 | Laravel 框架自带的 Password broker 与邮箱验证 |
-| 两步验证 | 使用 **Fortify 的两步验证部件**（密钥、二维码、恢复码、加密存储），`Fortify::ignoreRoutes()` 关闭其全部路由 |
-| 在线会话、强制下线 | 基于 token 表（含 IP、UA、最后活跃时间） |
+| 后台（Vben） | **Sanctum SPA 模式（会话 Cookie）+ Fortify 全套登录流程** |
+| 设备、App、脚本 | **Sanctum token**（Bearer） |
+| 开放平台、第三方授权（以后） | Passport（OAuth2） |
 
-### 7.3 两步验证流程
+- 业务代码统一使用 `auth:sanctum`，不区分请求来自会话还是 token。
+- 不使用 JWT：无法立即吊销，“强制下线、禁用立即生效”会变弱，Laravel 也没有官方 JWT 包。
+- **部署前提**：后台前端与 API 在同一个主域名下（同域不同路径，或 `admin.example.com` 与 `api.example.com`）。本地开发用 Vite 代理保持同源。
 
-1. `POST /auth/login`：账号密码正确且用户启用了两步验证 → 不发 token，返回 `two_factor_required` 与一个短期挑战凭证（缓存，5 分钟过期）。
-2. `POST /auth/two-factor-challenge`：挑战凭证 + 动态码或恢复码 → 验证通过后签发 Sanctum token。
+### 7.2 Fortify 提供的能力（直接使用，不自写）
 
-设计上做成**可插拔的验证提供者**：首批实现 TOTP；预留邮箱、短信验证码；支持“指定角色必须开启两步验证”。
+| 功能 | 说明 |
+|---|---|
+| 登录、登出、登录限流 | 登录字段配置为 `username`；在 `Fortify::authenticateUsing()` 中拒绝已禁用账号；限流次数由系统参数控制 |
+| 两步验证 | TOTP 动态码 + 恢复码，开启后需确认才生效 |
+| 找回密码、重置密码 | 邮件链接重置 |
+| 邮箱验证 | 按需开启 |
+| 敏感操作前确认密码 | 如关闭两步验证、修改安全设置 |
+| 修改个人资料、修改密码 | 修改密码后让其他设备下线（`Auth::logoutOtherDevices()`） |
+| 注册 | **关闭** |
+| Passkeys | Fortify 已集成；依赖的 `laravel/passkeys` 仍为 0.x，**暂不开启** |
 
-### 7.4 token 安全措施
+需要定制响应时，绑定 Fortify 的响应契约类，不改 Fortify 本身。
 
-- token 设置过期时间（普通登录与“记住我”区分）；
-- 启用 Sanctum `token_prefix`，便于密钥扫描识别泄露；
-- 设备等机器 token 用 abilities 限定权限范围；
-- 改密码、禁用账号、强制下线时吊销对应 token；
-- 定时清理过期 token；
-- token 存在浏览器 localStorage，**XSS 是主要风险**，配套措施见 §9。
+### 7.3 认证相关的自建部分
+
+- **登录日志**：监听 Laravel 标准认证事件（登录成功、失败、锁定）写入。
+- **在线会话与强制下线**：会话使用 `database` 驱动（生产可用 Redis 并另行记录），列表读取会话记录；强制下线即删除会话；设备 / App 的 token 一并展示与吊销。
+- **禁用账号立即生效**：中间件检查账号状态，并删除该用户全部会话与 token。
+- **设备 / App 的 token 签发接口**（Fortify 不发 token）。
+- **指定角色必须开启两步验证**：登录后的中间件检查，未开启则只允许访问两步验证设置。
+
+### 7.4 安全措施
+
+- 会话 Cookie：`HttpOnly`、线上 `Secure`、`SameSite=Lax`；CSRF 由 Sanctum 处理。
+- token：设置过期时间；启用 Sanctum `token_prefix` 便于识别泄露；用 abilities 限定权限范围；定时清理过期 token。
+- 改密码、禁用账号、强制下线时，吊销对应的会话与 token。
 
 ## 8. 授权与数据权限
 
@@ -298,21 +307,22 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 
 ### 8.2 菜单与权限
 
-- 权限表扩展为菜单树：目录 / 菜单 / 按钮三种类型，含路径、组件、图标、排序、显示、状态。
+- 权限扩展为菜单树：目录 / 菜单 / 按钮三种类型，含路径、组件、图标、排序、显示、状态。
 - 内置节点在配置中声明并同步（标记为内置，不可删除、不可改权限码）；管理员在界面上的调整在再次同步时不被覆盖。
 - 停用的节点及其子孙对所有人（含超管）失效；为防止自锁，菜单管理相关节点不可停用。
 
 ### 8.3 Policy 规范
 
 - **标准方法齐全**：`viewAny`、`view`、`create`、`update`、`delete`、`restore`、`forceDelete`，以及批量的 `deleteAny`、`restoreAny`、`forceDeleteAny`。
-- **关联操作单独授权**：如分配角色、分配部门、挂载分类，各有对应方法。
+- **关联操作单独授权**：如分配角色、挂载分类，各有对应方法。
 - 权限码检查放在 Policy 内部；控制器只声明 `#[Authorize('update', 'user')]` 这类标准写法。
 - **默认拒绝**：测试强制要求每个模型都有 Policy 且标准方法齐全；每条受保护路由都有授权声明。
 - 批量操作：默认检查一次批量方法；需要时逐条检查。
 
 ### 8.4 数据权限
 
-- 范围：全部、自定义部门、本部门及下级、本部门、仅本人；多角色取并集。
+- 默认提供两种范围：**全部**、**仅本人**（按 `created_by`）；多角色取并集。
+- **不内置部门等组织维度**。数据权限通过“范围提供者”接口实现：业务需要按部门、区域、门店等维度控制时，新增一个提供者并在角色上选用即可，不改动脚手架代码。
 - 通过模型 trait 提供 `visibleTo()` 查询范围与 `isVisibleTo()` 单条判定，Policy 复用同一规则。
 - **所有查询入口**都必须经过数据权限：列表、详情、**下拉选项接口**、导出、统计、全局搜索。
 - 禁止不带参数的 `withoutGlobalScopes()`（PHPStan 规则拦截），必须明确列出要去掉的作用域。
@@ -327,7 +337,7 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 | 富文本 | **保存时在后端净化**（`symfony/html-sanitizer`，落地前核实版本），去除脚本与危险属性 |
 | 上传 | 随机文件名；校验 MIME 与大小；**引用附件时校验归属**（只能使用自己上传或有权访问的附件） |
 | 路由参数 | 统一格式约束（数字 ID、ULID、UUID），非法参数直接 404 |
-| XSS 纵深防御 | Caddy 下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
+| XSS 纵深防御 | Web 服务器下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
 | 依赖 | CI 执行 `composer audit`、`npm audit` |
 | 日志 | 操作日志对密码、token 等字段脱敏；每个响应带 `X-Request-Id` |
 
@@ -344,7 +354,7 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 - 统计指标、复杂查询做成核心模块里独立的 Query 类。
 - 软删除是整套功能：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数生成。
 - 导出：`simple-excel` + 队列 + 完成通知，标准异步导出。
-- 对接第三方 API 时统一使用 Saloon（不作为核心依赖）。
+- 对接第三方 API 时统一使用 Saloon（不作为默认依赖）。
 
 ### 10.2 PHP 8.4 / 8.5 特性
 
@@ -356,12 +366,14 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 | 属性钩子、不对称可见性 | 用于数据对象、值对象、服务类；**不用于 Eloquent 模型字段** |
 | `new X()->method()` | 去掉多余括号 |
 | `array_find` / `array_any` / `array_all` / `array_first` / `array_last` | 替代简单循环 |
-| `#[\Deprecated]` | 公开 API 废弃流程（对开源框架尤为重要） |
+| `#[\Deprecated]` | 废弃公开方法时使用 |
 | `Uri\Rfc3986\Uri` | 网址解析与校验 |
 
 **前提**：落地前确认 Pint、PHPStan / Larastan、Rector、Pest、Scramble 全部支持所用新语法；先由 Rector 批量升级，再人工处理。
 
-### 10.3 常驻内存（Octane）规则
+### 10.3 常驻内存兼容规则
+
+默认运行在 PHP-FPM 下也必须遵守，保证随时可切换到 Octane + FrankenPHP：
 
 - 禁止用静态属性或单例保存请求相关数据；需要请求级状态时用 `#[Scoped]`、`Cache::memo()`、`Context`。
 - 禁止在请求中修改 `config()`。
@@ -371,8 +383,8 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 
 ### 10.4 代码生成
 
-- `edge:make-module`（随项目改名）：在核心生成业务模块，同时在 Admin 生成对应的同名目录；底层编排官方 `make:*` 命令与定制 stub。
-- `edge:make-app`：新建一个应用（Provider、路由、中间件组、测试目录、架构测试登记）。
+- `make:module`：在核心生成业务模块，同时在后台应用生成对应的同名目录；底层编排官方 `make:*` 命令与定制 stub。
+- `make:app`：新建一个应用（路由、中间件组、测试目录、架构测试登记）。
 - 生成内容包括：模型、迁移、工厂、Action、Policy（标准方法齐全）、Request、Resource、控制器、权限节点、路由、操作日志文案、**授权测试**、模块 README。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`。
 
@@ -382,62 +394,70 @@ Vben 的“刷新令牌”功能关闭；token 过期即重新登录。
 - `tests/Pest.php` 提供统一辅助：以某权限登录、断言无权限返回 403、断言数据权限过滤。
 - 每个接口至少覆盖：成功、无权限 403、数据权限之外 403/404、校验失败 422。
 - 核心安全模块（认证、权限、数据权限）运行 Pest 变异测试。
-- CI 在 Linux + PHP 8.5 + Octane 下运行全部测试。
+- CI 在 Linux + PHP 8.5 下运行全部测试，并在 Octane 下额外运行一遍，确保可无缝切换。
 
 ## 11. 运行、开发与部署
 
 ### 11.1 开发环境
 
-| 系统 | 方式 |
+| 方式 | 说明 |
 |---|---|
-| Linux | **Sail**（团队标准）；或本机 PHP 8.5 + Docker 跑数据库等服务 |
-| Windows | **WSL2**（项目放在 WSL 文件系统内）；或 Sail |
-| 原生 Windows + Herd | 仅用于编写普通代码：Octane / FrankenPHP、Horizon 不可用，不作为标准环境 |
+| Herd（Windows / macOS） | 本机开发的推荐方式，PHP-FPM 模式，与默认生产形态一致 |
+| Sail（Docker） | 团队统一环境；也用于验证 FrankenPHP |
+| 本机 PHP | `php artisan serve` |
 
-开发时同样用 `octane:start --server=frankenphp --watch` 运行，尽早暴露常驻内存问题。前端开发时用 Vite 代理把 `/api` 转发到后端。
+- 队列开发时用 `queue:listen`；Horizon 依赖 `pcntl`，Windows 本机不可用，仅在 Linux 环境使用。
+- 前端开发时用 Vite 代理把后台接口转发到后端，保持同源（会话模式的要求）。
 
 ### 11.2 部署形态
 
-**一个镜像，两个目录，Caddy 分流**：
+两种形态，代码完全相同，只是 Web 服务不同：
 
 ```
 /app/server/        Laravel（public/ 只放 Laravel 自身文件）
 /app/web/dist/      Vben 构建产物
 ```
 
-- `/api/*`、`/storage/*`、`/up` → Laravel（Octane worker）；
-- 其他路径 → `web/dist` 静态文件，找不到时回退到 `index.html`；
-- 带哈希的静态资源长期缓存，`index.html` 不缓存；
-- HTTPS 由 Caddy 自动申请证书。
+**默认：Nginx（或 Caddy）+ PHP-FPM**
 
-Dockerfile 多阶段构建：Node 构建前端 → Composer 安装后端 → `dunglas/frankenphp:php8.5` 最终镜像。Caddyfile 以 Octane 自带版本为基础扩展，放在 `deploy/`。构建产物不进 git。
+- 后台接口、`/sanctum/*`、`/storage/*`、`/up` → PHP-FPM；
+- 其他路径 → `web/dist` 静态文件，找不到时回退到 `index.html`；
+- 带哈希的静态资源长期缓存，`index.html` 不缓存。
+
+**可选：FrankenPHP（Octane worker 模式）**
+
+- 一个进程同时托管 API 与静态文件，Caddy 自动申请 HTTPS 证书；
+- 路由分流规则与默认形态相同。
+
+`deploy/` 同时提供两套配置（Nginx + PHP-FPM、Caddyfile + FrankenPHP）。镜像用多阶段构建：Node 构建前端 → Composer 安装后端 → 运行时镜像。构建产物不进 git。
 
 ### 11.3 进程
 
 | 进程 | 说明 |
 |---|---|
-| Octane（FrankenPHP） | HTTP，可按应用拆分多个进程 |
-| 队列 | Horizon（Redis）或 `queue:work`，由 Supervisor / systemd 管理 |
-| 调度 | `schedule:work` 或 cron |
+| Web | PHP-FPM，或 Octane（FrankenPHP） |
+| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理 |
+| 调度 | cron 调用 `schedule:run`，或 `schedule:work` |
 | Reverb | 启用实时推送时 |
 
 ### 11.4 发布流程
 
 1. 数据库迁移（迁移必须向下兼容）；
-2. 切换新镜像；
+2. 切换新代码或新镜像；
 3. `php artisan optimize`；
-4. `php artisan octane:reload`（**必需**，否则仍运行内存中的旧代码）。
+4. PHP-FPM：平滑重载 FPM（刷新 OPcache）；Octane：`php artisan octane:reload`（**必需**，否则仍运行内存中的旧代码）；
+5. `php artisan queue:restart`，让队列进程加载新代码。
 
-### 11.5 本地与线上的差异清单
+### 11.5 本地与线上的差异
 
 | 差异 | 保证手段 |
 |---|---|
-| 常驻内存 | §10.3 规则 + CI 在 Octane 下测试 |
+| 线上使用 Octane 时的常驻内存问题 | §10.3 规则 + CI 在 Octane 下测试 |
 | 文件名大小写、换行符 | CI 在 Linux 运行；`.gitattributes` 统一 LF |
 | Windows 缺失组件（Horizon、`df` 等） | 按环境注册，配置开关隔离 |
-| HTTPS、代理 | `APP_URL` 用 https；配置可信代理 |
-| 上传大小 | PHP 与 Caddy 的限制一致 |
-| PHP 版本与扩展 | `composer.json` 固定平台为 8.5；必要扩展用官方 Docker 镜像安装 |
+| HTTPS、代理、Cookie | `APP_URL` 用 https；线上 `SESSION_SECURE_COOKIE`；配置可信代理与 Sanctum 有状态域名 |
+| 上传大小 | PHP 与 Web 服务器的限制一致 |
+| PHP 版本与扩展 | `composer.json` 固定平台为 8.5；必要扩展在运行时镜像中安装 |
 
 ## 12. 依赖清单
 
@@ -448,13 +468,13 @@ Dockerfile 多阶段构建：Node 构建前端 → Composer 安装后端 → `du
 | 包 | 用途 |
 |---|---|
 | laravel/framework 13 | 框架 |
-| laravel/sanctum | 认证（token） |
-| laravel/fortify | 仅使用两步验证部件，关闭路由 |
-| laravel/octane 2.25 | 常驻内存运行 |
-| laravel/reverb 1.14 | 实时推送（可选） |
+| laravel/fortify 1.43 | **完整使用**：登录、两步验证、找回密码、邮箱验证、确认密码、个人资料 |
+| laravel/sanctum | SPA 会话认证 + token |
 | laravel/pulse 1.11 | 生产性能监控 |
-| laravel/horizon 5.52 | Redis 队列管理（需 pcntl，Linux） |
-| laravel/pennant 1.28 | 功能开关（可选） |
+| laravel/octane 2.25 | 可选：常驻内存运行（FrankenPHP） |
+| laravel/horizon 5.52 | 可选：Redis 队列管理（需 pcntl，Linux） |
+| laravel/reverb 1.14 | 可选：实时推送 |
+| laravel/pennant 1.28 | 可选：功能开关 |
 
 **spatie**
 
@@ -462,10 +482,10 @@ Dockerfile 多阶段构建：Node 构建前端 → Composer 安装后端 → `du
 |---|---|
 | laravel-permission 8.5 | 角色与权限存储 |
 | laravel-query-builder 7.3 | 列表筛选、排序、关联加载 |
-| laravel-activitylog 5.1 | 数据变更审计 |
+| laravel-activitylog 5.1 | 数据变更审计、操作日志、登录日志（统一存储，按日志名区分） |
 | laravel-backup 10.4 | 数据库与文件备份 |
-| laravel-health 1.42 | 健康检查（替代自写的系统信息检查） |
-| laravel-schedule-monitor 4.3 | 定时任务监控（替代自写的执行日志） |
+| laravel-health 1.42 | 健康检查 |
+| laravel-schedule-monitor 4.3 | 定时任务执行监控 |
 | simple-excel 3.11 | 流式导入导出 |
 
 **其他**
@@ -492,7 +512,7 @@ Dockerfile 多阶段构建：Node 构建前端 → Composer 安装后端 → `du
 
 ### 12.3 按需（写进规范，不默认安装）
 
-`saloonphp/saloon`（对接第三方 API）、`deptrac/deptrac`（模块变多后的分层可视化）、`spatie/laravel-medialibrary`、`laravel-model-states`、`laravel-pdf`、`laravel-webhook-*`、`laravel-multitenancy`、`laravel/passport`（开放平台）、`laravel/mcp`（AI 调用后台能力）。
+`saloonphp/saloon`（对接第三方 API）、`deptrac/deptrac`（模块变多后的分层可视化）、`spatie/laravel-medialibrary`（附件缩略图）、`laravel-model-states`、`laravel-pdf`、`laravel-webhook-*`、`laravel-multitenancy`、`laravel/passport`（开放平台）、`laravel/mcp`（AI 调用后台能力）。
 
 ### 12.4 明确不使用
 
@@ -504,27 +524,43 @@ Dockerfile 多阶段构建：Node 构建前端 → Composer 安装后端 → `du
 | Fractal | 官方 API Resource 已覆盖 |
 | dingo/api | 已停止维护（止步 Laravel 8） |
 | 自动生成 REST 的包（Orion、Lomkit） | 权限与业务规则难以精细控制；已有代码生成器 |
-| 响应格式包 | 30 行自写即可 |
-| Ray、Xdebug、Blackfire | 个人工具，不进框架依赖 |
+| 响应格式包 | 约 30 行即可实现 |
+| Ray、Xdebug、Blackfire | 个人工具，不进依赖 |
 
-## 13. 待决事项
+## 13. 自建基础设施清单
+
+只有下表中的能力需要自己写代码，其余全部由 Laravel 或 §12 中的包提供。每一项都尽量做薄：只写官方能力之上的“粘合层”。
+
+| 能力 | 自建内容 | 依托的官方能力 / 包 |
+|---|---|---|
+| Vben 响应格式 | 响应包装中间件 + 响应宏 | 框架响应宏 |
+| 菜单权限 | 菜单树（目录 / 菜单 / 按钮）、内置节点同步命令、按 Vben 路由结构输出菜单、按钮权限码接口 | spatie/laravel-permission、Gate |
+| 数据权限 | 范围提供者接口、默认“全部 / 仅本人”、模型 trait | Eloquent 查询范围、Policy |
+| 认证补充 | 登录日志、在线会话与强制下线、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
+| 操作日志 | 记录写请求的中间件（脱敏、请求 ID），写入 activitylog | spatie/laravel-activitylog、`Context` |
+| 字典 | 字典类型 / 字典项、缓存、`InDict` 校验规则、选项下发接口 | Cache、Validation |
+| 系统参数 | 后台可管理的键值参数、按类型转换、缓存、公开参数接口 | Cache、Casts |
+| 附件 | 上传记录、归属校验、删除时清理文件 | Storage |
+| 通知中心 | 我的通知、已读、全部已读接口 | Laravel 数据库通知 |
+| 公告 | 公告管理、发布后分批群发 | Notifications、`Bus::batch` |
+| 定时任务 / 失败任务 | 列表、立即执行、重试、删除接口 | spatie/laravel-schedule-monitor、`failed_jobs` |
+| 系统监控 | 健康状态与系统信息接口 | spatie/laravel-health、Pulse |
+| 枚举选项 | 统一枚举接口 + 选项下发接口 | PHP 枚举 |
+| 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
+| 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
+| 代码生成器 | `make:module`、`make:app`、定制 stub | 官方 `make:*` 命令、`stub:publish` |
+| 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
+
+## 14. 待决事项
 
 | 事项 | 现状 |
 |---|---|
-| 项目名 | 待定。候选 KeelAdmin、StrataAdmin、OctaAdmin；需确认 GitHub 组织名、域名、商标 |
-| 迁移文件位置 | 建议保留在 `database/migrations`（官方命令默认位置，全局顺序可控），文件名带模块前缀；待确认 |
-| 字典、系统参数、附件的去留 | 系统参数保留自研（界面可管理的键值对）；附件暂保留，需要缩略图时换 medialibrary |
+| 目录方案 | 是否尽量回归 Laravel 默认目录（核心放 `app/Models` 等默认位置，应用按 `Http` 子目录区分），以降低开发与学习成本 |
+| 应用注册方式 | 每个应用一个 ServiceProvider，还是统一在 `bootstrap/app.php` 中注册 |
+| 后台应用的名称 | 目前暂用 `Admin` |
+| 迁移文件位置 | 建议保留在 `database/migrations`（官方命令默认位置，全局顺序可控） |
+| 附件 | 暂保留自建，需要缩略图时换 medialibrary |
 | PHP 8.5 工具链兼容性 | 待在 8.5 环境实测 |
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
-| 后端管理 Caddy（域名、证书） | 暂不做；需要时采用 On-Demand TLS + 内部询问接口方案 |
-
-## 14. 附录：设计来源与取舍
-
-| 来源 | 借鉴 | 不借鉴 |
-|---|---|---|
-| Filament 5 | Panel 多入口、标准 Policy 方法（含批量、软删除）、安全规范（查询范围、字段暴露、URL 与 HTML 净化、上传）、枚举接口、多因素认证结构、模块化（按业务纵向切分） | 用 PHP 定义表单与表格、Livewire 相关、缺 Policy 时默认放行 |
-| Nova（仅公开的示例应用与旧版文档） | 关联操作授权、统一查询入口施加数据权限、Action 的可见与可执行分开授权、命名查询与指标 | 后端定义界面、Policy 中判断调用方（反面教材） |
-| Apiato / Porto | 按业务纵向切分、对外接口版本化、不暴露自增 ID、模块 README、强制使用生成器 | 仓储模式、Fractal、处处继承父类、过多层级；尚不支持 Laravel 13 |
-| madong、SaiAdmin 等 Webman 系 | — | 租户隔离默认放行、依赖混杂、缺少测试与 CI |
-| CatchAdmin | — | GET 请求默认不检查权限 |
+| 后端管理 Caddy（域名、证书） | 暂不做 |
