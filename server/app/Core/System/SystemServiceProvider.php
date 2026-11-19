@@ -5,16 +5,18 @@ namespace App\Core\System;
 use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPassword, UpdateUserProfileInformation};
 use App\Core\System\Commands\{SyncCommand, SyncDictsCommand, SyncPermissionsCommand, SyncSettingsCommand};
 use App\Core\System\Contracts\{DictRegistry, MenuRegistry, SettingRegistry};
-use App\Core\System\Enums\{PermissionType, SettingType, Status};
-use App\Core\System\Models\{Attachment, DictItem, DictType, Permission, Role, Setting, User};
-use App\Core\System\Services\{AllDataScope, DataScopeRegistry, DictRegistryService, EnumRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope, SettingRegistryService, Settings};
+use App\Core\System\Enums\{ExportFormat, ExportStatus, PermissionType, SettingType, Status};
+use App\Core\System\Exporters\UserExporter;
+use App\Core\System\Listeners\DeleteExportsOfDeletingUser;
+use App\Core\System\Models\{Attachment, DictItem, DictType, Export, Permission, Role, Setting, User};
+use App\Core\System\Services\{AllDataScope, DataScopeRegistry, DictRegistryService, EnumRegistry, ExporterRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope, SettingRegistryService, Settings};
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\{JsonResponse, Request};
-use Illuminate\Support\Facades\{Gate, RateLimiter};
+use Illuminate\Support\Facades\{Event, Gate, RateLimiter};
 use Illuminate\Support\{ServiceProvider, Str};
 use Laravel\Fortify\Fortify;
 
@@ -34,6 +36,9 @@ use Laravel\Fortify\Fortify;
  *
  * 字典、系统参数与枚举选项（设计文档 §6.7）：DictRegistry、SettingRegistry 扩展点（本模块的参数分组见 resources/settings.php）、
  * 同步命令 core:sync-dicts、core:sync-settings，以及 EnumRegistry 中本模块的枚举。
+ *
+ * 异步导出（设计文档 §6.10）：ExporterRegistry 扩展点（本模块登记用户列表的导出 system.user）；用户删除前删除他的导出（连同文件）。
+ * 完成通知由 Message 监听 ExportFinished 发送（System 不依赖 Message）。
  */
 class SystemServiceProvider extends ServiceProvider
 {
@@ -59,7 +64,7 @@ class SystemServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(MenuRegistry $menus, DataScopeRegistry $scopes, SettingRegistry $settings, EnumRegistry $enums): void
+    public function boot(MenuRegistry $menus, DataScopeRegistry $scopes, SettingRegistry $settings, EnumRegistry $enums, ExporterRegistry $exporters): void
     {
         Relation::morphMap([
             'permission' => Permission::class,
@@ -68,6 +73,7 @@ class SystemServiceProvider extends ServiceProvider
             'dict_item' => DictItem::class,
             'setting' => Setting::class,
             'attachment' => Attachment::class,
+            'export' => Export::class,
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
@@ -77,7 +83,14 @@ class SystemServiceProvider extends ServiceProvider
             'status' => Status::class,
             'permission_type' => PermissionType::class,
             'setting_type' => SettingType::class,
+            'export_status' => ExportStatus::class,
+            'export_format' => ExportFormat::class,
         ]);
+        $exporters->register([
+            'system.user' => UserExporter::class,
+        ]);
+
+        Event::listen('eloquent.deleting: '.User::class, DeleteExportsOfDeletingUser::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([SyncCommand::class, SyncPermissionsCommand::class, SyncDictsCommand::class, SyncSettingsCommand::class]);

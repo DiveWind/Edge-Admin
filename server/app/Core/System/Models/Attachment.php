@@ -2,13 +2,14 @@
 
 namespace App\Core\System\Models;
 
+use App\Core\System\Contracts\PrivateAttachable;
 use App\Core\System\Models\Concerns\HasDataScope;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use Database\Factories\Core\System\Models\AttachmentFactory;
 use Illuminate\Database\Eloquent\Attributes\{Fillable, Scope};
 use Illuminate\Database\Eloquent\{Builder, Model, Prunable};
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphTo};
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphTo, Relation};
 use Illuminate\Support\Facades\{DB, Storage};
 use Illuminate\Support\Str;
 use Throwable;
@@ -20,7 +21,8 @@ use Throwable;
  * - name：客户端提供的原始文件名（只用于显示与下载时的文件名）；
  * - mime_type、extension：服务端按文件内容探测的 MIME 与由它推断的扩展名（不信任客户端的 Content-Type 与扩展名）；
  * - size（字节）、sha256；created_by：上传者（HasDataScope 的归属列，§8.4）；
- * - attachable（可空的多态关联）与 collection（用途名，如 `avatar`）：绑定对象，为空表示尚未绑定（孤儿）。
+ * - attachable（可空的多态关联）与 collection（用途名，如 `avatar`）：绑定对象，为空表示尚未绑定（孤儿）；
+ *   绑定对象实现 PrivateAttachable（如导出记录）时是“私有附件”：访问权只跟随记录，附件管理不列出、管理员不能访问（§6.10）。
  *
  * 写入只在 System 模块的 Action 中进行（StoreAttachment、SyncAttachments、DeleteAttachment，设计文档 §5.2）。
  * 记录删除后，文件在事务提交后删除（booted() 的 deleted 事件），事务回滚时文件保留。
@@ -104,6 +106,24 @@ class Attachment extends Model
     }
 
     /**
+     * 是否绑定在实现 PrivateAttachable 的记录上（按多态别名判断，绑定对象已不存在时同样成立）。
+     */
+    public function isPrivate(): bool
+    {
+        return $this->attachable_type !== null && in_array($this->attachable_type, self::privateAttachableTypes(), true);
+    }
+
+    /**
+     * 实现 PrivateAttachable 的模型的多态别名（由多态别名表计算，不缓存）。
+     *
+     * @return list<string>
+     */
+    public static function privateAttachableTypes(): array
+    {
+        return array_keys(array_filter(Relation::morphMap(), fn (string $class): bool => is_subclass_of($class, PrivateAttachable::class)));
+    }
+
+    /**
      * 是否可以内联预览（图片白名单，不含 SVG）。
      */
     public function isPreviewable(): bool
@@ -137,6 +157,17 @@ class Attachment extends Model
         $query->where('attachable_type', $record->getMorphClass())
             ->where('attachable_id', $record->getKey())
             ->where('collection', $collection);
+    }
+
+    /**
+     * 去掉私有附件（绑定在 PrivateAttachable 记录上的，如导出的文件）：附件管理的列表使用。
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function withoutPrivate(Builder $query): void
+    {
+        $query->where(fn (Builder $query) => $query->whereNull('attachable_type')->orWhereNotIn('attachable_type', self::privateAttachableTypes()));
     }
 
     /**

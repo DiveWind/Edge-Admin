@@ -11,7 +11,7 @@
 | 菜单节点自身的权限码就是“查看 / 列表”权限。日志只读，没有按钮（不提供删除、清空，过期日志由调度清理）；
 | 在线会话的强制下线（会话与 token）是按钮 monitor.online.logout。
 | 定时任务（schedule，避免与队列任务 job 混淆）：立即执行 monitor.schedule.run；失败任务：重试、删除（含清空）；
-| 健康检查与系统信息合并为一页（monitor.health），立即检查是按钮 monitor.health.check。
+| 健康检查与系统信息合并为一页（monitor.health），立即检查是按钮 monitor.health.check；备份页 monitor.backup，立即备份是按钮 monitor.backup.run。
 |
 */
 
@@ -75,6 +75,17 @@ return [
                 'meta' => ['title' => 'monitor.health.title', 'icon' => 'lucide:heart-pulse', 'order' => 60],
                 'buttons' => [
                     'check' => 'monitor.health.check',
+                ],
+            ],
+            [
+                // 备份（§6.10）：备份列表与各备份盘的健康状态；立即备份是按钮 monitor.backup.run。不提供下载备份
+                'name' => 'monitor.backup',
+                'type' => 'menu',
+                'path' => '/monitor/backup',
+                'component' => '/monitor/backup/list',
+                'meta' => ['title' => 'monitor.backup.title', 'icon' => 'lucide:archive', 'order' => 70],
+                'buttons' => [
+                    'run' => 'monitor.backup.run',
                 ],
             ],
         ],

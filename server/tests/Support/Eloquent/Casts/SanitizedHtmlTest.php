@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 */
 
 /**
- * 使用 SanitizedHtml 的模型（不入库）。
+ * 使用 SanitizedHtml 的模型（不入库）：content 为默认档位，remark 为 basic 档位，note 为不存在的档位。
  */
 function richTextModel(): Model
 {
@@ -18,7 +18,7 @@ function richTextModel(): Model
     {
         protected function casts(): array
         {
-            return ['content' => SanitizedHtml::class];
+            return ['content' => SanitizedHtml::class, 'remark' => SanitizedHtml::class.':basic', 'note' => SanitizedHtml::class.':missing'];
         }
     };
 }
@@ -57,3 +57,16 @@ it('keeps null as null', function (): void {
 
     expect($model->getAttribute('content'))->toBeNull();
 });
+
+it('sanitizes with the profile given as the cast parameter', function (): void {
+    $model = richTextModel();
+    $model->setAttribute('content', '<p>Hi</p><img src="https://example.com/a.png">');
+    $model->setAttribute('remark', '<p>Hi</p><img src="https://example.com/a.png">');
+
+    expect($model->getAttribute('content'))->toContain('<img')
+        ->and($model->getAttribute('remark'))->toBe('<p>Hi</p>');
+});
+
+it('fails when the cast names an undefined profile', function (): void {
+    richTextModel()->setAttribute('note', '<p>Hi</p>');
+})->throws(InvalidArgumentException::class, 'The HTML sanitizer profile [missing] is not defined');

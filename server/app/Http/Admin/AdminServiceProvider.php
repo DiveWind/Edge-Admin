@@ -46,6 +46,11 @@ class AdminServiceProvider extends ServiceProvider
     public const string UPLOAD_LIMITER = self::NAME.'-uploads';
 
     /**
+     * 发起导出的限流器名（POST /<列表路径>/export，设计文档 §6.10）：路由上用 `throttle:admin-exports`。
+     */
+    public const string EXPORT_LIMITER = self::NAME.'-exports';
+
+    /**
      * Register any application services.
      *
      * Fortify 的路由挂在本入口下（admin 中间件组），本入口不加载时不注册；每次启动时按配置重新设置（静态开关，测试中会重建应用）。
@@ -98,7 +103,7 @@ class AdminServiceProvider extends ServiceProvider
 
     /**
      * 每分钟请求上限：已登录按用户计数，未登录按 IP 计数。运维动作另有 OPS_LIMITER（ops_rate_limit）、上传另有 UPLOAD_LIMITER
-     * （upload_rate_limit），同样按用户计数。
+     * （upload_rate_limit）、发起导出另有 EXPORT_LIMITER（export_rate_limit），同样按用户计数。
      */
     protected function configureRateLimiting(): void
     {
@@ -109,6 +114,9 @@ class AdminServiceProvider extends ServiceProvider
             ->by(self::rateLimitKey($request)));
 
         RateLimiter::for(self::UPLOAD_LIMITER, fn (Request $request): Limit => Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.upload_rate_limit'))
+            ->by(self::rateLimitKey($request)));
+
+        RateLimiter::for(self::EXPORT_LIMITER, fn (Request $request): Limit => Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.export_rate_limit'))
             ->by(self::rateLimitKey($request)));
     }
 

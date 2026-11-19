@@ -95,8 +95,8 @@
 server/
 ├── app/
 │   ├── Core/                         内核（尽量不改）
-│   │   ├── System/                   用户、角色、菜单权限、字典、参数、附件
-│   │   ├── Monitor/                  日志、在线会话、定时任务、系统监控
+│   │   ├── System/                   用户、角色、菜单权限、字典、参数、附件、异步导出
+│   │   ├── Monitor/                  日志、在线会话、定时任务、系统监控、备份
 │   │   └── Message/                  公告、通知
 │   │
 │   ├── Modules/                      业务模块
@@ -245,7 +245,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
 | 日志 | 数据变更审计写入 activitylog 时使用本模块的日志名（模块名小写，如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
 | 通知 | 定义本模块的通知类：继承 `App\Core\Message\Notifications\InboxNotification`，实现 `type()`（对外的类型名，以模块名开头，如 `content.article_approved`）与 `toInbox()`（返回 `NotificationContentData`：`title`、`content`、`level`、`link`、`params`），用 `$user->notify()` 发送，即统一出现在通知中心；停用的用户不接收，项目装了 Reverb 后在 `via()` 中加上 `broadcast` 即可实时推送（§6.9）。`tests/Arch` 强制 `app/` 中的通知类都继承它、`type()` 格式合法且唯一 |
-| 异步导出 | 实现导出接口，即接入统一的异步导出、完成通知与下载 |
+| 异步导出 | 实现 `App\Core\System\Contracts\Exporter`（显示名、权限码、列、按“操作者 + 列表参数”构造查询——**调用该列表的 Query 类**，复用同一份筛选白名单与数据范围——与逐行映射），在 Provider 的 `boot()` 中向 `App\Core\System\Services\ExporterRegistry` 登记对外名称（如 `system.user`），列表再提供一个导出入口（`POST /<列表路径>/export`，权限码 `<菜单>.export`），即接入统一的异步导出（队列、simple-excel 流式写出）、完成通知与下载（附件的签名地址），§6.10 |
 | 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在 Provider 的 `boot()` 中向 `App\Core\System\Services\EnumRegistry` 登记对外名称（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
 | Core 事件 | 监听 Core 发出的事件（如用户被删除），清理本模块的数据 |
 
@@ -305,9 +305,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、唯一性冲突。
-  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）与并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9）没有对应的表单字段，用 `message` 说明即可。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）、查看或删除他人的导出（§6.10）。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、导出的筛选与排序不在白名单或格式不对（`filter.<字段>` 等，与列表相同，§6.10）、唯一性冲突。
+  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）、并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9）与取决于全局状态、没有对应字段的 422（同时进行的导出超过上限、立即备份时备份任务未同步，§6.10）用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
 ### 6.2 认证与菜单相关接口
@@ -395,6 +395,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `GET /menu/all` | Vben 路由树（§6.2） | 登录即可 |
 | `GET /system/users` | 分页 `{ items, total }`；筛选 `username`、`name`、`email`、`status`、`created_at`；含 `roles`（`[{ name, title }]`） | `system.user` |
 | `GET /system/users/{user}` | 详情，含 `roles`（`[{ name, title }]`） | `system.user` |
+| `POST /system/users/export` | 异步导出列表：`{ format, filter, sort }`，筛选与排序同列表（§6.10） | `system.user.export` |
 | `POST /system/users` | 新增：`username`、`name`、`email`、`password`、`roles`（角色标识 `string[]`）、`status` | `system.user.create` |
 | `PUT /system/users/{user}` | 修改：字段同新增，不含 `password` | `system.user.update` |
 | `DELETE /system/users/{user}` | 删除 | `system.user.delete` |
@@ -435,7 +436,8 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - Policy（`PermissionPolicy`）方法：`viewAny` / `view`（`system.menu`）、`create`、`update`、`delete`（删除内置节点 403）；节点不按数据范围过滤。
 - **用户**的输出字段：`id`、`username`、`name`、`email`（可为 null）、`status`、`roles`、`created_at`、`updated_at`；不输出密码与两步验证的字段。
   - `roles` 在**读接口**（列表、详情，以及新增、修改、启停的响应）中输出为对象数组 `[{ name: 标识, title: 显示名 }]`（含停用的角色，按 `sort`、`id` 排序）：列表要显示角色名，而能看用户列表的人不一定有角色下拉（`/system/roles/options`）的权限。**写接口**的 `roles` 入参是角色标识 `string[]`，前端回填表单时取 `roles.map(r => r.name)`。
-  - 列表：经过数据范围（`visibleTo`，§8.4）；筛选 `username`、`name`、`email`（模糊）、`status`（精确）、`created_at`（区间，§6.3）；排序 `id`、`username`、`created_at`，默认 `-id`。
+  - 列表：经过数据范围（`visibleTo`，§8.4）；筛选 `username`、`name`、`email`（模糊）、`status`（精确）、`created_at`（区间，§6.3）；排序 `id`、`username`、`created_at`，默认 `-id`。查询在 Query 类 `UserList` 中，导出（`UserExporter`，§6.10）用同一个。
+  - 导出：列 `id`、`username`、`name`、`email`、`status`（显示名）、`roles`（角色显示名，逗号分隔）、`created_at`；只含操作者在列表中能看到的用户（同一份筛选与数据范围）。
   - 新增：`username`（必填，`alpha_dash`，最长 64，统一存为小写，转小写后唯一）、`name`（必填）、`email`（可空、唯一）、`password`（必填，规则同修改密码：`Password::defaults()`）、`roles`（已存在角色的标识，可省略）、`status`（默认 `enabled`）。`created_by` 写入操作者。成功返回 201。
   - 修改：字段同新增，不含 `password`（提交即 422）；未提交 `roles` 表示角色不变；提交的 `status` 与当前不同时按启用 / 停用处理（规则同状态接口）。
   - 重置密码：`{ password }`，规则同新增；成功返回 `data: null`，对方全部的会话与 token 失效。不能重置自己的密码（403，自己的密码在个人设置中验证当前密码后修改）。
@@ -475,8 +477,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `GET /monitor/health` | 最近一次健康检查的结果 | `monitor.health` |
 | `POST /monitor/health/check` | 立即检查：同步执行全部检查，返回结果（限流） | `monitor.health.check` |
 | `GET /monitor/system-info` | 系统信息（只读） | `monitor.health` |
+| `GET /monitor/backups`、`GET /monitor/backups/destinations`、`POST /monitor/backups/run` | 备份列表、各备份盘的健康状态、立即备份（§6.10） | `monitor.backup`、`monitor.backup.run` |
 
-- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）、`monitor.schedule`（`/monitor/schedule`，组件 `/monitor/schedule/list`，按钮 `monitor.schedule.run`）、`monitor.failed-job`（`/monitor/failed-job`，组件 `/monitor/failed-job/list`，按钮 `monitor.failed-job.retry`、`monitor.failed-job.delete`）、`monitor.health`（`/monitor/health`，组件 `/monitor/health/index`，按钮 `monitor.health.check`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token；健康检查与系统信息合并为一页（`monitor.health`）。
+- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）、`monitor.schedule`（`/monitor/schedule`，组件 `/monitor/schedule/list`，按钮 `monitor.schedule.run`）、`monitor.failed-job`（`/monitor/failed-job`，组件 `/monitor/failed-job/list`，按钮 `monitor.failed-job.retry`、`monitor.failed-job.delete`）、`monitor.health`（`/monitor/health`，组件 `/monitor/health/index`，按钮 `monitor.health.check`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token；健康检查与系统信息合并为一页（`monitor.health`）。备份页 `monitor.backup`（按钮 `monitor.backup.run`）见 §6.10。
 - 定时任务用 `schedule`（Laravel 的“任务调度”，`schedule:*` 命令）而不是 `job` 命名：`job` 在 Laravel 中指队列任务，与相邻的失败任务（`failed-job`）混淆。
 - 路由参数加格式约束（§9）：`{operation_log}`、`{login_log}`、`{token}`、`{schedule}` 只匹配数字，`{session}` 只匹配 16 位字母与数字，`{failed_job}` 只匹配 UUID。
 
@@ -549,7 +552,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 执行过程基于 `schedule:run`：派发 `ScheduledTaskStarting` → `$event->run()`（遵守 `withoutOverlapping()` 的互斥锁）→ 正常返回时 `ScheduledTaskFinished`（退出码非 0 时 schedule-monitor 记为 `failed`，带 `exit_code`、`runtime`），抛出异常时 `ScheduledTaskFailed`（带 `failure_message`）；异常只 `report()`。因此 schedule-monitor 照常记录：手动执行与定时执行在同一份执行记录中，手动执行一次只有“`starting` + 一条 `finished` 或 `failed`”。
   - 与 Laravel 13 的 `ScheduleRunCommand::runEvent()` 有一处不同：它在退出码非 0 时先派发 `ScheduledTaskFinished` 再派发 `ScheduledTaskFailed`，schedule-monitor 把两者都记为 `failed`，定时执行的这种失败会留下两条 `failed`（框架与包的行为，不改）。手动执行在退出码非 0 时不再派发 `ScheduledTaskFailed`，避免重复；代价是监听 `ScheduledTaskFailed` 的代码收不到这种手动执行的失败。谁点的执行见操作日志（`admin.monitor.schedules.run`）。与 `schedule:test` 相同，在前台执行（忽略 `runInBackground()`），不检查 `when()` / `skip()`、`onOneServer()` 与调度的暂停状态：手动执行就是明确要执行一次。
   - 只执行一次（`#[Tries(1)]`，失败不自动重试）；同一任务在排队或执行期间再次点击不会重复入队（`ShouldBeUnique`，按任务名加锁，最长 1 小时）。接口立即返回 `data: null`，执行结果在执行记录中查看。
-  - 在 worker 中执行，受 worker 的 `--timeout`（默认 60 秒）限制；耗时长的任务（备份等）需调大 worker 的 timeout 与队列连接的 `retry_after`，或等待调度执行。队列驱动为 `sync` 时在请求中同步执行（只用于开发、测试）。
+  - 在 worker 中执行，受 worker 的 `--timeout`（默认 60 秒）限制；耗时长的任务（备份等，§6.10）需调大 worker 的 timeout 与队列连接的 `retry_after`，或等待调度执行。队列驱动为 `sync` 时在请求中同步执行（只用于开发、测试）。
 
 **失败任务**（框架的 `failed_jobs`）
 
@@ -576,8 +579,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   | `DebugMode` | `APP_DEBUG` 为 false |
   | `Environment` | 环境为 `production` |
   | `OptimizedApp` | 配置、路由、事件已缓存（`php artisan optimize`） |
+  | `Backups` | 只在备份调度开启时注册（`CORE_BACKUP_SCHEDULE`，未设置时只有 production 开启）：每个备份盘都健康（可访问、最新备份不超过 `BACKUP_MAX_AGE_DAYS` 天、总量不超过 `BACKUP_MAX_STORAGE_MB`，与 `backup:monitor` 同一套规则，§6.10） |
 
-  开发环境中后三项失败是预期的。Redis、Horizon、备份等检查在引入对应组件时再加。
+  开发环境中 `DebugMode`、`Environment`、`OptimizedApp` 与没有备份时的 `Backups` 失败是预期的。Redis、Horizon 等检查在引入对应组件时再加。
 - 结果存储：包自带的 `CacheHealthResultStore`，只保留最近一次结果，不建表、不需要清理（缓存 `HEALTH_CACHE_STORE`，默认为默认缓存）。队列与调度的心跳同样存在缓存中，因此缓存必须是 Web、worker、调度进程共享的驱动（database、Redis、file），不能是 `array`。
 - 调度（`routes/console.php`，都 `->doNotMonitor()`）：每分钟 `health:check --no-notification`（执行检查并保存结果）、`health:schedule-check-heartbeat`、`health:queue-check-heartbeat`。包的通知关闭（`HEALTH_NOTIFICATIONS_ENABLED`，默认 false）。
 - **不开放包自带的 HTTP 端点**：不注册 `HealthCheckResultsController` / `HealthCheckJsonResultsController` 的路由，`health.oh_dear_endpoint.enabled` 为 false。给负载均衡用的存活探针使用 Laravel 自带的 `/up`（`bootstrap/app.php` 的 `health`）：只表示应用能启动并处理请求，不检查数据库等依赖，避免依赖抖动时整组实例被摘除。
@@ -608,7 +612,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - Policy：`ScheduledTaskPolicy`（`viewAny` / `view`：`monitor.schedule`；`run`：`monitor.schedule.run`）、`ScheduledTaskLogPolicy`（`viewAny` / `view`：`monitor.schedule`）、`FailedJobPolicy`（`viewAny` / `view`：`monitor.failed-job`；`retry`、`retryAny`：`monitor.failed-job.retry`；`delete`、`deleteAny`（清空）：`monitor.failed-job.delete`），其余方法拒绝。执行记录接口检查的是所属任务的 `view`。
 - 健康检查与系统信息没有模型：控制器直接声明权限码（`#[Authorize('monitor.health')]`、`#[Authorize('monitor.health.check')]`），由 `Gate::before` 判定（§8.1）。
 - **不按数据范围过滤**：定时任务、失败任务、健康状态与系统信息属于系统本身，不属于、也不“关于”某个用户（没有 `created_by`、causer 或所属用户可以委托，§8.4），能否访问只由权限码决定。失败任务的 payload 与异常可能含任意用户的数据，只授予可信的运维角色。
-- **限流**：立即执行、重试（单条与全部）、立即检查在 admin 入口的总限流之外，另经过 `admin-ops` 限流器：每个用户每分钟 `config('core.apps.admin.ops_rate_limit')`（`CORE_ADMIN_OPS_RATE_LIMIT`，默认 10）次，超过返回 429。
+- **限流**：立即执行、重试（单条与全部）、立即检查、立即备份（§6.10）在 admin 入口的总限流之外，另经过 `admin-ops` 限流器：每个用户每分钟 `config('core.apps.admin.ops_rate_limit')`（`CORE_ADMIN_OPS_RATE_LIMIT`，默认 10）次，超过返回 429。
 
 ### 6.7 字典、参数与选项接口
 
@@ -705,13 +709,13 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - System 声明的公开参数：`site.name`（站点名称，默认 `config('app.name')`）、`site.login_notice`（登录页提示文案，`text`，默认空字符串）。
 - System 声明的其他分组：`auth`（`auth.login_rate_limit`，§7.2）、`attachment`（上传的类型白名单 `attachment.allowed_extensions` 与大小上限 `attachment.max_size`，§6.8）。
 
-**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8），已读通知的保留天数、公告每批发送的人数与通知链接（§6.9）同样是部署级配置。
+**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8），已读通知的保留天数、公告每批发送的人数与通知链接（§6.9），导出的保留时长、并发上限、分块大小、超时、通知链接与发起导出的限流（§6.10），富文本净化的档位（§9），备份的盘、保留策略与通知（`config/backup.php`，§6.10）同样是部署级配置。
 
 **枚举选项**（`GET /options/enums?names=a,b`）
 
 - `names` 必填，逗号分隔的对外名称；响应是以名称为键的对象，按请求顺序，每个枚举的值是 `[{ value, label, color? }]`（按 `cases()` 顺序），`label` 是 `HasLabel::label()`，**按 `Accept-Language` 翻译**（与提示文案相同，§6.1）；枚举另外实现了 `HasColor` 时每个选项有 `color`（规则同字典项的 `color`），没有实现时不输出该键。
 - **显式白名单**：只下发在 `EnumRegistry` 中登记过对外名称的枚举，名称不在登记中 → 422（`names`），不按类名反射。登记时校验：名称为小写点分标识、不重复，类是实现 `HasLabel` 的 backed enum；实现了 `HasColor` 的，每个 case 的颜色都合法。模块在 Provider 的 `boot()` 中登记：`$enums->register(['content.article_status' => ArticleStatus::class])`。
-- 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）；Message 登记了 `notification_level`（`NotificationLevel`，有颜色）、`announcement_status`（`AnnouncementStatus`，有颜色）、`announcement_target`（`AnnouncementTarget`，§6.9）。
+- 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）；Message 登记了 `notification_level`（`NotificationLevel`，有颜色）、`announcement_status`（`AnnouncementStatus`，有颜色）、`announcement_target`（`AnnouncementTarget`，§6.9）；System 另登记了导出的 `export_status`（`ExportStatus`，有颜色：`queued` 为 `default`、`running` 为 `processing`、`completed` 为 `success`、`failed` 为 `error`）、`export_format`（`ExportFormat`，§6.10）。
 - **登录即可访问**：枚举是代码中的固定集合，不是业务数据；不开放给未登录请求（登录页不需要），默认拒绝。不缓存（直接由代码计算）。
 
 **声明与同步**
@@ -813,7 +817,7 @@ return [
 
 1. 未绑定的附件：只有**上传者本人**可以访问（上传后、提交表单前的预览）；
 2. 已绑定的附件：**委托给绑定对象**——能 `view` 那条记录的人才能访问（`$actor->can('view', $attachment->attachable)`，即那条记录的 Policy，含它的数据范围）。上传者本人也不例外：附件交给记录之后，访问权就跟随记录。与日志“委托给 causer”（§6.6）是同一思路，业务模块新增的记录类型不用为附件写任何授权代码；
-3. 以上都不满足时：有 `system.attachment` 且附件在数据范围内（按上传者 `created_by`，§8.4）也可以访问——附件管理员在管理页中查看、下载。
+3. 以上都不满足时：有 `system.attachment` 且附件在数据范围内（按上传者 `created_by`，§8.4）也可以访问——附件管理员在管理页中查看、下载。绑定对象实现了标记接口 `App\Core\System\Contracts\PrivateAttachable`（如导出记录，§6.10）时这一条不适用：访问权只跟随记录。
 4. 否则 403。绑定对象已不存在（理论上已随记录删除）时第 2 条不成立。
 
 业务记录自己的接口输出附件时（如文章详情带封面），由入口的 `AttachmentResource` 签发 URL：记录已经通过了它自己的 `view`，不再逐个检查附件。
@@ -827,7 +831,7 @@ return [
 
 **附件管理**（`GET /system/attachments`、`DELETE /system/attachments/{attachment}`）
 
-- 列表：经过数据范围（`visibleTo`，按上传者）；预加载 `creator`；筛选 `name`、`mime_type`（模糊，如 `image/`）、`created_by`、`collection`（精确）、`is_bound`（`true` / `false`，`1` / `0`）、`created_at`（区间，§6.3）；排序 `id`、`size`、`created_at`，默认 `-id`。
+- 列表：经过数据范围（`visibleTo`，按上传者）；不含绑定在 `PrivateAttachable` 记录上的附件（如导出的文件，§6.10）；预加载 `creator`；筛选 `name`、`mime_type`（模糊，如 `image/`）、`created_by`、`collection`（精确）、`is_bound`（`true` / `false`，`1` / `0`）、`created_at`（区间，§6.3）；排序 `id`、`size`、`created_at`，默认 `-id`。
 - 删除：成功返回 `data: null`，记录与文件一起删除，**文件在事务提交后才删**（回滚时文件保留）。**已绑定的附件不能删除 —— 403**（只看附件本身就能判定，§6.1）：它被某条记录使用（如某人的头像），要删请在那条记录中移除或替换它（`SyncAttachments` 会删除被替换的附件），或删除那条记录。未绑定的孤儿可以删，也会被自动清理。
 - Policy（`AttachmentPolicy`）：`viewAny`（`system.attachment`）、`view`（上文“访问权”）、`create`（登录即可）、`delete`（`system.attachment.delete`、未绑定、数据范围内），其余方法拒绝（附件没有修改）。
 
@@ -935,9 +939,9 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 
 - 表 `announcements`：`title`（最长 255）、`content`（净化后的 HTML）、`level`（`NotificationLevel`，默认 `info`）、`status`（`AnnouncementStatus`：`draft` 草稿、`published` 已发布、`revoked` 已撤回）、`target`（`AnnouncementTarget`：`all` 全部用户、`roles` 指定角色）、`published_at`、`published_by`（发布人）、`revoked_at`、`created_by`（`published_by`、`created_by` 为外键，用户删除后置空）、时间戳；目标角色在 `announcement_role`（外键级联：删除公告或角色时一并删除）。模型 `Announcement`（多态别名 `announcement`），`HasDataScope`（归属列 `created_by`）、`HasAttachments`（用途 `attachments`）。三个枚举登记为 `notification_level`、`announcement_status`、`announcement_target`（§6.7）。
 - 不支持“指定用户”：需要一个按数据范围过滤的用户选择接口，而按角色已覆盖多数场景；以后需要时加一种 `target` 与关联表。不支持定时发布。
-- **富文本**（§9）：`content` 是 HTML，**保存时净化**：模型的类型转换 `App\Support\Eloquent\Casts\SanitizedHtml` 在写入属性时调用 `symfony/html-sanitizer`，任何写入路径（Action、工厂、填充）存进库的都是净化后的内容，接口输出的也就是它。规则（`AppServiceProvider` 中绑定的 `HtmlSanitizerInterface` 单例，无状态）：`allowSafeElements()`（W3C 的安全元素与属性：去掉 `script`、`style`、`iframe`、`form`、`on*` 事件属性等）；链接只允许 `http`、`https`、`mailto`，图片等媒体只允许 `http`、`https`（不允许 `javascript:`、`data:`）；`a` 一律加 `rel="noopener noreferrer"`；输入最长 1,000,000 字节（包的默认 20000 字节，超出部分会被静默截掉）。第 9 步把它扩展为通用的净化入口（§13）。
+- **富文本**（§9）：`content` 是 HTML，**保存时净化**：模型的类型转换 `App\Support\Eloquent\Casts\SanitizedHtml` 在写入属性时调用 `symfony/html-sanitizer`，任何写入路径（Action、工厂、填充）存进库的都是净化后的内容，接口输出的也就是它。规则（`AppServiceProvider` 中绑定的 `HtmlSanitizerInterface` 单例，无状态）：`allowSafeElements()`（W3C 的安全元素与属性：去掉 `script`、`style`、`iframe`、`form`、`on*` 事件属性等）；链接只允许 `http`、`https`、`mailto`，图片等媒体只允许 `http`、`https`（不允许 `javascript:`、`data:`）；`a` 一律加 `rel="noopener noreferrer"`；输入最长 1,000,000 字节（包的默认 20000 字节，超出部分会被静默截掉）。公告使用默认的 `rich` 档位（含图片），档位与声明方式见 §9。
   - 不只存纯文本或 Markdown 的原因：后台的公告编辑器产出 HTML；Markdown 渲染成 HTML 同样要净化，只是把净化挪到了前端；§9 已选定“保存时在后端净化”，现在就按它存，以后不用迁移数据。
-  - 内容中的图片只能引用外部 `http(s)` 地址：附件的签名地址会过期，不要嵌进正文；文件作为公告的附件（`attachment_ids`）。
+  - 内容中的图片只能引用外部 `http(s)` 地址（可用 `CORE_HTML_MEDIA_HOSTS` 限定为自己的图床，§9）：附件的签名地址会过期，不要嵌进正文；文件作为公告的附件（`attachment_ids`）。
 - 输出字段：`id`、`title`、`level`、`status`、`target`、`roles`（`[{ name, title }]`，目标为全部用户时为 `[]`）、`published_at`、`publisher`（`{ id, username, name }`，未发布或发布人已删除时为 null）、`revoked_at`、`created_by`、`created_at`、`updated_at`；详情与新增、修改、发布、撤回的响应另含 `content` 与 `attachments`（附件数组，格式同 §6.8，签名地址由本接口签发）。列表不含 `content`、`attachments`。
 - 列表：经过数据范围（`visibleTo`）；筛选 `title`（模糊）、`status`、`level`、`target`（精确）、`created_at`、`published_at`（区间）；排序 `id`、`created_at`、`published_at`，默认 `-id`。
 - 新增、修改：`title`、`content`（最长 65535 字符，按净化前计）、`target` 必填；`level` 可选（新增默认 `info`，修改时未提交表示不变）；`roles`（角色标识 `string[]`，已存在的角色）在 `target` 为 `roles` 时必填且不能为空，为 `all` 时不能提交非空值（422，`roles`），保存时按 `target` 整体替换目标角色；`attachment_ids`（附件 id 数组，`OwnedAttachment`：自己上传的未绑定附件，或本公告已有的附件，§6.8）在修改时未提交表示不变，提交 `[]` 去掉全部附件。新增的公告是草稿，`created_by` 写入操作者，成功返回 201。
@@ -956,6 +960,101 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
   - 详情：`AnnouncementPolicy::read`——已发布且目标包含操作者，否则 403（草稿、已撤回、不是发给自己的）。附件的签名地址由详情接口签发；`/attachments/{id}` 的访问权委托给公告的 `view`（§6.8），只对公告管理员开放。
 - **授权**（`AnnouncementPolicy`）：`viewAny` / `view`（`message.announcement`）、`create`、`update`（草稿）、`delete`（不是已发布）、`publish`（草稿）、`revoke`（已发布）、`viewFormOptions`（目标角色下拉：`create` 或 `update`）；记录级方法都检查数据范围（`isVisibleTo`，按 `created_by`：公告是管理员创建的业务记录，§8.4）；`read`（我收到的公告）不需要权限码、不按数据范围，只看是否发给了操作者。
 - **目标角色下拉**：与 `/system/roles/options` 相同（启用角色，按 `sort`、`id`），但按公告的权限码授权：能写公告的人不一定能管理用户。
+
+### 6.10 导出与备份接口
+
+前缀与 §6.5 相同。**异步导出**属于内核模块 `app/Core/System`（导出的文件就是附件，§6.8），完成通知由 Message 发送（System 不依赖 Message，通过事件，下文）；**备份**属于 `app/Core/Monitor`。接口在 `app/Http/Admin/System`、`app/Http/Admin/Monitor`。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `POST /system/users/export` | 导出用户列表：`{ format, filter, sort }`（`filter`、`sort` 与列表相同），创建导出任务并入队，返回导出记录（201）；限流 | `system.user.export` |
+| `GET /exports` | 我的导出分页；筛选 `name`、`status`、`format`、`created_at` | 登录即可（只查本人的） |
+| `GET /exports/{export}` | 我的导出详情，含 `file`（签名的下载地址） | 本人（`ExportPolicy::view`） |
+| `DELETE /exports/{export}` | 删除（连同文件；排队、进行中的即取消） | 本人（`ExportPolicy::delete`） |
+| `GET /monitor/backups` | 备份文件分页；筛选 `disk` | `monitor.backup` |
+| `GET /monitor/backups/destinations` | 各备份盘的健康状态（数组，**不分页**，§6.3 的例外） | `monitor.backup` |
+| `POST /monitor/backups/run` | 立即备份：派发调度中已定义的 `backup:run`，立即返回（限流） | `monitor.backup.run` |
+
+**菜单节点**：`system.user` 下增加按钮 `system.user.export`（`common.export`）。目录 `monitor` 下增加菜单 `monitor.backup`（`/monitor/backup`，组件 `/monitor/backup/list`，`lucide:archive`，`order` 70；按钮 `monitor.backup.run`）。**“我的导出”不是菜单节点**：与通知中心一样是每个登录用户都有的个人功能，前端用静态路由（如 `/exports`，§6.2 的 `mixed` 模式），完成通知的 `link` 指向它。
+
+路由参数：`{export}` 只匹配数字（§9）。
+
+#### 异步导出
+
+**每个列表单独提供导出入口**（`POST /<列表路径>/export`），不提供“按名称导出任意列表”的通用 `POST /exports`：
+
+- 授权在路由上静态声明（`#[Authorize('system.user.export')]`），`tests/Arch` 能检查权限码已声明；通用入口要按请求中的名称动态选择导出类与权限码，多一处“字符串选类”的入口；
+- 导出请求直接继承该列表的 Form Request（筛选值的格式校验与列表完全相同），前端在列表页用同一份 `filter`、`sort` 调用；
+- “我的导出”的列表、详情、删除仍是统一的 `/exports`。
+
+**导出类（扩展点，§5.5）**：实现 `App\Core\System\Contracts\Exporter`，在模块 Provider 的 `boot()` 中向 `App\Core\System\Services\ExporterRegistry` 登记对外名称（**显式白名单**，`$exporters->register(['system.user' => UserExporter::class])`）。名称存入导出记录（不存类名，移动、重命名类不用迁移数据，与多态别名同理），格式与通知的类型名相同（小写点分、以模块名开头、全局唯一），登记时校验（类须实现 `Exporter`）。
+
+| 方法 | 说明 |
+|---|---|
+| `title(): string` | 导出的显示名：后端文案（JSON 语言包，英文原文为键，§6.1），用于文件名与接口的 `title` |
+| `permission(): string` | 导出的权限码（列表菜单下的 `<菜单>.export` 按钮）：导出入口声明同一个码，执行时再按它复核；`tests` 检查已登记导出类的权限码都已声明 |
+| `columns(): array` | `列键 => 表头`，表头同样是后端文案，按发起人的语言翻译（导出的文件离开系统后无法再由前端翻译，所以不用前端 i18n key） |
+| `query(User $actor, array $parameters): Builder` | 按“操作者 + 列表参数 `{ filter, sort }`”构造查询：**必须调用该列表所用的 Query 类**（如 `App\Core\System\Queries\UserList`），即同一份 query-builder 白名单与数据范围（`visibleTo`）——导出看到的数据不会比列表多 |
+| `map(Model $row): array` | 一行：`列键 => 标量或 null`（字符串、整数、浮点、布尔），按 `columns()` 的顺序取值，缺少的列为空；枚举输出 `label()`、时间输出应用时区的 `Y-m-d H:i:s` 由导出类决定 |
+
+- **列表的查询放在模块的 Query 类中**：`UserList::builder($actor, $parameters)` 返回 query-builder（`visibleTo`、预加载、允许的筛选与排序、默认排序），列表控制器 `->paginate()`，导出类 `->getEloquentBuilder()`。参数是 `{ filter, sort }` 数组（列表请求的 `ListRequest::listParameters()`），因此同一份参数可以存入导出记录、在队列中重放。接入导出的列表都按此抽出 Query 类。
+- 第一个使用方是用户列表（`UserExporter`，名称 `system.user`）：列 `id`、`username`、`name`、`email`、`status`（显示名）、`roles`（角色显示名，逗号分隔）、`created_at`。
+
+**发起**（`POST /system/users/export`，Action `CreateExport`）
+
+- 请求：列表的 Form Request 去掉 `page`、`pageSize`，加 `format`（`xlsx`、`csv`，默认 `xlsx`）；未声明的字段（含 `page`）→ 422。`filter`、`sort` 的格式与值校验和列表相同。
+  - 未知筛选的 422 **错误键与列表不同**（都是 422，前端按 422 处理即可）：导出的 `filter` 在请求体中，未声明的筛选键先被 `failOnUnknownFields` 拒绝，错误挂在 `filter.<键>` 上；列表的 `filter` 在查询字符串中（`failOnUnknownFields` 不检查），由 query-builder 拒绝，错误挂在 `filter` 上。未知排序两者相同，都挂在 `sort` 上。
+- **同步构造一次查询**（不执行）：不在白名单的筛选、排序 → 422（§6.3），时间区间格式错误 → 422（`filter.<字段>`），与列表的行为一致，不会等到队列中才失败。
+- **并发上限**：同一用户排队与进行中的导出不超过 `config('core.exports.max_active')`（`CORE_EXPORT_MAX_ACTIVE`，默认 3），超过 → 422（`message`，取决于全局状态，§6.1）。检查与写入在一个事务中，先锁住操作者的用户行（`lockForUpdate()`），同一用户的并发请求串行化。
+- **限流**：在 admin 入口的总限流之外，另经过 `admin-exports` 限流器：每个用户每分钟 `config('core.apps.admin.export_rate_limit')`（`CORE_ADMIN_EXPORT_RATE_LIMIT`，默认 5）次，超过 429。
+- 写入导出记录（`queued`，`locale` 为当前请求的语言，`params` 为 `{ filter, sort }`），派发队列任务 `RunExport`（`ShouldQueueAfterCommit`，事务提交后才入队），返回 201 与导出记录。
+
+**执行**（队列任务 `RunExport` → Action `GenerateExport`）
+
+1. 锁行复核：记录已删除（被取消）或已不是 `queued` → 直接结束（重复投递时幂等）。
+2. 复核发起人：账号启用、**仍有导出类的权限码**（按执行时的授权判定）；否则失败（不写出任何数据）。数据范围同样按执行时计算。
+3. 标记 `running`、`started_at`。
+4. 按 `exports.locale`（发起时的语言）翻译表头、显示名（`withLocale()`，执行后恢复，常驻内存安全），用 simple-excel 流式写入本机临时文件：查询用 `lazy(config('core.exports.chunk_size'))`（`CORE_EXPORT_CHUNK_SIZE`，默认 500）分块读取（每块照常预加载关联），**不会一次读入全部数据**；查询最后追加主键排序，排序列有重复值时分块也稳定。
+5. **防公式注入**：XLSX 中的字符串一律写为字符串单元格（openspout 默认把以 `=` 开头的字符串写成公式）；CSV 中以 `=`、`+`、`-`、`@`、制表符、回车开头的字符串前加 `'`（OWASP 的做法）。数字、布尔照常写出。CSV 带 UTF-8 BOM（Excel 直接打开中文不乱码）。
+6. 写完后把文件存到附件盘（`core.attachments.disk`），路径 `exports/<年>/<月>/<日>/<40 位随机串>.<xlsx|csv>`；在一个事务中锁行复核记录仍在，登记附件（绑定到导出记录的 `file` 用途，`created_by` 为发起人，`name` 为 `<导出的显示名>-<年月日-时分秒>.<扩展名>`），标记 `completed`、`row_count`、`finished_at`。记录在执行期间被删除 → 删除已存的文件，结束。临时文件无论成败都删除。
+7. 派发事件 `App\Core\System\Events\ExportFinished`。
+
+**任务约束**：`#[Tries(1)]`（不自动重试：导出只读、但可能很重，失败后由用户重新发起）；超时 `config('core.exports.timeout')` 秒（`CORE_EXPORT_TIMEOUT`，默认 60，任务级的 timeout 优先于 worker 的 `--timeout`），超时即失败（`failOnTimeout`）。**超时必须小于队列连接的 `retry_after`（默认 90）并留出余量**，否则任务仍在执行时会被另一个 worker 再次取出；调大导出超时须同时调大 `retry_after`（§11.3）。任何失败（异常、超时、worker 被杀后超过尝试次数）都由任务的 `failed()` 调用 Action `FailExport`：记录仍存在且未完成时标记 `failed`、`finished_at`，派发 `ExportFinished`；异常细节只在失败任务中（§6.6），不写入导出记录、不发给用户。
+
+**完成通知**：Message 监听 `ExportFinished`，给发起人发送 `App\Core\Message\Notifications\ExportFinished`（`type` 为 `message.export`）：`title` 为前端 i18n key `message.notification.exportCompleted` / `message.notification.exportFailed`，`params` 为 `{ title: 导出的显示名（发起时的语言）, rows: 行数 }`，`level` 为 `success` / `error`，`link` 为 `config('core.exports.link')`（`CORE_EXPORT_LINK`，默认 `/exports`，前端路由，可含 `{id}`），`subject` 为导出记录。通知中**不放下载地址**：签名地址会过期，通知会保留很久；用户从“我的导出”取当时签发的地址。
+
+**表与输出**
+
+- 表 `exports`：`user_id`（发起人，外键）、`exporter`（导出类的对外名称）、`format`（`ExportFormat`：`xlsx`、`csv`）、`status`（`ExportStatus`：`queued` 排队中、`running` 进行中、`completed` 已完成、`failed` 失败；有颜色）、`params`（JSON：`{ filter, sort }`）、`locale`、`row_count`（完成时）、`started_at`、`finished_at`、时间戳。模型 `Export`（多态别名 `export`），`HasAttachments`（用途 `file`）、`Prunable`。两个枚举登记为 `export_status`、`export_format`（§6.7）。
+- 输出字段：`id`、`name`（导出类的对外名称）、`title`（显示名，按 `Accept-Language` 翻译）、`format`、`status`、`params`（为空时为 `[]`）、`row_count`、`file`（附件，格式同 §6.8，签名地址由本接口签发；完成前为 null）、`started_at`、`finished_at`、`expires_at`（到期清理的时间）、`created_at`、`updated_at`。列表与详情字段相同（列表也带 `file`：“我的导出”页直接下载）。
+- 列表：只有本人的；预加载 `file`；筛选 `name`、`status`、`format`（精确）、`created_at`（区间）；排序 `id`、`created_at`，默认 `-id`。
+- 删除：任何状态都可以删除，返回 `data: null`；文件随记录删除（`HasAttachments`，事务提交后）。排队、进行中的导出被删除即取消：任务开始时、写完文件后都会锁行复核，发现记录不在就结束并删除文件。
+
+**下载与访问权**：文件是绑定在导出记录上的附件，下载走 §6.8 的签名路由，**不另设下载通道**。访问权委托给导出记录（`AttachmentPolicy::view` 第 2 条 → `ExportPolicy::view`：只有发起人）。导出的文件是批量数据，**附件管理员也不能越过**：`Export` 实现标记接口 `App\Core\System\Contracts\PrivateAttachable`——绑定在这类记录上的附件不出现在附件管理的列表中，`AttachmentPolicy::view` 的第 3 条（附件管理员）对它们不适用（已绑定，本来也不能在附件管理中删除）。业务模块有同样敏感的附件（如工资条）时也实现它。
+
+**Policy**（`ExportPolicy`）：`viewAny`（任何登录用户，列表只查本人的）；`view`、`delete`：导出属于操作者本人，否则 403（超管也一样）；`create`、`update` 等一律拒绝（发起由各列表的导出入口按权限码授权）。**不按数据范围**：导出记录只属于发起人；数据范围在生成文件时已经作用于其中的数据。发起人之后失去权限码时，已生成的文件在到期前仍可下载（生成时他有权看到这些数据）。
+
+**清理**：`Export` 使用框架的 `Prunable`（逐条删除，以便连同文件删除），`model:prune` 删除创建于 `config('core.exports.ttl')` 小时（`CORE_EXPORT_TTL_HOURS`，默认 24）之前的导出，**不论状态**（卡在排队中的也清理）；调度每小时执行（`routes/console.php`），文件最多比 ttl 多保留一小时。用户被删除时，他的导出连同文件一并删除（System 监听 `User` 的 `deleting` 事件；外键 `cascadeOnDelete` 兜底）。保留时长、并发上限、分块大小、超时都是部署级配置（§6.7）。
+
+**导入（本步不做）**：simple-excel 同样能流式读取（`SimpleExcelReader`），以后需要时与导出对称地做：上传文件为附件（`AllowedUpload`，`csv`、`xlsx`）→ `POST /<列表路径>/import { attachment_id }`（`OwnedAttachment`）→ 导入记录 + 队列任务 → 逐行按模块声明的校验规则校验、**调用模块的 Action 写入**（不绕过业务规则）→ 错误报告（行号 + 字段错误）作为附件绑定到导入记录 → 完成通知。现在不做通用导入框架：导入是写操作，每个模块的校验规则、写入 Action、部分失败的语义（整批回滚还是跳过错误行）、重复导入的幂等都不同，没有第一个使用方时抽象不出稳定的接口；导出只读、规则统一，适合先做成扩展点。
+
+#### 备份（spatie/laravel-backup）
+
+- **配置都是部署级的**（`config/backup.php`，环境变量）：
+  - 备份内容：默认连接的数据库（`DB_CONNECTION`）与附件所在的私有目录 `storage/app/private`（附件盘为 S3 等云存储时，文件由云存储自己的版本与复制保障，备份只含数据库与本机文件）；
+  - 备份盘 `BACKUP_DISKS`（逗号分隔，默认 `backups`：`config/filesystems.php` 中的本机盘 `storage/app/backups`，不在 Web 根目录、不在被备份的目录中）；生产应至少有一个异地盘（S3 等）；
+  - 备份名（盘上的目录名）`BACKUP_NAME`（默认 `APP_NAME`）；压缩包加密 `BACKUP_ARCHIVE_PASSWORD`（生产建议设置）；
+  - 保留策略用包的默认策略（全部保留 7 天，之后每天一份保留 16 天、每周一份 8 周、每月一份 4 个月、每年一份 2 年，总量超过 5000 MB 时删最旧的）；
+  - 健康标准（`monitor_backups`）：最新备份不超过 `BACKUP_MAX_AGE_DAYS`（默认 1）天，总量不超过 `BACKUP_MAX_STORAGE_MB`（默认 5000）；
+  - **包自带的通知默认关闭**：结果已在定时任务页（执行记录）与健康检查中；设置 `BACKUP_NOTIFICATION_MAIL` 后，失败与不健康的通知（`BackupHasFailed`、`UnhealthyBackupWasFound`、`CleanupHasFailed`）发邮件到该地址，成功类的通知始终不发。
+- **调度**（`routes/console.php`，`config('core.monitor.backup.schedule')`，`CORE_BACKUP_SCHEDULE`，**默认跟随环境**：`APP_ENV=production` 时开启——生产开箱即有每日备份，比“忘了开”安全；其他环境关闭——开发环境常没有 `mysqldump` / `sqlite3` 等客户端，也就不会每天留下失败记录、健康检查中不出现失败的 `Backups`；显式设置时以设置为准。与其他配置一样在读取配置时求值，`config:cache` 按缓存时的环境变量固定下来，部署时在生产环境中生成缓存即可）：每天 01:00 `backup:clean`、01:30 `backup:run`、07:00 `backup:monitor`，都 `withoutOverlapping()`。它们是普通的有名称的任务：被 schedule-monitor 同步与监控（§6.6 的定时任务页），也能在那里“立即执行”。关闭调度后它们不在调度中，也就不出现在定时任务页，立即备份返回 422。
+- **worker 超时**：定时执行在调度进程中运行，不受队列超时限制；**“立即执行”与“立即备份”在队列 worker 中执行**（§6.6），受 worker 的 `--timeout`（默认 60 秒）限制，备份超过它会被强制终止。数据库较大时，处理默认队列的 worker 须调大 `--timeout`，并让队列连接的 `retry_after` 大于它（§11.3），或只依赖定时执行。
+- **备份列表**（`GET /monitor/backups`，Query `BackupFiles`）：读取 `backup.backup.destination.disks` 中每个盘上本应用的备份（包的 `BackupDestination`），按时间倒序合并为一个列表，在内存中分页（备份数量受保留策略限制，通常几十个）。输出 `disk`、`path`（盘内路径）、`size`（字节）、`created_at`。筛选 `disk`（精确，必须是配置中的盘，否则 422）；排序 `created_at`、`size`，默认 `-created_at`；其他筛选、排序 → 422。
+- **健康状态**（`GET /monitor/backups/destinations`，Query `BackupDestinations`）：按 `monitor_backups` 逐个盘检查（与 `backup:monitor` 同一套规则：可访问、最新备份的时间、总量），输出 `[{ disk, name, reachable, healthy, failures: [{ check, message }], newest_backup_at, backups_count, used_storage }]`。盘无法访问时 `reachable` 为 false，`failures` 中的消息为固定文案，**不输出连接异常的原文**（可能含主机、桶名等）。`message` 是包的英文文案，前端按 `check` 翻译。
+- **立即备份**（`POST /monitor/backups/run`）：按任务名 `backup:run` 找到已同步的定时任务，调用 `RunScheduledTask`（§6.6 的立即执行，同一套白名单：**只执行调度中已定义的事件**；接口没有参数，请求体中的任何字段都被忽略，不能借此执行别的任务或命令）。比在定时任务页点“立即执行”多一个单独的权限码，可以只授予“备份”而不授予“执行任意定时任务”。任务未同步（调度已关闭或尚未执行 `schedule-monitor:sync`）→ 422（`message`）。另经过 `admin-ops` 限流；同一任务排队或执行期间不重复入队（`ExecuteScheduledTask` 的 `ShouldBeUnique`）。
+- **不提供下载备份的接口**。备份含整个数据库（密码哈希、两步验证密钥、会话、全部业务数据）与全部附件，一旦通过浏览器下载就离开了服务器的访问控制；恢复本来就要服务器权限，需要备份文件的运维人员从备份盘（服务器或对象存储的控制台）直接取，访问由基础设施的权限与审计控制。即使只限超管、加确认密码、单独权限码与操作日志，被盗用的超管会话仍可一次拿走全部数据，风险与收益不对等。需要时由项目自行添加，且须同时满足：只限超管、Fortify 的 `password.confirm`、单独的权限码、写操作日志。
+- **健康检查**：备份调度开启时，在 §6.6 的默认检查中加入 `Backups`（`App\Core\Monitor\Checks\BackupsCheck`）：与 `backup:monitor`、健康状态接口同一套规则（包的 `BackupDestinationStatusFactory`，读取 `monitor_backups`），任一盘不健康即失败，`short_summary` 为不健康的盘，`meta` 为各盘的状态。不用 laravel-health 自带的 `BackupsCheck`：它的阈值是注册时（启动时）计算的时间点，常驻内存下会停在 worker 启动的时刻，且与 `monitor_backups` 重复定义一套标准。开发环境没有备份时它失败是预期的（与 `OptimizedApp` 等相同）。
+- **授权**：没有模型，控制器直接声明权限码（`#[Authorize('monitor.backup')]`、`#[Authorize('monitor.backup.run')]`）；不按数据范围（备份属于系统本身，§6.6）。
 
 ## 7. 认证
 
@@ -1254,6 +1353,13 @@ public function delete(User $actor, User $user): Response
 - 我收到的公告：草稿、已撤回、不是发给自己的 —— 403。
 - `target` 为 `roles` 时 `roles` 必填且不能为空，为 `all` 时不能提交 —— 422（`roles`）；引用不能使用的附件 —— 422（`attachment_ids.*`）。
 
+**导出与备份**（§6.10）
+
+- 导出只能由发起人查看、下载、删除：操作他人的导出 —— 403（超管也一样）；导出文件的附件，附件管理员也不能访问（`PrivateAttachable`）—— 403。
+- 发起导出需要该列表的导出权限码（`<菜单>.export`）—— 403；执行时发起人已停用或失去权限码 —— 导出失败（不写出数据）。
+- 筛选、排序不在列表的白名单或格式不对 —— 422（与列表相同）；同一用户排队与进行中的导出超过上限 —— 422（`message`）；超过发起导出的限流 —— 429。
+- 立即备份只能执行调度中已定义的 `backup:run`；它未同步时 —— 422（`message`）。不提供下载备份。
+
 **在线会话与 token**（§6.6）
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
@@ -1266,12 +1372,26 @@ public function delete(User $actor, User $user): Response
 |---|---|
 | 输出 | API Resource 逐个列出字段，禁止整模型 `toArray()` 输出；敏感字段加 `#[Hidden]` |
 | 输入 | 写接口拒绝未声明字段（`failOnUnknownFields`）；网址类字段只允许 `http` / `https` |
-| 富文本 | **保存时在后端净化**（`symfony/html-sanitizer` 8.1）：模型的类型转换 `SanitizedHtml` 在写入属性时净化，去除脚本、样式与事件属性，链接与媒体只允许安全的协议（§6.9）；存的、输出的都是净化后的 HTML |
+| 富文本 | **保存时在后端净化**（`symfony/html-sanitizer` 8.1）：模型的类型转换 `SanitizedHtml` 在写入属性时按档位净化，去除脚本、样式与事件属性，链接与媒体只允许安全的协议；存的、输出的都是净化后的 HTML（下文“富文本”） |
+| 导出 | 导出的数据范围与列表相同（同一个 Query 类）；文件只有发起人能下载（签名地址，`PrivateAttachable`）；单元格防公式注入（§6.10） |
+| 备份 | 不提供下载接口；压缩包可加密（`BACKUP_ARCHIVE_PASSWORD`）；备份盘不在 Web 根目录（§6.10） |
 | 上传 | 随机文件名（按日期分目录，扩展名由服务端探测的 MIME 推断）；**按文件内容**校验类型（探测的 MIME 与客户端扩展名都在白名单中，不信任客户端的 `Content-Type`）与大小（白名单与上限是系统参数；PHP 的 `upload_max_filesize`、`post_max_size` 与 Web 服务器的请求体上限须不小于它）；默认私有盘，下载只经过签名的临时 URL，一律 `attachment` 并带 `nosniff`、CSP `sandbox`，只有图片白名单可内联预览（SVG 不内联）；**引用附件时校验归属**（`OwnedAttachment`：只能使用自己上传的未绑定附件，或这条记录已有的附件）；绑定后访问权跟随所属记录（§6.8） |
 | 路由参数 | 统一格式约束（数字 ID、ULID、UUID），非法参数直接 404 |
 | XSS 纵深防御 | Web 服务器下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
 | 依赖 | CI 执行 `composer audit`、`npm audit` |
 | 日志 | 操作日志对密码、token 等字段脱敏（可配置，§6.6）；登录日志不记录密码；每个响应带 `X-Request-Id`，日志带同一请求 ID |
+
+**富文本**
+
+- **统一入口**：`App\Support\Html\HtmlSanitizers`（单例，按档位构造 symfony 的 `HtmlSanitizer`，构造后只读，不保存请求数据）。`app/` 中只有 `App\Support\Html` 使用 `symfony/html-sanitizer`（`tests/Arch` 检查），规则只有一份。
+- **档位**（`config('core.html')`，部署级）：
+  - 共用：`allowSafeElements()`（W3C 的安全元素与属性，去掉 `script`、`style`、`iframe`、`form`、`on*` 事件属性等）；链接只允许 `http`、`https`、`mailto`（`a` 一律加 `rel="noopener noreferrer"`）；输入最长 1,000,000 字节；
+  - `basic`（基础）：文字格式、标题、列表、表格、引用、链接；**不允许图片等媒体**（`img`、`audio`、`video`、`source`、`track`、`picture` 被去掉）。用于评论、备注这类不需要图片的字段；
+  - `rich`（含图片，**默认档位**）：另允许媒体，地址只允许 `http`、`https`（不允许 `data:`、`javascript:`）；`CORE_HTML_MEDIA_HOSTS`（逗号分隔）设置后只允许这些主机的图片（如自己的图床、CDN）。
+  - 项目可在 `config/core.php` 中增加档位（同样的键：`media`、`media_hosts`）。
+- **声明**：富文本字段在模型的 `casts()` 中声明 `'content' => SanitizedHtml::class`（默认档位）或 `SanitizedHtml::class.':basic'`；写入属性时（fill、赋值、工厂、填充）即净化，任何写入路径存进库的都是净化后的内容。档位名不存在时抛出异常（开发期错误）。表单的长度上限按净化前计（Form Request）。
+- **约定**：存 HTML 的列一律用 `SanitizedHtml`，不在 Action、控制器中手动净化，也不存未净化的 HTML 再在输出时净化；纯文本字段（标题、摘要、通知内容）不存 HTML，前端按文本显示。“哪些列是富文本”无法从代码中可靠识别，由代码审查检查（`CONTRIBUTING.md` 的清单）；`tests/Arch` 保证只有一个净化入口。
+- **正文中的图片**：只引用外部的 `http(s)` 地址，**不要嵌入附件的签名地址**——它会在 `url_ttl` 的一到两倍时间后过期，正文中的图片随之失效。需要“上传图片插入正文”时，应另建一个不过期的公开图片通道（公开盘或 CDN 上的独立目录、不可枚举的文件名，图片白名单与大小上限），并用 `CORE_HTML_MEDIA_HOSTS` 限定正文只能引用它；本脚手架暂不提供（§14）。正文以外的文件作为记录的附件（如公告的 `attachment_ids`）。
 
 ## 10. 编码规范
 
@@ -1286,7 +1406,7 @@ public function delete(User $actor, User $user): Response
   - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum` 的模板不带 `color()`，需要时手工加上 `HasColor`。
 - 统计指标、复杂查询做成模块里独立的 Query 类。
 - 软删除是整套功能：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数生成。
-- 导出：`simple-excel` + 队列 + 完成通知，标准异步导出。
+- 导出：`simple-excel` + 队列 + 完成通知，标准异步导出（§6.10）：模块实现 `Exporter` 并登记，列表的查询放在 Query 类中供列表与导出共用；读取用 `lazy()` 分块，不一次读入全部数据。导入以后同样用 simple-excel 的流式读取，逐行调用模块的 Action（§6.10 的“导入”）。
 - 对接第三方 API 时统一使用 Saloon（不作为默认依赖）。
 
 ### 10.2 PHP 8.4 / 8.5 特性
@@ -1393,8 +1513,8 @@ Scramble 的兼容性在引入时另行验证。
 | 进程 | 说明 |
 |---|---|
 | Web | PHP-FPM，或 Octane（FrankenPHP） |
-| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理；须处理默认队列（健康检查的队列心跳、定时任务的“立即执行”，§6.6；公告的分批发送，§6.9） |
-| 调度 | cron 每分钟调用 `schedule:run`，或 `schedule:work`；健康检查的调度心跳依赖它（§6.6） |
+| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理；须处理默认队列（健康检查的队列心跳、定时任务的“立即执行”与立即备份，§6.6；公告的分批发送，§6.9；异步导出，§6.10）。**超时**：worker 的 `--timeout`（默认 60 秒）必须小于队列连接的 `retry_after`（`DB_QUEUE_RETRY_AFTER` 等，默认 90 秒），并留出余量，否则仍在执行的任务会被另一个 worker 再次取出；导出任务自带超时（`CORE_EXPORT_TIMEOUT`，默认 60 秒，同样须小于 `retry_after`）；“立即执行”的备份等长任务受 worker 的 `--timeout` 限制，需要时为处理它的 worker 调大 `--timeout` 与 `retry_after` |
+| 调度 | cron 每分钟调用 `schedule:run`，或 `schedule:work`；健康检查的调度心跳依赖它（§6.6）；每日备份在调度进程中执行，不受队列超时限制（§6.10） |
 | Reverb | 启用实时推送时（可选，通知的 `broadcast` 通道，§6.9） |
 
 ### 11.4 发布流程
@@ -1415,6 +1535,12 @@ Scramble 的兼容性在引入时另行验证。
 | HTTPS、代理、Cookie | `APP_URL` 用 https；线上 `SESSION_SECURE_COOKIE`；配置可信代理与 Sanctum 有状态域名 |
 | 上传大小 | PHP（`upload_max_filesize`、`post_max_size`）与 Web 服务器（`client_max_body_size`）的限制一致，且不小于系统参数 `attachment.max_size`（§6.8） |
 | PHP 版本与扩展 | `composer.json` 固定平台为 8.5；必要扩展在运行时镜像中安装 |
+
+### 11.6 备份与恢复
+
+- 备份由调度每天执行（§6.10；`CORE_BACKUP_SCHEDULE` 未设置时只在 `APP_ENV=production` 下调度，预发布等其他环境需要备份时显式设为 `true`），备份盘与保留策略在 `config/backup.php` 与环境变量中；生产至少配置一个异地盘（`BACKUP_DISKS=backups,s3`），并设置 `BACKUP_ARCHIVE_PASSWORD`。
+- 运行环境须有数据库的命令行客户端（MySQL 的 `mysqldump`、PostgreSQL 的 `pg_dump`、SQLite 的 `sqlite3`），运行时镜像中安装；PHP 须有 `zip` 扩展。
+- 恢复不提供接口：在服务器上从备份盘取压缩包，解压后用数据库客户端导入、把文件放回 `storage/app/private`；建议定期演练。
 
 ## 12. 依赖清单
 
@@ -1440,10 +1566,10 @@ Scramble 的兼容性在引入时另行验证。
 | laravel-permission 8.5 | 角色与权限存储 |
 | laravel-query-builder 7.3 | 列表筛选、排序、关联加载 |
 | laravel-activitylog 5.1 | 数据变更审计、操作日志、登录日志（统一存储，按日志名区分，§6.6）。已核实 5.1.5：有状态的服务（`CauserResolver`、`ActivityLogStatus`、`ActivityBuffer`）都以 `scoped` 注册，Octane 下无需登记 flush；不使用其静态的 `beforeLogging()` 回调 |
-| laravel-backup 10.4 | 数据库与文件备份 |
+| laravel-backup 10.5 | 数据库与文件备份（§6.10）。已核实 10.5.0：`illuminate/*` ^12.40 \|\| ^13.0，需要 `ext-zip`；依赖 `spatie/db-dumper` 4（调用数据库的命令行客户端）；`Config` 以 `scoped` 注册，`BackupLogger` 单例只持有日志通道；接口只读备份盘（`BackupDestination`），不保存请求数据。通知用包自带的邮件通知（默认关闭） |
 | laravel-health 1.42 | 健康检查（§6.6）。已核实 1.42.0：`illuminate/*` ^13.0；结果存缓存（`CacheHealthResultStore`）；`Health` 单例只在启动时登记检查，不保存请求数据；不注册其 HTTP 端点 |
 | laravel-schedule-monitor 4.3 | 定时任务执行监控（§6.6）。已核实 4.3.3：`illuminate/bus` ^13.0；单例 `MonitoredScheduledTasks` 只在定义调度时按事件对象记录 `monitorName` 等设置，不保存请求数据；不使用 Oh Dear（未配置 `monitor_id` 时同步只写本地表） |
-| simple-excel 3.11 | 流式导入导出 |
+| simple-excel 3.11 | 流式导入导出（§6.10）。已核实 3.11.0：`illuminate/support` ^13.0，底层 `openspout/openspout` 5（当前 5.15）；写入器每次导出新建、写完关闭，不保存状态。openspout 会把以 `=` 开头的字符串写成公式，导出时字符串一律写为字符串单元格 |
 
 **其他**
 
@@ -1505,8 +1631,9 @@ Scramble 的兼容性在引入时另行验证。
 | 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
 | 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 待定（§14） |
 | 枚举选项 | `HasLabel` / `HasColor` 接口、显式白名单 `EnumRegistry`（模块在 Provider 中登记对外名称，登记时校验颜色）、选项下发接口（`/options/enums`，按 `Accept-Language` 翻译，有颜色时输出 `color`） | PHP backed enum、翻译 |
-| 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
-| 富文本净化 | 保存时净化的统一入口：已有最小入口（类型转换 `SanitizedHtml` + 单例的默认规则，公告使用，§6.9）；第 9 步扩展为按用途的规则 | symfony/html-sanitizer |
+| 异步导出 | 扩展点 `Exporter` + `ExporterRegistry`（显式白名单）；列表的 Query 类供列表与导出共用（同一份筛选白名单与数据范围）；导出任务表与状态流转、发起时同步校验参数、并发上限（锁用户行）与限流；队列任务（执行时复核权限、`lazy()` 分块流式写出、按发起时的语言翻译、防公式注入、超时与失败处理）；文件存为附件并绑定到导出记录（签名下载、`PrivateAttachable` 只限发起人）；完成 / 失败事件与 Message 的通知；到期清理 | simple-excel（openspout）、队列（`ShouldQueueAfterCommit`、`failed()`）、附件（§6.8）、通知中心（§6.9）、`Prunable` |
+| 富文本净化 | 统一入口 `HtmlSanitizers`（按配置的档位 `basic` / `rich` 构造只读的净化器，可限定图片主机）与类型转换 `SanitizedHtml`（`:档位` 参数，写入属性时净化）；`tests/Arch` 保证只有这一个入口（§9） | symfony/html-sanitizer |
+| 备份 | 部署级配置（`config/backup.php`：备份盘、内容、保留、健康标准、默认关闭的通知）与调度；备份列表、各盘健康状态的只读接口；立即备份（复用定时任务的立即执行）；与 `backup:monitor` 同一套规则的健康检查 `Backups` | spatie/laravel-backup（`backup:run` / `clean` / `monitor`、`BackupDestination`、`BackupDestinationStatusFactory`）、schedule-monitor、laravel-health |
 | 代码生成器 | `core:make-*` 命令集（入口、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
 | 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
 
@@ -1520,4 +1647,7 @@ Scramble 的兼容性在引入时另行验证。
 | 后端管理 Caddy（域名、证书） | 暂不做 |
 | 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）、在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）与撤回公告时按 `notifications.data->subject` 查找通知（§6.9）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
 | Pulse | 设计原定“系统监控依托 Pulse”，但 Pulse 的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突。暂不安装；接入时只用它的记录器写入 `pulse_*` 表，由后台接口读取聚合数据给前端图表，`/pulse` 页面最多作为只对超管开放的运维入口 |
+| 通用导入 | 暂不做（§6.10 的“导入”）：有第一个使用方时，按“附件上传 → 队列逐行校验并调用模块的 Action → 错误报告附件 → 完成通知”实现 |
+| 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `http(s)` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
+| 下载备份 | 不提供（§6.10）；确有需要时须同时满足：只限超管、确认密码（`password.confirm`）、单独的权限码、操作日志 |
 | `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |

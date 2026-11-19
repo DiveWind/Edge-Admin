@@ -15,6 +15,7 @@ use Illuminate\Auth\Access\Response;
  *   1. 未绑定的附件：上传者本人；
  *   2. 已绑定的附件：委托给绑定对象——能 `view` 那条记录的人（那条记录的 Policy，含它的数据范围）；上传者本人也不例外；
  *   3. 以上都不满足时：附件管理员（`system.attachment`）且附件在数据范围内（按上传者 created_by，HasDataScope）；
+ *      私有附件（绑定对象实现 PrivateAttachable，如导出的文件，§6.10）不适用这一条：访问权只跟随记录；
  * - delete：`system.attachment.delete`；已绑定的附件不能删除（403，超管也一样：在绑定它的记录中替换、移除，或删除那条记录）；数据范围内。
  *
  * 规则与调用方无关：禁止判断是哪个入口在调用。附件没有修改、软删除与批量操作，相关方法一律拒绝。
@@ -46,7 +47,7 @@ class AttachmentPolicy
             }
         }
 
-        return $actor->can('system.attachment') && $attachment->isVisibleTo($actor) ? Response::allow() : Response::deny();
+        return ! $attachment->isPrivate() && $actor->can('system.attachment') && $attachment->isVisibleTo($actor) ? Response::allow() : Response::deny();
     }
 
     /**

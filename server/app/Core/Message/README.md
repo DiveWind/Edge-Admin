@@ -81,6 +81,10 @@
 **实时推送**：项目装了 Reverb（设计文档 §12，可选）后，在通知类的 `via()` 中加上 `'broadcast'` 即可，载荷就是 `toArray()`（字段同接口输出，外加 `id`、`type`）；
 频道由 `User::receivesBroadcastNotificationsOn()` 决定（框架默认用类名，启用时改为 `user.{id}`，并在 `routes/channels.php` 中只授权本人）。
 
+## 导出完成的通知
+
+`Listeners/NotifyExportFinished` 监听 System 的 `ExportFinished`，给发起人发送 `Notifications/ExportFinished`（类型 `message.export`，`title` 为 `message.notification.exportCompleted` / `exportFailed`，`params` 为 `{ title, rows }`，`link` 为 `config('core.exports.link')`，不含下载地址，设计文档 §6.10）。
+
 ## 依赖 Core 的能力
 
 - System：`User`（接收人；停用的不接收）、`Role`（公告的目标角色）；菜单与权限节点（`MenuRegistry`，`resources/menus.php`）；

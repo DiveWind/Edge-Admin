@@ -33,6 +33,8 @@ return [
                     'delete' => 'common.delete',
                     'status' => 'system.user.changeStatus',
                     'password' => 'system.user.resetPassword',
+                    // 异步导出列表（§6.10）
+                    'export' => 'common.export',
                 ],
             ],
             [

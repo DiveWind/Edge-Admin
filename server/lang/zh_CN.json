@@ -146,5 +146,17 @@
     "Only draft announcements can be edited.": "只有草稿状态的公告可以修改。",
     "Only draft announcements can be published.": "只有草稿状态的公告可以发布。",
     "Only published announcements can be revoked.": "只有已发布的公告可以撤回。",
-    "Published announcements must be revoked before they can be deleted.": "已发布的公告需要先撤回才能删除。"
+    "Published announcements must be revoked before they can be deleted.": "已发布的公告需要先撤回才能删除。",
+    "Queued": "排队中",
+    "Running": "进行中",
+    "Completed": "已完成",
+    "Failed": "失败",
+    "Excel workbook (.xlsx)": "Excel 工作簿（.xlsx）",
+    "CSV (.csv)": "CSV（.csv）",
+    "Users": "用户",
+    "ID": "ID",
+    "Created at": "创建时间",
+    "You can have at most :count exports in progress. Please wait for them to finish.": "同时进行中的导出最多 :count 个，请等待它们完成。",
+    "You can only access your own exports.": "只能访问自己的导出。",
+    "The backup task is not in the schedule. Enable the backup schedule and sync the scheduled tasks first.": "备份任务不在调度中：请先开启备份调度并同步定时任务。"
 }

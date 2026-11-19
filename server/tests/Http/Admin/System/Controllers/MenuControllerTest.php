@@ -37,7 +37,7 @@ function menuPayload(string $type, array $overrides = []): array
         'menu' => ['type' => 'menu', 'name' => 'demo', 'path' => '/demo', 'component' => '/demo/index', 'meta' => ['title' => 'demo.title']],
         'embedded' => ['type' => 'embedded', 'name' => 'demo', 'path' => '/demo', 'meta' => ['title' => 'demo.title', 'iframeSrc' => 'https://example.com/embed']],
         'link' => ['type' => 'link', 'name' => 'demo', 'path' => '/demo', 'meta' => ['title' => 'demo.title', 'link' => 'https://example.com/docs']],
-        'button' => ['type' => 'button', 'name' => 'system.user.export', 'parent_id' => menuId('system.user'), 'meta' => ['title' => 'demo.export']],
+        'button' => ['type' => 'button', 'name' => 'system.user.import', 'parent_id' => menuId('system.user'), 'meta' => ['title' => 'demo.export']],
     };
 
     return array_replace_recursive($payload, $overrides);
@@ -88,7 +88,7 @@ describe('index', function (): void {
             ->assertJsonPath('data.2.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
             ->assertJsonPath('data.2.children.0.status', 'disabled')
             ->assertJsonPath('data.2.children.0.children.*.name', [
-                'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password',
+                'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password', 'system.user.export',
             ])
             ->assertJsonPath('data.2.children.0.children.0.children', [])
             ->assertJsonPath('data.0.id', $demo->id);
@@ -198,7 +198,7 @@ describe('store', function (): void {
         'menu' => ['menu', ['name' => 'demo', 'parent_id' => null, 'path' => '/demo', 'component' => '/demo/index']],
         'embedded' => ['embedded', ['name' => 'demo', 'path' => '/demo', 'component' => null]],
         'link' => ['link', ['name' => 'demo', 'path' => '/demo', 'component' => null]],
-        'button' => ['button', ['name' => 'system.user.export', 'path' => null, 'component' => null, 'title' => 'demo.export']],
+        'button' => ['button', ['name' => 'system.user.import', 'path' => null, 'component' => null, 'title' => 'demo.export']],
     ]);
 
     it('stores meta.title, meta.icon and meta.order in their columns and the other meta keys in the meta column', function (): void {

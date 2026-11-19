@@ -25,13 +25,13 @@ use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 class AttachmentController
 {
     /**
-     * 附件管理的列表（经过数据范围 visibleTo($actor)，预加载 creator）：筛选 name、mime_type（模糊）、created_by、collection（精确）、
+     * 附件管理的列表（经过数据范围 visibleTo($actor)，不含私有附件如导出的文件，预加载 creator）：筛选 name、mime_type（模糊）、created_by、collection（精确）、
      * is_bound（true / false）、created_at（区间 `起,止`）；排序 id、size、created_at，默认 `-id`。不在白名单内的参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', Attachment::class)]
     public function index(AttachmentIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $attachments = QueryBuilder::for(Attachment::query()->visibleTo($actor)->with('creator'), $request)
+        $attachments = QueryBuilder::for(Attachment::query()->visibleTo($actor)->withoutPrivate()->with('creator'), $request)
             ->allowedFilters(
                 AllowedFilter::partial('name'),
                 AllowedFilter::partial('mime_type'),

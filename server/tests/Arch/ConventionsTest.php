@@ -159,6 +159,11 @@ if (($contracts = archNamespaces('Core/*/Contracts', 'Modules/*/Contracts')) !==
         ->toBeInterfaces();
 }
 
+arch('富文本只经过统一的净化入口（App\Support\Html\HtmlSanitizers，模型用 SanitizedHtml，设计文档 §9）')
+    ->expect('App')
+    ->not->toUse('Symfony\Component\HtmlSanitizer')
+    ->ignoring('App\Support\Html');
+
 test('通知类都继承 InboxNotification，type() 格式合法且全局唯一（通知中心的统一结构，设计文档 §5.5、§6.9）', function (): void {
     $types = [];
 

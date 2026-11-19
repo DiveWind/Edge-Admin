@@ -13,10 +13,11 @@
 
 use App\Core\Message\Models\Notification;
 use App\Core\Monitor\Models\ScheduledTaskLog;
-use App\Core\System\Models\Attachment;
+use App\Core\System\Models\{Attachment, Export};
 use Illuminate\Database\Console\PruneCommand;
 use Illuminate\Support\Facades\Schedule;
 use Spatie\Activitylog\Commands\CleanActivitylogCommand;
+use Spatie\Backup\Commands\{BackupCommand, CleanupCommand, MonitorCommand};
 use Spatie\Health\Commands\{DispatchQueueCheckJobsCommand, RunHealthChecksCommand, ScheduleCheckHeartbeatCommand};
 
 // 日志清理（设计文档 §6.6）：删除早于 activitylog.clean_after_days 天的操作日志、登录日志与模块审计日志
@@ -28,6 +29,9 @@ Schedule::command(PruneCommand::class, ['--model' => [ScheduledTaskLog::class]])
 // 孤儿附件（设计文档 §6.8）：上传后一直没有绑定、超过 core.attachments.orphan_ttl 小时的附件，连同文件删除（Prunable，逐条删除）
 Schedule::command(PruneCommand::class, ['--model' => [Attachment::class]])->daily()->withoutOverlapping();
 
+// 过期的导出（设计文档 §6.10）：创建超过 core.exports.ttl 小时的导出（不论状态），连同文件删除（Prunable，逐条删除）
+Schedule::command(PruneCommand::class, ['--model' => [Export::class]])->hourly()->withoutOverlapping();
+
 // 已读的通知（设计文档 §6.9）：已读、创建超过 core.message.notifications.read_ttl 天的通知（MassPrunable）；未读的不清理
 Schedule::command(PruneCommand::class, ['--model' => [Notification::class]])->daily()->withoutOverlapping();
 
@@ -35,3 +39,11 @@ Schedule::command(PruneCommand::class, ['--model' => [Notification::class]])->da
 Schedule::command(RunHealthChecksCommand::class, ['--no-notification'])->everyMinute()->withoutOverlapping()->doNotMonitor();
 Schedule::command(ScheduleCheckHeartbeatCommand::class)->everyMinute()->doNotMonitor();
 Schedule::command(DispatchQueueCheckJobsCommand::class)->everyMinute()->doNotMonitor();
+
+// 备份（设计文档 §6.10，配置在 config/backup.php）：先清理过期的备份，再备份，早上检查各备份盘是否健康。
+// 在调度进程中执行，不受队列超时限制；在定时任务页“立即执行”或立即备份时在队列 worker 中执行，受 worker 的 --timeout 限制（§11.3）
+if (config()->boolean('core.monitor.backup.schedule')) {
+    Schedule::command(CleanupCommand::class)->dailyAt('01:00')->withoutOverlapping();
+    Schedule::command(BackupCommand::class)->dailyAt('01:30')->withoutOverlapping();
+    Schedule::command(MonitorCommand::class)->dailyAt('07:00')->withoutOverlapping();
+}

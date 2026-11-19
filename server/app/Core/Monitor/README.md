@@ -18,6 +18,8 @@
 
 ## 对外提供
 
+备份（设计文档 §6.10）：`Queries/BackupFiles`（各备份盘上的备份，内存分页）、`Queries/BackupDestinations`（各盘的健康状态，与 `backup:monitor` 同一套规则）、`Actions/RunBackup`（立即备份：按任务名 `backup:run` 交给 `RunScheduledTask`，只执行调度中已定义的事件）、`Checks/BackupsCheck`（健康检查 `Backups`，备份调度开启时注册）。菜单 `monitor.backup`（按钮 `monitor.backup.run`）。**不提供下载备份**。
+
 | 类 | 用途 |
 |---|---|
 | `Models/Activity` | activitylog 的模型（`config('activitylog.activity_model')`，多态别名 `activity`）：写入时自动在 `properties.request_id` 中记下 Context 的请求 ID；`visibleTo($actor)` / `isVisibleTo($actor)`：数据范围委托给 causer 用户 |
@@ -100,12 +102,20 @@
 - 操作日志在响应发送后写入（`defer()->always()`），数据只在闭包中捕获；`RecordLoginActivity` 每次派发时重新解析，取到的是当前请求；
 - schedule-monitor 的单例 `MonitoredScheduledTasks` 只在定义调度时记录 `monitorName` 等设置；laravel-health 的 `Health` 单例只在启动时登记检查项；
   `DataMasker` 无状态。`ExecuteScheduledTask` 执行时临时关闭事件的 `runInBackground`，执行后恢复。
+- laravel-backup 的 `Config` 是 `scoped`；备份的 Query 每次读取 `config()` 与备份盘，`BackupsCheck` 在 `run()` 时按当时的时间判断（不像包自带的 `BackupsCheck` 在启动时算好阈值）。
 
 ## 依赖 Core 的能力
 
 - System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`。
 - System：枚举选项的白名单 `EnumRegistry`：登记 `login_event`（`Enums/LoginEvent`，实现 `HasColor`）、`login_failure_reason`（`Enums/LoginFailureReason`），由 `/options/enums` 下发（设计文档 §6.7）。
-- 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health；框架的 `failed_jobs`、`queue:retry`。
+- 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health、spatie/laravel-backup；框架的 `failed_jobs`、`queue:retry`。
+
+## 备份
+
+- 配置都是部署级的（`config/backup.php` 与环境变量 `BACKUP_*`）：备份数据库与 `storage/app/private`，备份盘默认 `backups`（`storage/app/backups`），包自带的通知默认关闭（`BACKUP_NOTIFICATION_MAIL` 开启失败类的邮件）。
+- 调度（`routes/console.php`，`CORE_BACKUP_SCHEDULE`，未设置时 production 开启、其他环境关闭）：01:00 `backup:clean`、01:30 `backup:run`、07:00 `backup:monitor`；被 schedule-monitor 监控，可在定时任务页立即执行。
+- 定时执行在调度进程中，不受队列超时限制；立即执行 / 立即备份在队列 worker 中，受 `--timeout` 限制（设计文档 §11.3）。
+- 运行环境须有 `mysqldump` / `pg_dump` / `sqlite3` 与 `zip` 扩展。
 
 ## 配置
 

@@ -4,10 +4,11 @@ use App\Core\Message\Models\Notification;
 use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
 use App\Core\Monitor\MonitorServiceProvider;
 use App\Core\Monitor\Policies\PersonalAccessTokenPolicy;
-use App\Core\System\Models\Attachment;
+use App\Core\System\Models\{Attachment, Export};
 use Illuminate\Console\Scheduling\{Event, Schedule};
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Env;
+use Illuminate\Support\Facades\{Gate, Request};
 use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Health\Checks\Check;
 use Spatie\Health\Facades\Health;
@@ -96,8 +97,94 @@ it('monitors the other scheduled tasks and syncs them', function (): void {
             "model:prune --model='".Notification::class."'",
             "model:prune --model='".ScheduledTaskLog::class."'",
             "model:prune --model='".Attachment::class."'",
+            "model:prune --model='".Export::class."'",
         ]);
 });
+
+it('prunes the expired exports every hour', function (): void {
+    expect(scheduledEvent(Export::class)->expression)->toBe('0 * * * *');
+});
+
+/**
+ * 按给定的备份调度开关重新定义一遍调度（routes/console.php），返回其中的备份任务：命令 => 事件。
+ *
+ * @return array<string, Event>
+ */
+function backupEvents(bool $scheduled): array
+{
+    config(['core.monitor.backup.schedule' => $scheduled]);
+    $schedule = new Schedule;
+    Illuminate\Support\Facades\Schedule::swap($schedule);
+
+    require base_path('routes/console.php');
+
+    return collect($schedule->events())
+        ->filter(fn (Event $event): bool => str_contains((string) $event->command, 'backup:'))
+        ->mapWithKeys(fn (Event $event): array => [(string) str((string) $event->command)->after("'artisan' ") => $event])
+        ->all();
+}
+
+it('cleans, runs and monitors the backups every day when the backup schedule is on', function (): void {
+    $events = backupEvents(true);
+
+    expect(array_map(fn (Event $event): string => $event->expression, $events))
+        ->toBe(['backup:clean' => '0 1 * * *', 'backup:run' => '30 1 * * *', 'backup:monitor' => '0 7 * * *'])
+        ->and(array_filter($events, fn (Event $event): bool => ! $event->withoutOverlapping))->toBe([]);
+});
+
+it('does not schedule the backups when the backup schedule is off', function (): void {
+    expect(backupEvents(false))->toBe([]);
+});
+
+it('syncs the backup tasks to the monitored tasks when the backup schedule is on', function (): void {
+    backupEvents(true);
+
+    $this->artisan('schedule-monitor:sync')->assertSuccessful();
+
+    expect(ScheduledTask::query()->where('name', 'like', 'backup:%')->orderBy('name')->pluck('name')->all())
+        ->toBe(['backup:clean', 'backup:monitor', 'backup:run']);
+});
+
+/**
+ * 在给定的环境变量下读取 config/core.php 的 monitor.backup.schedule（null 表示未设置该变量）。
+ */
+function backupScheduleConfig(string $appEnv, ?string $schedule): bool
+{
+    $variables = ['APP_ENV' => $appEnv, 'CORE_BACKUP_SCHEDULE' => $schedule];
+    $original = array_map(fn (string $name): array => [Env::get($name), Request::server($name) ?? null, getenv($name)], array_combine(array_keys($variables), array_keys($variables)));
+
+    $set = function (string $name, ?string $value): void {
+        if ($value === null) {
+            unset($_ENV[$name], $_SERVER[$name]);
+            putenv($name);
+        } else {
+            $_ENV[$name] = $_SERVER[$name] = $value;
+            putenv("{$name}={$value}");
+        }
+    };
+
+    try {
+        foreach ($variables as $name => $value) {
+            $set($name, $value);
+        }
+
+        return (require base_path('config/core.php'))['monitor']['backup']['schedule'];
+    } finally {
+        foreach ($original as $name => [$env, $server, $getenv]) {
+            $set($name, is_string($getenv) ? $getenv : (is_string($env) ? $env : (is_string($server) ? $server : null)));
+        }
+    }
+}
+
+it('schedules the backups by default only in production, unless CORE_BACKUP_SCHEDULE says otherwise', function (string $appEnv, ?string $schedule, bool $expected): void {
+    expect(backupScheduleConfig($appEnv, $schedule))->toBe($expected);
+})->with([
+    'production by default' => ['production', null, true],
+    'local by default' => ['local', null, false],
+    'testing by default' => ['testing', null, false],
+    'turned off in production' => ['production', 'false', false],
+    'turned on in local' => ['local', 'true', true],
+]);
 
 /**
  * MonitorServiceProvider 按当前配置给出的健康检查项的名称。
@@ -124,6 +211,12 @@ it('registers the default health checks', function (): void {
     expect(Health::registeredChecks()->map(fn (Check $check): string => $check->getName())->all())
         ->toBe(['Database', 'Cache', 'UsedDiskSpace', 'Queue', 'Schedule', 'DebugMode', 'Environment', 'OptimizedApp']);
 });
+
+it('checks the backups only when the backup schedule is on', function (bool $scheduled): void {
+    config(['core.monitor.backup.schedule' => $scheduled]);
+
+    expect(in_array('Backups', healthCheckNames(), true))->toBe($scheduled);
+})->with(['on' => [true], 'off' => [false]]);
 
 it('checks the database connection count only on MySQL, MariaDB and PostgreSQL', function (string $driver, bool $registered): void {
     config(['database.connections.sqlite.driver' => $driver]);

@@ -1,6 +1,6 @@
 <?php
 
-use App\Core\System\Models\{Attachment, User};
+use App\Core\System\Models\{Attachment, Export, User};
 use Illuminate\Support\Facades\Gate;
 
 /*
@@ -53,6 +53,35 @@ describe('view', function (): void {
 
         expect(Gate::forUser($admin)->allows('view', $own))->toBeTrue()
             ->and(Gate::forUser($admin)->allows('view', $other))->toBeFalse();
+    });
+});
+
+describe('private attachments', function (): void {
+    it('lets only viewers of the record access attachments bound to a PrivateAttachable record, not attachment admins', function (): void {
+        $owner = User::factory()->create();
+        $export = Export::factory()->for($owner)->create();
+        $attachment = Attachment::factory()->for($owner, 'creator')->boundTo($export, Export::FILE_COLLECTION)->create();
+
+        expect($attachment->isPrivate())->toBeTrue()
+            ->and(Gate::forUser($owner)->allows('view', $attachment))->toBeTrue()
+            ->and(Gate::forUser(userWithDataScope('all', 'system.attachment'))->allows('view', $attachment))->toBeFalse()
+            ->and(Gate::forUser(superAdminActor())->allows('view', $attachment))->toBeFalse();
+    });
+
+    it('stays private after the record is gone', function (): void {
+        $export = Export::factory()->create();
+        $attachment = Attachment::factory()->boundTo($export, Export::FILE_COLLECTION)->create();
+        $export->deleteQuietly();
+
+        expect(Gate::forUser(userWithDataScope('all', 'system.attachment'))->allows('view', $attachment->fresh()))->toBeFalse();
+    });
+
+    it('keeps the other attachments non-private', function (): void {
+        $owner = User::factory()->create();
+
+        expect(Attachment::factory()->create()->isPrivate())->toBeFalse()
+            ->and(Attachment::factory()->boundTo($owner, User::AVATAR_COLLECTION)->create()->isPrivate())->toBeFalse()
+            ->and(Attachment::privateAttachableTypes())->toBe(['export']);
     });
 });
 

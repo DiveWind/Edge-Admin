@@ -232,6 +232,13 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - 枚举实现 `App\Core\System\Contracts\HasLabel`（`label()` 返回多语言的显示名称，`tests/Arch` 强制）。
 - `app/Core/Generator` 是生成命令所在的内核模块（只在命令行下注册），修改生成规则时同步更新它的测试 `tests/Core/Generator`。
 
+### 富文本与导出（设计文档 §9、§6.10）
+
+- 存 HTML 的列一律在模型的 `casts()` 中用 `App\Support\Eloquent\Casts\SanitizedHtml`（默认档位 `rich`，`SanitizedHtml::class.':basic'` 不允许图片），不手动净化；
+  `app/` 中只有 `App\Support\Html` 使用 symfony/html-sanitizer（`tests/Arch`）。正文中的图片不要引用附件的签名地址（会过期）。
+- 列表要支持导出时：查询放进模块的 Query 类（列表与导出共用），实现 `App\Core\System\Contracts\Exporter` 并登记到 `ExporterRegistry`，
+  菜单加 `<菜单>.export` 按钮，入口加 `POST /<列表路径>/export`（步骤见 `app/Core/System/README.md` 的“异步导出”）。
+
 ### 常驻内存兼容（设计文档 §10.3）
 
 默认以 PHP-FPM 运行，但代码一律按常驻内存（Octane + FrankenPHP）安全来写：

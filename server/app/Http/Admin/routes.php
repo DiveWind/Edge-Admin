@@ -2,8 +2,8 @@
 
 use App\Http\Admin\AdminServiceProvider;
 use App\Http\Admin\Message\Controllers\{AnnouncementController, AnnouncementRoleOptionsController, NotificationController, PublishAnnouncementController, ReadAllNotificationsController, ReadNotificationController, ReceivedAnnouncementController, RevokeAnnouncementController, UnreadNotificationCountController};
-use App\Http\Admin\Monitor\Controllers\{FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
-use App\Http\Admin\System\Controllers\{AttachmentController, AttachmentDownloadController, AttachmentPreviewController, AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserInfoController, UserPasswordController, UserStatusController};
+use App\Http\Admin\Monitor\Controllers\{BackupController, BackupDestinationController, FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunBackupController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
+use App\Http\Admin\System\Controllers\{AttachmentController, AttachmentDownloadController, AttachmentPreviewController, AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, ExportController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserExportController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -54,10 +54,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::apiResource('notifications', NotificationController::class)->only(['index', 'destroy'])->whereUuid('notification');
     Route::apiResource('announcements', ReceivedAnnouncementController::class)->only(['index', 'show'])->whereNumber('announcement');
 
+    // 我的导出（设计文档 §6.10）：个人功能，只能访问本人发起的导出；文件的下载地址是附件的签名 URL
+    Route::apiResource('exports', ExportController::class)->only(['index', 'show', 'destroy'])->whereNumber('export');
+
     // 系统管理（设计文档 §6.5）
     Route::prefix('system')->name('system.')->group(function (): void {
         Route::put('users/{user}/status', UserStatusController::class)->whereNumber('user')->name('users.status');
         Route::put('users/{user}/password', UserPasswordController::class)->whereNumber('user')->name('users.password');
+        // 异步导出（§6.10）：筛选与排序同列表，另经过发起导出的限流（admin-exports）
+        Route::post('users/export', UserExportController::class)->middleware('throttle:'.AdminServiceProvider::EXPORT_LIMITER)->name('users.export');
         Route::apiResource('users', UserController::class)->whereNumber('user');
 
         Route::get('roles/options', RoleOptionsController::class)->name('roles.options');
@@ -93,7 +98,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
 
     // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位，失败任务的 {failed_job} 是 UUID；
-    // 立即执行、重试、立即检查另经过运维动作的限流（admin-ops）
+    // 立即执行、重试、立即检查、立即备份另经过运维动作的限流（admin-ops）
     Route::prefix('monitor')->name('monitor.')->group(function (): void {
         $ops = 'throttle:'.AdminServiceProvider::OPS_LIMITER;
 
@@ -117,5 +122,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('health', HealthResultController::class)->name('health');
         Route::post('health/check', RunHealthChecksController::class)->middleware($ops)->name('health.check');
         Route::get('system-info', SystemInfoController::class)->name('system-info');
+
+        // 备份（§6.10）：备份列表、各备份盘的健康状态、立即备份（派发调度中的 backup:run）；不提供下载
+        Route::get('backups/destinations', BackupDestinationController::class)->name('backups.destinations');
+        Route::post('backups/run', RunBackupController::class)->middleware($ops)->name('backups.run');
+        Route::apiResource('backups', BackupController::class)->only(['index']);
     });
 });

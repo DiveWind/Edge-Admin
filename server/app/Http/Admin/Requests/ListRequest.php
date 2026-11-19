@@ -11,8 +11,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * - 排序：`sort`，多个字段逗号分隔，降序加 `-`，如 `sort=-created_at,id`；
  * - 筛选：`filter[字段]`，如 `filter[status]=active`。
  *
- * 允许的排序、筛选字段由后续接入的 spatie/laravel-query-builder 显式白名单控制；这里只校验参数格式。
+ * 允许的排序、筛选字段由 spatie/laravel-query-builder 显式白名单控制；这里只校验参数格式。
  * 控制器：`ArticleResource::collection($query->paginate($request->pageSize()))`，响应由 FormatResponse 转为 `{ items, total }`。
+ * 需要导出的列表（§6.10）把查询放在模块的 Query 类中，以 listParameters() 为参数，列表与导出共用同一份白名单与数据范围。
  */
 class ListRequest extends FormRequest
 {
@@ -45,6 +46,24 @@ class ListRequest extends FormRequest
     public function pageSize(): int
     {
         return $this->integer('pageSize', config()->integer('core.apps.admin.pagination.page_size'));
+    }
+
+    /**
+     * 交给列表 Query 类（query-builder）的参数 `{ filter, sort }`（只含请求中出现的）：列表与导出（§6.10）用同一份参数构造查询。
+     *
+     * @return array<string, mixed>
+     */
+    public function listParameters(): array
+    {
+        $parameters = [];
+
+        foreach (['filter', 'sort'] as $key) {
+            if ($this->has($key)) {
+                $parameters[$key] = $this->input($key);
+            }
+        }
+
+        return $parameters;
     }
 
     /**

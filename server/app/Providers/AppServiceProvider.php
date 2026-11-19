@@ -13,10 +13,10 @@ use Illuminate\Support\Facades\{DB, Date};
 use Illuminate\Support\{ServiceProvider, Str};
 use Illuminate\Validation\Rules\Password;
 use LogicException;
-use Symfony\Component\HtmlSanitizer\{HtmlSanitizer, HtmlSanitizerConfig, HtmlSanitizerInterface};
 
 /**
  * 全项目的全局默认（设计文档 §4.5、§9、§10）。入口的配置在各自的 ServiceProvider（app/Http/<Name>）中。
+ * 富文本净化的规则在 App\Support\Html\HtmlSanitizers（档位见 config('core.html')）。
  */
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,28 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->registerHtmlSanitizer();
-    }
-
-    /**
-     * 富文本净化（§9、§13）：模型的 SanitizedHtml 转换在写入属性时使用。HtmlSanitizer 构造后只读（配置不可变），作为单例不保存请求数据。
-     *
-     * - allowSafeElements()：W3C 的安全元素与属性（去掉 script、style、iframe、form、on* 事件属性等）；
-     * - 链接只允许 http、https、mailto，图片等媒体只允许 http、https（不允许 javascript:、data:）；a 一律加 rel="noopener noreferrer"；
-     * - 输入最长 1,000,000 字节（包的默认 20000 字节，超出部分会被静默截掉；字段的长度上限由 Form Request 校验）。
-     *
-     * 需要不同的规则时，在项目中重新绑定 HtmlSanitizerInterface。
-     */
-    protected function registerHtmlSanitizer(): void
-    {
-        $this->app->singleton(HtmlSanitizerInterface::class, fn (): HtmlSanitizer => new HtmlSanitizer(
-            new HtmlSanitizerConfig()
-                ->allowSafeElements()
-                ->allowLinkSchemes(['http', 'https', 'mailto'])
-                ->allowMediaSchemes(['http', 'https'])
-                ->forceAttribute('a', 'rel', 'noopener noreferrer')
-                ->withMaxInputLength(1_000_000),
-        ));
+        //
     }
 
     /**

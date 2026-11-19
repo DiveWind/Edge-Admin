@@ -4,13 +4,12 @@ namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{CreateUser, DeleteUser, UpdateUser};
 use App\Core\System\Models\User;
+use App\Core\System\Queries\UserList;
 use App\Http\Admin\System\Requests\{UserIndexRequest, UserRequest};
 use App\Http\Admin\System\Resources\UserResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 用户管理（设计文档 §6.5、§8.4、§8.5、§8.6）：列表、详情、新增、修改、删除。
@@ -24,23 +23,12 @@ class UserController
     /**
      * 列表（经过数据范围 visibleTo($actor)，预加载 roles）：筛选 username、name、email（模糊）、status（精确）、
      * created_at（区间 `起,止`）；排序 id、username、created_at，默认 `-id`。不在白名单内的筛选、排序参数返回 422（§6.3）。
+     * 查询在 Query 类 UserList 中，与导出（UserExportController）共用。
      */
     #[Authorize('viewAny', User::class)]
-    public function index(UserIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(UserIndexRequest $request, UserList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $users = QueryBuilder::for(User::query()->visibleTo($actor)->with('roles'), $request)
-            ->allowedFilters(
-                AllowedFilter::partial('username'),
-                AllowedFilter::partial('name'),
-                AllowedFilter::partial('email'),
-                AllowedFilter::exact('status'),
-                DateTimeRangeFilter::allowed('created_at'),
-            )
-            ->allowedSorts('id', 'username', 'created_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return UserResource::collection($users);
+        return UserResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

@@ -23,6 +23,11 @@ $only = is_string($only)
 
 $enabled = fn (string $app): bool => $only === null || in_array($app, $only, true);
 
+// 逗号分隔的环境变量 → 小写的列表；未设置或为空时为 null
+$list = fn (mixed $value): ?array => is_string($value) && trim($value) !== ''
+    ? array_values(array_filter(array_map(trim(...), explode(',', strtolower($value)))))
+    : null;
+
 return [
 
     /*
@@ -39,7 +44,8 @@ return [
     | - prefix：URL 前缀；
     | - rate_limit：每分钟请求上限（已登录按用户、未登录按 IP 计数）；
     | - ops_rate_limit：运维动作的每分钟上限（限流器 admin-ops，按用户计数）；
-    | - upload_rate_limit：上传附件的每分钟上限（限流器 admin-uploads，按用户计数）。
+    | - upload_rate_limit：上传附件的每分钟上限（限流器 admin-uploads，按用户计数）；
+    | - export_rate_limit：发起导出的每分钟上限（限流器 admin-exports，按用户计数）。
     |
     */
 
@@ -57,6 +63,9 @@ return [
 
             // 上传附件（POST /attachments）另外的每分钟上限，按用户计数（设计文档 §6.8）
             'upload_rate_limit' => (int) env('CORE_ADMIN_UPLOAD_RATE_LIMIT', 30),
+
+            // 发起导出（POST /<列表>/export）另外的每分钟上限，按用户计数（设计文档 §6.10）
+            'export_rate_limit' => (int) env('CORE_ADMIN_EXPORT_RATE_LIMIT', 5),
 
             // 列表分页（设计文档 §6.3）：page 从 1 开始；pageSize 缺省时取 page_size，超过 max_page_size 返回 422
             'pagination' => [
@@ -127,6 +136,11 @@ return [
     | - database_connections：数据库连接数，只在默认连接为 MySQL / MariaDB / PostgreSQL 时注册；
     | - queue：默认队列的心跳最长间隔（分钟）；schedule：调度心跳最长间隔（分钟）；environment：期望的运行环境。
     |
+    | backup：备份（spatie/laravel-backup，备份盘、内容、保留策略、健康标准与通知在 config/backup.php，设计文档 §6.10）。
+    | - schedule：是否调度每日的 backup:clean、backup:run、backup:monitor（routes/console.php），同时决定是否注册健康检查 Backups。
+    |   默认跟随环境：production 开启，其他环境关闭（开发环境常没有 mysqldump、sqlite3 等客户端）；显式设置 CORE_BACKUP_SCHEDULE 时以设置为准。
+    |   与其他配置一样在读取配置时求值，config:cache 时按缓存时的 APP_ENV 与 CORE_BACKUP_SCHEDULE 固定下来。
+    |
     */
 
     'monitor' => [
@@ -156,6 +170,10 @@ return [
             'queue_heartbeat_minutes' => (int) env('CORE_HEALTH_QUEUE_MINUTES', 5),
             'schedule_heartbeat_minutes' => (int) env('CORE_HEALTH_SCHEDULE_MINUTES', 2),
             'environment' => env('CORE_HEALTH_ENVIRONMENT', 'production'),
+        ],
+
+        'backup' => [
+            'schedule' => (bool) env('CORE_BACKUP_SCHEDULE', env('APP_ENV') === 'production'),
         ],
     ],
 
@@ -205,6 +223,63 @@ return [
         'announcements' => [
             'batch_size' => (int) env('CORE_ANNOUNCEMENT_BATCH_SIZE', 500),
             'link' => env('CORE_ANNOUNCEMENT_LINK', '/announcements/{id}'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 异步导出（设计文档 §6.10）
+    |--------------------------------------------------------------------------
+    |
+    | 部署级配置。导出的文件存为附件（core.attachments.disk），只有发起人能下载。
+    |
+    | - ttl：导出任务与文件保留多少小时（按创建时间，不论状态），之后由 model:prune 连同文件删除（每小时执行）；
+    | - max_active：同一用户同时排队与进行中的导出上限，超过时发起导出返回 422；
+    | - chunk_size：生成文件时每次从数据库读取的行数（lazy() 分块，不一次读入全部数据）；
+    | - timeout：导出队列任务的超时（秒），超时即失败。必须小于队列连接的 retry_after（默认 90）并留出余量，
+    |   否则任务仍在执行时会被另一个 worker 再次取出；调大时同时调大 retry_after；
+    | - link：完成 / 失败通知的链接（前端的“我的导出”路由，可含 `{id}`）。
+    |
+    */
+
+    'exports' => [
+        'ttl' => (int) env('CORE_EXPORT_TTL_HOURS', 24),
+        'max_active' => (int) env('CORE_EXPORT_MAX_ACTIVE', 3),
+        'chunk_size' => (int) env('CORE_EXPORT_CHUNK_SIZE', 500),
+        'timeout' => (int) env('CORE_EXPORT_TIMEOUT', 60),
+        'link' => env('CORE_EXPORT_LINK', '/exports'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 富文本净化（设计文档 §9）
+    |--------------------------------------------------------------------------
+    |
+    | 模型的富文本字段用类型转换 SanitizedHtml（`SanitizedHtml::class` 为默认档位，`SanitizedHtml::class.':basic'` 指定档位），
+    | 写入属性时由 App\Support\Html\HtmlSanitizers 净化。所有档位共用：W3C 的安全元素与属性、链接协议白名单、a 加 rel="noopener noreferrer"。
+    |
+    | - default_profile：未指定档位时使用的档位；
+    | - max_input_length：输入的最大字节数（symfony 的默认 20000 字节，超出部分会被静默截掉）；
+    | - link_schemes：链接允许的协议；media_schemes：图片等媒体允许的协议（不允许 data:、javascript:）；
+    | - profiles：档位。media 是否允许图片等媒体；media_hosts 只允许这些主机的媒体（null 不限）。
+    |   正文中的图片不要引用附件的签名地址（会过期），CORE_HTML_MEDIA_HOSTS 可限定为自己的图床或 CDN（逗号分隔）。
+    |
+    */
+
+    'html' => [
+        'default_profile' => 'rich',
+        'max_input_length' => 1_000_000,
+        'link_schemes' => ['http', 'https', 'mailto'],
+        'media_schemes' => ['http', 'https'],
+        'profiles' => [
+            // 基础：文字格式、标题、列表、表格、引用、链接；不允许图片等媒体
+            'basic' => ['media' => false],
+
+            // 含图片：另允许 http(s) 的图片等媒体
+            'rich' => [
+                'media' => true,
+                'media_hosts' => $list(env('CORE_HTML_MEDIA_HOSTS')),
+            ],
         ],
     ],
 

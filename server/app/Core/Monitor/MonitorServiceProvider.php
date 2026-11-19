@@ -2,6 +2,7 @@
 
 namespace App\Core\Monitor;
 
+use App\Core\Monitor\Checks\BackupsCheck;
 use App\Core\Monitor\Enums\{LoginEvent, LoginFailureReason};
 use App\Core\Monitor\Listeners\RecordLoginActivity;
 use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
@@ -26,7 +27,8 @@ use Spatie\Health\Facades\Health;
  * - 登录日志：RecordLoginActivity 订阅认证事件（设计文档 §7.3）；
  * - Sanctum 的 PersonalAccessToken 不在 app/ 中，Policy 无法按命名推断，这里显式绑定 PersonalAccessTokenPolicy；
  * - 健康检查的检查项（spatie/laravel-health，阈值见 config('core.monitor.health')，设计文档 §6.6）：只在启动时登记到 Health 单例，
- *   不保存请求数据。
+ *   不保存请求数据；
+ * - 备份（spatie/laravel-backup，设计文档 §6.10）：菜单 monitor.backup，调度在 routes/console.php，配置在 config/backup.php。
  *
  * 操作日志的中间件在后台入口（App\Http\Admin\Middleware\RecordOperationLog）；过期日志、执行记录的清理与健康检查、心跳在 routes/console.php 中调度。
  */
@@ -69,7 +71,8 @@ class MonitorServiceProvider extends ServiceProvider
     }
 
     /**
-     * 健康检查项（设计文档 §6.6）：数据库连接数只在 MySQL / MariaDB / PostgreSQL 下注册，磁盘使用率依赖 `df`（Windows 下默认关闭）。
+     * 健康检查项（设计文档 §6.6）：数据库连接数只在 MySQL / MariaDB / PostgreSQL 下注册，磁盘使用率依赖 `df`（Windows 下默认关闭），
+     * 备份（Backups，§6.10）只在备份调度开启时注册。
      *
      * @return list<Check>
      */
@@ -96,6 +99,7 @@ class MonitorServiceProvider extends ServiceProvider
             DebugModeCheck::new(),
             EnvironmentCheck::new()->expectEnvironment(config()->string($health.'environment')),
             OptimizedAppCheck::new(),
+            config()->boolean('core.monitor.backup.schedule') ? BackupsCheck::new() : null,
         ]));
     }
 }

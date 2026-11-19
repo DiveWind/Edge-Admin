@@ -39,6 +39,15 @@ return [
             'report' => false,
         ],
 
+        // 备份盘（spatie/laravel-backup，config/backup.php 的 BACKUP_DISKS，设计文档 §6.10）：不在 Web 根目录、不在被备份的 storage/app/private 中
+        'backups' => [
+            'driver' => 'local',
+            'root' => storage_path('app/backups'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

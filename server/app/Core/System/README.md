@@ -19,7 +19,9 @@
 - 系统参数（设计文档 §6.7）：`Models/Setting`、扩展点 `SettingRegistry` 与同步命令 `core:sync-settings`、读取服务 `Settings`、本模块的参数分组 `resources/settings.php`（下文“系统参数”）；
 - 枚举选项（设计文档 §6.7）：显式白名单 `Services/EnumRegistry`（下文“枚举选项”）；
 - 附件（设计文档 §6.8）：`Models/Attachment`、上传校验 `Rules/AllowedUpload`、归属校验 `Rules/OwnedAttachment`、绑定 `Actions/SyncAttachments` 与
-  模型 trait `Models/Concerns/HasAttachments`、访问权委托 `Policies/AttachmentPolicy`、孤儿清理、头像（下文“附件”）。
+  模型 trait `Models/Concerns/HasAttachments`、访问权委托 `Policies/AttachmentPolicy`、孤儿清理、头像（下文“附件”）；
+- 异步导出（设计文档 §6.10）：扩展点 `Contracts/Exporter` / `Services/ExporterRegistry`、导出任务 `Models/Export` 与队列任务 `Jobs/RunExport`、
+  用户列表的导出 `Exporters/UserExporter`（与列表共用 `Queries/UserList`）、文件存为私有附件（下文“异步导出”）。
 
 不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）；
 附件的下载、预览路由与签名 URL 的签发（入口的事，后台入口见 `app/Http/Admin/System/Controllers/Attachment*Controller` 与 `AttachmentResource`）。
@@ -78,6 +80,15 @@
 | `Actions/DeleteAttachment` | 删除附件，文件在事务提交后删除 |
 | `Rules/AllowedUpload` | 上传校验：内容 MIME 推断的扩展名与客户端扩展名都在白名单中、大小上限（系统参数 `attachment.*`） |
 | `Rules/OwnedAttachment` | 引用附件的归属校验：自己上传的未绑定附件，或这条记录已有的附件；可限定 MIME |
+| `Contracts/PrivateAttachable` | 标记接口：绑定在实现它的记录上的附件只跟随记录（附件管理不列出、管理员不能访问），`Export` 已实现 |
+| `Contracts/Exporter`、`Services/ExporterRegistry` | 扩展点：导出类（显示名、权限码、列、按“操作者 + 列表参数”构造查询、逐行映射）与其登记（下文“异步导出”） |
+| `Queries/UserList` | 用户列表的查询（query-builder 白名单 + `visibleTo`），列表接口与 `UserExporter` 共用 |
+| `Exporters/UserExporter` | 用户列表的导出（`system.user`，权限码 `system.user.export`） |
+| `Actions/CreateExport` | 发起导出：同步校验参数、并发上限（锁用户行，422）、入队 `RunExport` |
+| `Actions/GenerateExport`、`Jobs/RunExport` | 生成文件：复核权限、`lazy()` 分块、按发起时的语言、防公式注入（`Services/ExportWriter`）、存为附件、派发 `Events/ExportFinished` |
+| `Actions/FailExport`、`DeleteExport`、`DeleteUserExports` | 标记失败；删除（排队、进行中的即取消）；删除用户的全部导出（用户删除前） |
+| `Policies/ExportPolicy` | 导出只属于发起人：查看、下载、删除只限本人 |
+| `Events/ExportFinished` | 导出完成或失败（Message 据此通知发起人） |
 | `Policies/AttachmentPolicy` | 附件的授权：上传只需登录；访问权委托给绑定对象；附件管理按 `system.attachment` 与数据范围；已绑定的不能删 |
 | `Commands/SyncCommand` | `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即停止（非 0 退出）；`DatabaseSeeder` 与部署使用 |
 
@@ -374,6 +385,27 @@ public function boot(EnumRegistry $enums): void
 | 上传的类型不在白名单、超过上限 | 422（`file`） | `AllowedUpload` |
 | 引用别人的、已绑定在别处的、不存在的附件；MIME 不符合用途 | 422（对应字段） | `OwnedAttachment`；并发时 `SyncAttachments` 加锁复核 |
 
+## 异步导出
+
+模块接入（设计文档 §5.5、§6.10）：
+
+1. 把列表的查询放进本模块的 Query 类（`builder(User $actor, array $parameters): QueryBuilder`，如 `UserList`），列表控制器调用它；
+2. 实现 `Contracts/Exporter`，`query()` 调用同一个 Query 类（同一份筛选白名单与数据范围），在 Provider 的 `boot()` 中
+   `$exporters->register(['content.article' => ArticleExporter::class])`；
+3. 在 `resources/menus.php` 的列表菜单下加按钮 `export`（权限码 `<菜单>.export`）；
+4. 入口加 `POST /<列表路径>/export`：请求继承列表请求（去掉 `page`、`pageSize`，加 `format`），`#[Authorize('<菜单>.export')]`，
+   经过 `admin-exports` 限流，调用 `CreateExport::handle($actor, '<名称>', $format, $request->listParameters())`。
+
+“我的导出”（`/exports`）、文件下载（附件的签名地址）、完成通知、到期清理都是统一的，模块不用写。
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 没有导出权限码 | 403 | 导出入口的 `#[Authorize]` |
+| 筛选、排序不在列表的白名单 / 格式不对 | 422 | 列表请求、Query 类（`CreateExport` 同步构造一次） |
+| 同一用户排队与进行中的导出超过 `core.exports.max_active` | 422（`message`） | `CreateExport`（锁用户行） |
+| 查看、下载、删除他人的导出（超管也一样） | 403 | `ExportPolicy`、`AttachmentPolicy`（`PrivateAttachable`） |
+| 执行时发起人已停用或失去权限码 | 导出失败，不写出数据 | `GenerateExport` |
+
 ## 依赖 Core 的能力
 
 无。`Contracts/HasLabel` 是本模块提供给 Core 与业务模块的枚举接口。
@@ -385,6 +417,8 @@ public function boot(EnumRegistry $enums): void
 `config/core.php` 的 `auth`：`login_rate_limit`（系统参数 `auth.login_rate_limit` 的默认值）、`frontend_url` 与 `reset_password_path`（重置密码的前端页面）。
 
 `config/core.php` 的 `attachments`：`disk`（存储盘，私有盘）、`url_ttl`、`avatar_url_ttl`（签名地址与头像地址的时间窗口，分钟；过期时间对齐到窗口，有效期为 1～2 个窗口）、`orphan_ttl`（未绑定附件的保留小时数）。
+
+`config/core.php` 的 `exports`：`ttl`（保留小时数）、`max_active`（每人同时进行的上限）、`chunk_size`（每次读取的行数）、`timeout`（队列任务超时，须小于 `retry_after`）、`link`（完成通知的链接）；发起导出的限流在 `apps.admin.export_rate_limit`。
 
 ## 生成命令
 
