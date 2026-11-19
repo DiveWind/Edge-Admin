@@ -26,7 +26,8 @@ use Spatie\Permission\Traits\HasRoles;
  * - HasRoles：spatie 的角色关联与分配（Action 中 syncRoles()）。判定一律走 can() / Gate / Policy（设计文档 §8.1），
  *   不使用 hasRole() 等 spatie 的判定 API（PHPStan 拦截）；除“是否超管”（isSuperAdmin()）外不按角色判断；
  * - created_by：创建人，供“仅本人”数据范围使用（§8.4、§8.5），由 Action 写入；
- * - HasDataScope：数据权限，`User::query()->visibleTo($actor)` 与 `$user->isVisibleTo($actor)`（用户管理的列表、详情、Policy 使用）。
+ * - HasDataScope：数据权限，`User::query()->visibleTo($actor)` 与 `$user->isVisibleTo($actor)`（用户管理的列表、详情、Policy 使用）；
+ *   “仅本人”范围下，自己创建的用户与本人都可见（dataScopeOwnerColumns()）。可见不等于可操作：删除、停用自己仍由 UserPolicy 拒绝。
  */
 #[Fillable(['username', 'name', 'email', 'avatar', 'password', 'status'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
@@ -75,6 +76,16 @@ class User extends Authenticatable
         $roles = $this->roles;
 
         return $roles->filter(fn (Role $role): bool => $role->isEnabled())->values();
+    }
+
+    /**
+     * “仅本人”数据范围的归属列（§8.4）：自己创建的用户（created_by），以及本人（id）。
+     *
+     * @return non-empty-list<string>
+     */
+    public function dataScopeOwnerColumns(): array
+    {
+        return ['created_by', 'id'];
     }
 
     /**

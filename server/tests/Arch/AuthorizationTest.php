@@ -1,7 +1,7 @@
 <?php
 
 use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Models\{Permission, User};
+use App\Core\System\Models\Permission;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route as RouteDefinition;
@@ -41,10 +41,10 @@ const LOGIN_ONLY_ROUTES = [
 const POLICY_METHODS = ['viewAny', 'view', 'create', 'update', 'delete', 'restore', 'forceDelete', 'deleteAny', 'restoreAny', 'forceDeleteAny'];
 
 /**
- * 暂时还没有 Policy 的模型（临时豁免）：User 的 Policy 在 5.3（用户管理）、Permission 的在 5.4（菜单管理）中加入。
- * TODO: 5.3 / 5.4 完成后移除；对应的 Policy 加入后本名单中的条目会让测试失败，提醒删除。
+ * 暂时还没有 Policy 的模型（临时豁免）：Permission 的 Policy 在 5.4（菜单管理）中加入。
+ * TODO: 5.4 完成后移除；对应的 Policy 加入后本名单中的条目会让测试失败，提醒删除。
  */
-const MODELS_PENDING_POLICY = [User::class, Permission::class];
+const MODELS_PENDING_POLICY = [Permission::class];
 
 /**
  * spatie 的判定 API（§8.1）。

@@ -242,6 +242,25 @@ describe('store', function (): void {
         $this->assertDatabaseMissing('roles', ['name' => 'editor']);
     });
 
+    it('returns 422 for a data scope that the operator cannot grant', function (): void {
+        $this->actingAs(userWithPermissions('system.role.create'))
+            ->postJson('/api/admin/system/roles', ['name' => 'editor', 'title' => 'Editor', 'data_scope' => 'all'], ['Accept-Language' => 'zh-CN'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.data_scope.0', '不能授予自己没有的数据范围。');
+
+        $this->assertDatabaseMissing('roles', ['name' => 'editor']);
+    });
+
+    it('lets operators grant the data scopes they have', function (string $operatorScope, string $scope): void {
+        $this->actingAs(userWithDataScope($operatorScope, 'system.role.create'))
+            ->postJson('/api/admin/system/roles', ['name' => 'editor', 'title' => 'Editor', 'data_scope' => $scope])
+            ->assertCreated()
+            ->assertJsonPath('data.data_scope', $scope);
+    })->with([
+        'self grants self' => ['self', 'self'],
+        'all grants all' => ['all', 'all'],
+    ]);
+
     it('lets super admins grant any registered code', function (): void {
         $disabled = Permission::query()->where('name', 'system.menu.delete')->sole();
         $disabled->update(['status' => Status::Disabled]);
@@ -339,6 +358,32 @@ describe('update', function (): void {
             ->assertJsonPath('data.permissions', ['system', 'system.role', 'system.menu', 'system.menu.delete']);
     });
 
+    it('returns 422 when changing the data scope to one that the operator cannot grant', function (): void {
+        $this->actingAs(userWithPermissions('system.role.update'))
+            ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Editor', 'data_scope' => 'all'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.data_scope.0', 'You cannot grant a data scope you do not have.');
+
+        $this->assertDatabaseHas('roles', ['id' => $this->role->id, 'data_scope' => 'self']);
+    });
+
+    it('keeps a data scope that the operator cannot grant when it is unchanged', function (bool $submitted): void {
+        $this->role->update(['data_scope' => 'all']);
+
+        $this->actingAs(userWithPermissions('system.role.update'))
+            ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Changed', ...($submitted ? ['data_scope' => 'all'] : [])])
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Changed')
+            ->assertJsonPath('data.data_scope', 'all');
+    })->with(['submitted' => true, 'not submitted' => false]);
+
+    it('lets super admins change the data scope to any registered scope', function (): void {
+        $this->actingAs(superAdminActor())
+            ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Editor', 'data_scope' => 'all'])
+            ->assertOk()
+            ->assertJsonPath('data.data_scope', 'all');
+    });
+
     it('changes the codes of users with the role right away', function (): void {
         $member = User::factory()->create()->assignRole($this->role);
 
@@ -359,11 +404,20 @@ describe('update', function (): void {
         });
 
         it('updates the display fields', function (): void {
-            $this->actingAs(userWithPermissions('system.role.update'))
+            $this->actingAs(superAdminActor())
                 ->putJson("/api/admin/system/roles/{$this->superAdmin->id}", ['name' => Role::SUPER_ADMIN, 'title' => 'Root', 'remark' => 'Everything'])
                 ->assertOk()
                 ->assertJsonPath('data.title', 'Root')
                 ->assertJsonPath('data.is_super_admin', true);
+        });
+
+        it('returns 403 to operators who are not super admins', function (): void {
+            $this->actingAs(userWithPermissions('system.role.update'))
+                ->putJson("/api/admin/system/roles/{$this->superAdmin->id}", ['name' => Role::SUPER_ADMIN, 'title' => 'Root'], ['Accept-Language' => 'zh-CN'])
+                ->assertForbidden()
+                ->assertExactJson(['code' => 403, 'data' => null, 'message' => '只有超级管理员能管理超级管理员角色。']);
+
+            $this->assertDatabaseHas('roles', ['id' => $this->superAdmin->id, 'title' => 'Super Admin']);
         });
 
         it('rejects changes to the identifier, disabling and permissions', function (array $payload, string $field, string $message): void {

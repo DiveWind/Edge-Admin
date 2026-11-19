@@ -3,14 +3,19 @@
 namespace App\Core\System\Services;
 
 use App\Core\System\Contracts\DataScopeProvider;
+use App\Core\System\Models\{Role, User};
 use Illuminate\Container\Attributes\Singleton;
 use InvalidArgumentException;
+use NoDiscard;
 
 /**
  * 已登记的数据范围提供者（设计文档 §8.4）：单例，只保存启动时注册的提供者（无状态的声明），不保存请求数据（§10.3）。
  *
  * SystemServiceProvider 注册 Core 默认的 `all`、`self`；业务模块在自己 Provider 的 boot() 中注册新的范围。
  * 角色的 data_scope 只能是已登记的 key（角色表单校验）；库中残留的未登记 key 在判定时按“拒绝”处理（HasDataScope）。
+ *
+ * 数据范围的防提权（§8.5）：grantableKeysFor() 是操作者“可授予的数据范围”，角色管理（CreateRole、UpdateRole）、
+ * 分配角色（SyncUserRoles）与角色表单的选项（/system/roles/data-scopes）共用。
  */
 #[Singleton]
 class DataScopeRegistry
@@ -88,5 +93,40 @@ class DataScopeRegistry
     public function keys(): array
     {
         return array_keys($this->providers);
+    }
+
+    /**
+     * $user 可授予的数据范围（§8.5），按登记顺序：
+     *
+     * - 超管，或任一启用角色的范围是 `all` → 全部已登记的范围；
+     * - 否则为各启用角色选用的、已登记的范围（停用角色不算，未登记的 key 不算）。
+     *
+     * 只读取用户的角色，不保存任何状态（本类是单例）。
+     *
+     * @return list<string>
+     */
+    #[NoDiscard]
+    public function grantableKeysFor(User $user): array
+    {
+        if ($user->isSuperAdmin()) {
+            return $this->keys();
+        }
+
+        $keys = $user->enabledRoles()->map(fn (Role $role): string => $role->data_scope)->all();
+
+        if (in_array(self::ALL, $keys, true)) {
+            return $this->keys();
+        }
+
+        return array_values(array_intersect($this->keys(), $keys));
+    }
+
+    /**
+     * $user 能否授予范围 $key（grantableKeysFor() 中有它）。
+     */
+    #[NoDiscard]
+    public function canGrant(User $user, string $key): bool
+    {
+        return in_array($key, $this->grantableKeysFor($user), true);
     }
 }

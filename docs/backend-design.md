@@ -299,8 +299,8 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己）、非超管操作超管用户、删除内置节点、删除 `super-admin` 角色。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、内置节点改 `name` / `type` / `path` / `component`、节点类型层级不合法、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`（`roles`）、唯一性冲突。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码）、非超管操作超管用户、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改 `name` / `type` / `path` / `component`、节点类型层级不合法、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
@@ -365,6 +365,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 分页：`page`（从 1 开始）、`pageSize`（有上限）；
   - 排序：`sort`，多个字段逗号分隔，降序加 `-`，如 `sort=-created_at,id`；
   - 筛选：`filter[字段]`，如 `filter[status]=enabled`；时间区间写成 `filter[created_at]=起,止`。
+- **时间区间**由通用筛选 `App\Support\QueryBuilder\Filters\DateTimeRangeFilter` 实现（`DateTimeRangeFilter::allowed('created_at')`）：两端都是带时区偏移的 ISO 8601（dayjs 的 `format()`，如 `2026-11-19T08:00:00+08:00`，也接受 `Z` 与毫秒），任一端可空（`起,` / `,止`），两端都包含；比较前换算为库中的存储时区（应用时区，§10.1）。格式非法（缺逗号、没有时区偏移、日期不存在）或开始晚于结束 → 422，错误挂在 `filter.<字段>` 上（与其他筛选值的校验错误如 `filter.status` 一致）。查询字符串中的 `+` 要编码为 `%2B`（axios 默认如此）；未编码时被解析为空格，后端按 `+` 处理。
 - 使用 `spatie/laravel-query-builder` 实现，**允许的筛选和排序字段显式白名单**；不在白名单内的参数返回 422（该包默认抛出 400，统一映射为 422）。`failOnUnknownFields` 只检查请求体，查询参数的白名单由该包负责。
 - `pageSize` 超过上限返回 422，不自动截断。
 - 返回 `{ items, total }`。
@@ -386,9 +387,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 |---|---|---|
 | `GET /auth/codes` | 当前用户的权限码 `string[]`（§6.2） | 登录即可 |
 | `GET /menu/all` | Vben 路由树（§6.2） | 登录即可 |
-| `GET /system/users` | 分页 `{ items, total }`；筛选 `username`、`name`、`email`、`status`、`created_at` | `system.user` |
-| `GET /system/users/{user}` | 详情，含 `roles`（角色标识 `string[]`） | `system.user` |
-| `POST /system/users` | 新增：`username`、`name`、`email`、`password`、`roles`、`status` | `system.user.create` |
+| `GET /system/users` | 分页 `{ items, total }`；筛选 `username`、`name`、`email`、`status`、`created_at`；含 `roles`（`[{ name, title }]`） | `system.user` |
+| `GET /system/users/{user}` | 详情，含 `roles`（`[{ name, title }]`） | `system.user` |
+| `POST /system/users` | 新增：`username`、`name`、`email`、`password`、`roles`（角色标识 `string[]`）、`status` | `system.user.create` |
 | `PUT /system/users/{user}` | 修改：字段同新增，不含 `password` | `system.user.update` |
 | `DELETE /system/users/{user}` | 删除 | `system.user.delete` |
 | `PUT /system/users/{user}/status` | 启用 / 停用：`{ status }` | `system.user.status` |
@@ -401,7 +402,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `DELETE /system/roles/{role}` | 删除 | `system.role.delete` |
 | `PUT /system/roles/{role}/status` | 启用 / 停用：`{ status }` | `system.role.status` |
 | `GET /system/roles/permission-tree` | 授权用的节点树：只含启用节点，精简字段 `{ name, type, meta: { title, icon }, children }` | `system.role.create` 或 `system.role.update` |
-| `GET /system/roles/data-scopes` | 数据范围选项 `[{ value, label }]`（§8.4） | `system.role.create` 或 `system.role.update` |
+| `GET /system/roles/data-scopes` | 数据范围选项 `[{ value, label }]`（§8.4），只含操作者可授予的范围（§8.5） | `system.role.create` 或 `system.role.update` |
 | `GET /system/menus` | 整棵节点树（数组，**不分页**，是 §6.3 列表契约的例外） | `system.menu` |
 | `GET /system/menus/{menu}` | 详情 | `system.menu` |
 | `POST /system/menus` | 新增：`parent_id`、`type`、`name`、`path`、`component`、`status`、`meta.*` | `system.menu.create` |
@@ -411,12 +412,20 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 菜单节点的写接口中，`meta.title`、`meta.icon` 存入 `title`、`icon` 列，`meta.order` 存入 `sort` 列（不接受顶层 `sort`），其余 `meta.*` 按白名单存入 `meta` 列（§8.2）。
 - 内置节点的 `name`、`type`、`path`、`component` 在前端只读；提交的值与库中不同时返回 422（§8.6）。
 - 菜单管理页拿到的节点：顶层 `id`、`parent_id`、`type`、`name`、`path`、`component`、`status`、`is_builtin`、`children`，以及 `meta`（含 `title`、`icon`、`order` 和 `meta` 列中的键）。
+- **用户**的输出字段：`id`、`username`、`name`、`email`（可为 null）、`status`、`roles`、`created_at`、`updated_at`；不输出密码与两步验证的字段。
+  - `roles` 在**读接口**（列表、详情，以及新增、修改、启停的响应）中输出为对象数组 `[{ name: 标识, title: 显示名 }]`（含停用的角色，按 `sort`、`id` 排序）：列表要显示角色名，而能看用户列表的人不一定有角色下拉（`/system/roles/options`）的权限。**写接口**的 `roles` 入参是角色标识 `string[]`，前端回填表单时取 `roles.map(r => r.name)`。
+  - 列表：经过数据范围（`visibleTo`，§8.4）；筛选 `username`、`name`、`email`（模糊）、`status`（精确）、`created_at`（区间，§6.3）；排序 `id`、`username`、`created_at`，默认 `-id`。
+  - 新增：`username`（必填，`alpha_dash`，最长 64，统一存为小写，转小写后唯一）、`name`（必填）、`email`（可空、唯一）、`password`（必填，规则同修改密码：`Password::defaults()`）、`roles`（已存在角色的标识，可省略）、`status`（默认 `enabled`）。`created_by` 写入操作者。成功返回 201。
+  - 修改：字段同新增，不含 `password`（提交即 422）；未提交 `roles` 表示角色不变；提交的 `status` 与当前不同时按启用 / 停用处理（规则同状态接口）。
+  - 重置密码：`{ password }`，规则同新增；成功返回 `data: null`，对方全部的会话与 token 失效。不能重置自己的密码（403，自己的密码在个人设置中验证当前密码后修改）。
+  - 删除：同时吊销对方的会话与 token；对方创建的用户 `created_by` 置空。
+  - Policy（`UserPolicy`）方法：`viewAny` / `view`（`system.user`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.user.status`）、`resetPassword`（`system.user.password`）；记录级方法都检查数据范围（`isVisibleTo`）。
 - **角色**的输出字段：`id`、`name`（标识）、`title`、`status`、`data_scope`、`remark`、`sort`、`is_super_admin`（是否为 `super-admin` 角色，前端据此隐藏授权树、禁用删除与停用）、`created_at`、`updated_at`；详情与新增、修改的响应另含 `permissions`（权限码 `string[]`），列表不含。
   - 列表：筛选 `name`、`title`（模糊）、`status`（精确）；排序 `sort`、`id`、`created_at`，默认 `sort,id`。
-  - 新增、修改：`name`、`title` 必填；`status`（默认 `enabled`）、`data_scope`（必须是已登记的范围，默认 `self`）、`remark`、`sort`（默认 0）、`permissions`（已登记的权限码）可选；修改时未提交 `permissions` 表示权限不变，`super-admin` 角色不能提交 `permissions`（422）。新增成功返回 201。
+  - 新增、修改：`name`、`title` 必填；`status`（默认 `enabled`）、`data_scope`（必须是已登记的范围，默认 `self`；非超管只能选自己可授予的范围，§8.5）、`remark`、`sort`（默认 0）、`permissions`（已登记的权限码）可选；修改时未提交 `permissions` 表示权限不变，`super-admin` 角色不能提交 `permissions`（422）。新增成功返回 201。
   - Policy（`RolePolicy`）方法：`viewAny` / `view`（`system.role`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.role.status`）、`viewFormOptions`（授权树与数据范围选项）、`viewOptions`（角色下拉）。
 - **授权树**节点：`{ name, type, meta: { title, icon }, children }`，`icon` 可为 null，叶子的 `children` 为空数组；只含生效节点（本身及全部祖先都启用，含按钮与没有子节点的目录），同级按 `sort`、`id` 排序。
-- 路由参数加格式约束（§9）：`{role}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
+- 路由参数加格式约束（§9）：`{user}`、`{role}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
 - 业务保护规则（不能删除自己、内置节点不能删等）见 §8.6。
 
 ## 7. 认证
@@ -586,7 +595,8 @@ public function delete(User $actor, User $user): Response
 
 ### 8.4 数据权限
 
-- **范围提供者**：接口 `App\Core\System\Contracts\DataScopeProvider`，注册到 `DataScopeRegistry` 单例。Core 默认注册 `all`（全部）、`self`（仅本人，按 `created_by`）；模块可在自己的 Provider 中注册新的范围。每个角色选用一个范围（`roles.data_scope`），新建角色默认 `self`。
+- **范围提供者**：接口 `App\Core\System\Contracts\DataScopeProvider`，注册到 `DataScopeRegistry` 单例。Core 默认注册 `all`（全部）、`self`（仅本人）；模块可在自己的 Provider 中注册新的范围。每个角色选用一个范围（`roles.data_scope`），新建角色默认 `self`。
+- **“仅本人”的语义**：记录“属于”用户时可见。“属于”由模型声明：`HasDataScope::dataScopeOwnerColumns()` 返回归属列，任一列的值等于用户 id 即属于该用户（多列为 OR）；默认只有 `created_by`，模型可覆盖。`User` 声明为 `created_by`、`id`——“仅本人”的操作者在用户管理中能看到**自己和自己创建的用户**。`SelfDataScope` 的 `constrain()` 与 `contains()` 读取同一组列，保持同一规则。本人可见不等于能删除 / 停用自己，后者仍由 Policy 拒绝（403，§8.6）。
 
 | 方法 | 说明 |
 |---|---|
@@ -628,7 +638,9 @@ public function delete(User $actor, User $user): Response
 - **防提权**：
   - 非超管授予角色的权限码，必须是自己有效权限码的子集：提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422（`permissions`）；
   - 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的权限码（对非超管是自己没有的码，对超管是停用节点的授权——它们不出现在授权树中），无论是否提交都保留，操作者既不能加也不能删；
-  - 只有超管能授予或收回 `super-admin` 角色。
+  - 只有超管能授予或收回 `super-admin` 角色（422，`roles`）。
+  - **数据范围**：操作者“可授予的数据范围”（`DataScopeRegistry::grantableKeysFor()`，只算启用角色）——超管，或任一启用角色的范围是 `all` → 全部已登记的范围；否则为各启用角色选用的（已登记的）范围 key。角色管理中非超管提交的 `data_scope` 不在其中 → 422（`data_scope`）；修改时 `data_scope` 保持原值不拦，与权限码的保留规则同一思路。角色表单的选项（`/system/roles/data-scopes`）只列出可授予的范围。
+  - **分配角色**：非超管只能分配或移除“管得到”的角色——角色的权限码全部在操作者的有效权限码之内（含停用节点授权的角色对非超管而言管不到），且角色的 `data_scope` 在操作者可授予的范围内。提交中新增的、管不到的角色 → 422（`roles`，列出角色标识）；用户原本就有、但操作者管不到的角色（含 `super-admin`），无论是否提交都保留不动，与上面权限码的保留规则同一思路。超管不受限。
 
 ### 8.6 业务保护规则
 
@@ -636,18 +648,22 @@ public function delete(User $actor, User $user): Response
 
 **用户**
 
-- 不能删除或停用自己 —— 403。
+- 不能删除或停用自己 —— 403（状态接口）；在修改接口中提交 `status: disabled` 停用自己 —— 422（`status`）。
+- 不能在用户管理中重置自己的密码（应在个人设置中验证当前密码后修改）—— 403。
 - 超管用户只有超管能编辑、重置密码、停用、删除 —— 403。
-- 系统至少保留一个启用的超管：最后一个启用的超管不能删除（`message`）、不能停用（`status`）、不能去掉超管角色（`roles`）—— 422。
+- 系统至少保留一个启用的超管（账号启用且拥有启用的 `super-admin` 角色）：最后一个启用的超管不能删除（`message`）、不能停用（`status`，修改接口与状态接口都拦）、不能去掉超管角色（`roles`）—— 422。
+  - 并发：检查与写入在同一事务中，检查前先对 `super-admin` 角色那一行 `lockForUpdate()`，把所有“减少启用超管”的写操作（删除、停用、去掉超管角色）串行化，避免两个超管同时停用对方后一个不剩（`EnsureSuperAdminRemains`）。SQLite 不支持行锁，但同一时间只有一个写事务。
+  - 通过接口时，非超管操作超管用户先被 403 拦住，超管操作者自己就是一个启用的超管，因此删除、停用的这条 422 实际只在并发时出现；去掉自己的超管角色在只剩自己时直接出现。
 - 非超管授予或收回 `super-admin` 角色 —— 422（`roles`）。
-- 停用走 `DisableUser`（吊销会话与 token，§7.3）；管理员重置密码后吊销对方的会话与 token（§7.4）。
-- 用户名唯一，统一存为小写；重复时 422（`username`）。
+- 停用走 `DisableUser`（吊销会话与 token，§7.3），启用走 `EnableUser`；管理员重置密码、删除用户后吊销对方的会话与 token（§7.4）。
+- 分配角色的防提权见 §8.5（422，`roles`）。
+- 用户名唯一，统一存为小写；重复时 422（`username`）；邮箱唯一，重复时 422（`email`）。表单校验之外，并发写入撞上唯一索引时 Action 同样返回 422。
 
 **角色**
 
-- `super-admin` 不能删除 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树；修改时提交 `permissions` —— 422（`permissions`）。
+- `super-admin` 不能删除 —— 403；只有超管能修改、启停它 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树；修改时提交 `permissions` —— 422（`permissions`）。
 - 已分配给用户的角色不能删除 —— 422（`message`）。
-- 授予的权限码超出自己的有效权限码 —— 422（`permissions`）。
+- 授予的权限码超出自己的有效权限码 —— 422（`permissions`）；选用自己不可授予的数据范围 —— 422（`data_scope`，§8.5）。
 - 停用角色的权限与数据范围都不生效。
 
 **菜单节点**

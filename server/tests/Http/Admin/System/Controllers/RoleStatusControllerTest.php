@@ -64,6 +64,15 @@ it('returns 422 when disabling the super admin role', function (): void {
     $this->assertDatabaseHas('roles', ['id' => $superAdmin->id, 'status' => 'enabled']);
 });
 
+it('returns 403 to operators who are not super admins for the super admin role', function (): void {
+    $superAdmin = Role::query()->where('name', Role::SUPER_ADMIN)->sole();
+
+    $this->actingAs(userWithPermissions('system.role.status'))
+        ->putJson("/api/admin/system/roles/{$superAdmin->id}/status", ['status' => 'enabled'])
+        ->assertForbidden()
+        ->assertJsonPath('message', 'Only super admins can manage the super admin role.');
+});
+
 it('removes the codes and menus of the role right away when it is disabled', function (): void {
     $member = User::factory()->create()->assignRole($this->role);
 

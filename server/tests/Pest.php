@@ -51,10 +51,19 @@ function syncBuiltinPermissions(): void
 
 /**
  * 拥有给定权限码的用户：一个启用角色授予这些权限码及其全部祖先（节点需已存在，如 syncBuiltinPermissions()）。
+ * 角色的数据范围为新建角色的默认值 `self`（仅本人数据）；需要其他范围时用 userWithDataScope()。
  */
 function userWithPermissions(string ...$codes): User
 {
-    $role = Role::factory()->create();
+    return userWithDataScope('self', ...$codes);
+}
+
+/**
+ * 拥有给定权限码、且角色选用给定数据范围（§8.4，如 `all`、`self`）的用户。
+ */
+function userWithDataScope(string $scope, string ...$codes): User
+{
+    $role = Role::factory()->create(['data_scope' => $scope]);
     $role->givePermissionTo(resolve(PermissionRegistry::class)->withAncestors($codes));
 
     return User::factory()->create()->assignRole($role);

@@ -4,7 +4,7 @@ namespace App\Core\System\Models\Concerns;
 
 use App\Core\System\Contracts\DataScopeProvider;
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\DataScopeRegistry;
+use App\Core\System\Services\{DataScopeRegistry, SelfDataScope};
 use Illuminate\Database\Eloquent\{Builder, Model};
 use Illuminate\Support\Collection;
 use NoDiscard;
@@ -17,6 +17,8 @@ use NoDiscard;
  * 3. 没有启用角色，或角色的范围 key 未登记（该角色不贡献任何范围）→ 默认拒绝：查询加 `1 = 0`，单条判定为 false。
  *
  * 停用的角色，其权限与数据范围都不生效。所有查询入口（列表、详情、下拉选项、导出、统计、全局搜索）都必须经过它。
+ *
+ * “仅本人”范围（`self`）按 dataScopeOwnerColumns() 判断记录是否属于用户：默认 `created_by`，模型可覆盖（如 User 另含 `id`）。
  *
  * @mixin Model
  */
@@ -61,6 +63,18 @@ trait HasDataScope
         }
 
         return array_any($scopes, fn (array $scope): bool => $scope['provider']->contains($this, $user, $scope['roles']));
+    }
+
+    /**
+     * “仅本人”范围（SelfDataScope）判断记录归属的列：任一列的值等于用户 id，记录即属于该用户（多列为 OR）。
+     * 默认只有创建人 `created_by`（由 Action 写入，§8.5）；模型可覆盖本方法，如 User 另含 `id`（本人也属于“本人数据”）。
+     * SelfDataScope 的 constrain() 与 contains() 都按它判断，查询与单条判定保持同一规则。
+     *
+     * @return non-empty-list<string>
+     */
+    public function dataScopeOwnerColumns(): array
+    {
+        return [SelfDataScope::OWNER_COLUMN];
     }
 
     /**

@@ -1,6 +1,26 @@
 <?php
 
+use App\Core\System\Models\Role;
 use App\Core\System\Services\{DataScopeRegistry, SelfDataScope};
+
+/**
+ * 登记模块的范围 `department`（测试用，规则同 self）。
+ */
+function registerDepartmentScope(): void
+{
+    resolve(DataScopeRegistry::class)->register(new class extends SelfDataScope
+    {
+        public function key(): string
+        {
+            return 'department';
+        }
+
+        public function label(): string
+        {
+            return 'Department';
+        }
+    });
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -23,7 +43,7 @@ it('returns 403 without the role create or update code', function (): void {
 it('lists the registered scopes with localized labels', function (string $locale, array $labels): void {
     syncBuiltinPermissions();
 
-    $this->actingAs(userWithPermissions('system.role.update'))
+    $this->actingAs(userWithDataScope('all', 'system.role.update'))
         ->getJson('/api/admin/system/roles/data-scopes', ['Accept-Language' => $locale])
         ->assertOk()
         ->assertExactJson(['code' => 0, 'message' => 'ok', 'data' => [
@@ -37,21 +57,25 @@ it('lists the registered scopes with localized labels', function (string $locale
 
 it('includes the scopes registered by modules', function (): void {
     syncBuiltinPermissions();
-    resolve(DataScopeRegistry::class)->register(new class extends SelfDataScope
-    {
-        public function key(): string
-        {
-            return 'department';
-        }
-
-        public function label(): string
-        {
-            return 'Department';
-        }
-    });
+    registerDepartmentScope();
 
     $this->actingAs(superAdminActor())
         ->getJson('/api/admin/system/roles/data-scopes')
         ->assertOk()
         ->assertJsonPath('data.*.value', ['all', 'self', 'department']);
+});
+
+it('lists only the scopes that the operator can grant', function (): void {
+    syncBuiltinPermissions();
+    registerDepartmentScope();
+    $actor = userWithPermissions('system.role.create');
+    $actor->assignRole(Role::factory()->create(['data_scope' => 'department']), Role::factory()->disabled()->create(['data_scope' => 'all']));
+
+    $this->actingAs($actor->fresh())
+        ->getJson('/api/admin/system/roles/data-scopes')
+        ->assertOk()
+        ->assertExactJson(['code' => 0, 'message' => 'ok', 'data' => [
+            ['value' => 'self', 'label' => 'Own data only'],
+            ['value' => 'department', 'label' => 'Department'],
+        ]]);
 });

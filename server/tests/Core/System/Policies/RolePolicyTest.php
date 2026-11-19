@@ -62,6 +62,18 @@ it('forbids deleting the super admin role with a message', function (): void {
         ->and($response->message())->toBe('The super admin role cannot be deleted.');
 });
 
+it('lets only super admins update or change the status of the super admin role', function (string $ability, string $code): void {
+    $role = Role::query()->where('name', Role::SUPER_ADMIN)->sole();
+    $response = Gate::forUser(userWithPermissions($code))->inspect($ability, $role);
+
+    expect($response->denied())->toBeTrue()
+        ->and($response->message())->toBe('Only super admins can manage the super admin role.')
+        ->and(Gate::forUser(superAdminActor())->allows($ability, $role))->toBeTrue();
+})->with([
+    'update' => ['update', 'system.role.update'],
+    'changeStatus' => ['changeStatus', 'system.role.status'],
+]);
+
 it('is the policy of the Role model', function (): void {
     expect(Gate::getPolicyFor(Role::class))->toBeInstanceOf(RolePolicy::class);
 });

@@ -12,6 +12,7 @@ use Illuminate\Validation\ValidationException;
  *
  * - super-admin 角色：标识不能改 → 422（name）；不能停用 → 422（status）；权限隐含全部，不能提交 permissions → 422（permissions）；
  * - 标识唯一 → 422（name）；
+ * - 数据范围防提权：非超管把 data_scope 改为自己不可授予的范围 → 422（data_scope）；保持原值不拦（CreateRole::ensureGrantableDataScope()）；
  * - 提交了 permissions 时按 SyncRolePermissions 的规则保存（防提权、保留操作者管不到的授权、补齐祖先）；未提交时权限不变。
  */
 class UpdateRole
@@ -37,6 +38,7 @@ class UpdateRole
                 $this->protectSuperAdmin($role, $permissions);
             }
 
+            CreateRole::ensureGrantableDataScope($role, $actor);
             CreateRole::save($role);
 
             if ($permissions !== null) {

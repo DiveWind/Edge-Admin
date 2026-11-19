@@ -3,6 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\{Role, User};
+use App\Core\System\Services\DataScopeRegistry;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -11,6 +12,7 @@ use Illuminate\Validation\ValidationException;
  * 新增角色（POST /system/roles，设计文档 §6.5、§8.5）：保存字段，再按 SyncRolePermissions 的规则保存权限码。
  *
  * - 标识（name）唯一：表单已校验，并发冲突时同样返回 422（name）；
+ * - 数据范围防提权：非超管提交的 data_scope 不在自己可授予的范围内 → 422（data_scope，§8.5）；
  * - 未提交的字段取列默认值：status 为 enabled，data_scope 为 self，sort 为 0。
  */
 class CreateRole
@@ -38,6 +40,7 @@ class CreateRole
             // 显式指定 guard：spatie 默认取当前请求的 guard（auth:sanctum 下为 sanctum）
             $role = new Role([...self::only($attributes), 'guard_name' => User::GUARD]);
 
+            self::ensureGrantableDataScope($role, $actor);
             self::save($role);
 
             $this->syncPermissions->handle($role, $permissions, $actor);
@@ -55,6 +58,23 @@ class CreateRole
     public static function only(array $attributes): array
     {
         return array_intersect_key($attributes, array_flip(self::ATTRIBUTES));
+    }
+
+    /**
+     * 数据范围防提权（§8.5）：提交（改动）了 data_scope 时，它必须在操作者可授予的范围内（DataScopeRegistry::grantableKeysFor()），
+     * 否则 → 422（data_scope）。未提交或保持原值时不检查，与权限码“管不到的保持不变”同一思路。
+     *
+     * @throws ValidationException
+     */
+    public static function ensureGrantableDataScope(Role $role, User $actor): void
+    {
+        if (! $role->isDirty('data_scope') || resolve(DataScopeRegistry::class)->canGrant($actor, $role->data_scope)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'data_scope' => [__('You cannot grant a data scope you do not have.')],
+        ]);
     }
 
     /**

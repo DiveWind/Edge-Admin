@@ -76,23 +76,23 @@ it('does not restrict when any enabled role uses the all scope', function (): vo
     expectVisibleUsers($this->actor, [$this->actor, $this->own, $this->team, $this->other]);
 });
 
-it('limits the self scope to records created by the user', function (): void {
+it('limits the self scope to the user and the users they created', function (): void {
     $this->actor->assignRole(Role::factory()->create(['data_scope' => 'self']));
 
-    expectVisibleUsers($this->actor, [$this->own]);
+    expectVisibleUsers($this->actor, [$this->actor, $this->own]);
 });
 
 it('unions the scopes of multiple enabled roles', function (): void {
     registerTeamScope();
     $this->actor->assignRole(Role::factory()->create(['data_scope' => 'self']), Role::factory()->create(['data_scope' => 'team']));
 
-    expectVisibleUsers($this->actor, [$this->own, $this->team]);
+    expectVisibleUsers($this->actor, [$this->actor, $this->own, $this->team]);
 });
 
 it('ignores the scopes of disabled roles', function (): void {
     $this->actor->assignRole(Role::factory()->create(['data_scope' => 'self']), Role::factory()->disabled()->create(['data_scope' => 'all']));
 
-    expectVisibleUsers($this->actor, [$this->own]);
+    expectVisibleUsers($this->actor, [$this->actor, $this->own]);
 });
 
 it('ignores a disabled super admin role', function (): void {
@@ -117,14 +117,14 @@ it('shows nothing for scopes that are not registered', function (): void {
 it('keeps the registered scopes of other roles when one scope is not registered', function (): void {
     $this->actor->assignRole(Role::factory()->create(['data_scope' => 'department']), Role::factory()->create(['data_scope' => 'self']));
 
-    expectVisibleUsers($this->actor, [$this->own]);
+    expectVisibleUsers($this->actor, [$this->actor, $this->own]);
 });
 
 it('keeps the scope inside its own group when combined with other conditions', function (): void {
     registerTeamScope();
     $this->actor->assignRole(Role::factory()->create(['data_scope' => 'self']), Role::factory()->create(['data_scope' => 'team']));
 
-    $names = User::query()->where('name', '!=', 'Own')->visibleTo($this->actor)->pluck('name')->all();
+    $names = User::query()->where('name', '!=', 'Own')->visibleTo($this->actor)->orderBy('id')->pluck('name')->all();
 
-    expect($names)->toBe(['Team member']);
+    expect($names)->toBe(['Actor', 'Team member']);
 });

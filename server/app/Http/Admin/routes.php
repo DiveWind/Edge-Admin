@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserInfoController};
+use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -29,6 +29,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // 系统管理（设计文档 §6.5）
     Route::prefix('system')->name('system.')->group(function (): void {
+        Route::put('users/{user}/status', UserStatusController::class)->whereNumber('user')->name('users.status');
+        Route::put('users/{user}/password', UserPasswordController::class)->whereNumber('user')->name('users.password');
+        Route::apiResource('users', UserController::class)->whereNumber('user');
+
         Route::get('roles/options', RoleOptionsController::class)->name('roles.options');
         Route::get('roles/permission-tree', RolePermissionTreeController::class)->name('roles.permission-tree');
         Route::get('roles/data-scopes', RoleDataScopesController::class)->name('roles.data-scopes');

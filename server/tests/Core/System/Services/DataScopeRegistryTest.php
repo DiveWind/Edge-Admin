@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\System\Models\{Role, User};
 use App\Core\System\Services\{AllDataScope, DataScopeRegistry, SelfDataScope};
 
 /*
@@ -34,3 +35,29 @@ it('rejects an invalid key', function (): void {
         }
     });
 })->throws(InvalidArgumentException::class, '不合法');
+
+it('lets super admins and the all scope grant every registered scope', function (array $roles): void {
+    $user = User::factory()->create()->assignRole(...$roles);
+
+    expect(resolve(DataScopeRegistry::class)->grantableKeysFor($user))->toBe(['all', 'self']);
+})->with([
+    'super admin with the self scope' => fn (): array => [Role::factory()->superAdmin()->create(['data_scope' => 'self'])],
+    'enabled role with the all scope' => fn (): array => [Role::factory()->create(['data_scope' => 'self']), Role::factory()->create(['data_scope' => 'all'])],
+]);
+
+it('grants only the registered scopes of the enabled roles otherwise', function (): void {
+    $user = User::factory()->create()->assignRole(
+        Role::factory()->create(['data_scope' => 'self']),
+        Role::factory()->create(['data_scope' => 'department']),
+        Role::factory()->disabled()->create(['data_scope' => 'all']),
+    );
+    $registry = resolve(DataScopeRegistry::class);
+
+    expect($registry->grantableKeysFor($user))->toBe(['self'])
+        ->and($registry->canGrant($user, 'self'))->toBeTrue()
+        ->and($registry->canGrant($user, 'all'))->toBeFalse();
+});
+
+it('grants nothing to users without enabled roles', function (): void {
+    expect(resolve(DataScopeRegistry::class)->grantableKeysFor(User::factory()->create()))->toBe([]);
+});

@@ -12,10 +12,11 @@
   节点类型见 `Enums/PermissionType`）、菜单与权限节点的扩展点 `MenuRegistry`、同步命令 `core:sync-permissions`、
   有效权限码 `PermissionRegistry` 与 `Gate::before`；
 - 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
+- 用户管理（设计文档 §6.5、§8.5、§8.6）：`Policies/UserPolicy` 与用户的 Action（下文“用户管理”）；
 - 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）。
 
 不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）。
-用户、菜单的管理（Policy、Action、接口）、字典、参数、附件等在后续接入。
+菜单的管理（Policy、Action、接口）、字典、参数、附件等在后续接入。
 
 ## 对外提供
 
@@ -25,7 +26,8 @@
 | `Actions/UpdateUserProfileInformation` | 修改姓名、邮箱、头像（Fortify：`PUT /user/profile-information`） |
 | `Actions/UpdateUserPassword` | 修改密码，其他会话与全部 token 失效（Fortify：`PUT /user/password`） |
 | `Actions/ResetUserPassword` | 重置密码，全部会话与 token 失效（Fortify：`POST /reset-password`） |
-| `Actions/DisableUser` | 停用用户：不能再登录，已登录的会话与 token 立即失效（供用户管理调用） |
+| `Actions/DisableUser` | 停用用户：不能再登录，已登录的会话与 token 立即失效（由 `ChangeUserStatus` 调用） |
+| `Actions/EnableUser` | 启用用户（由 `ChangeUserStatus` 调用） |
 | `Actions/RevokeUserSessions` | 删除用户的会话（database 驱动，按 `sessions.user_id`，可保留一个）与全部 token |
 | `Actions/SyncPermissions` | 把声明的节点同步到 `permissions` 表（`core:sync-permissions` 调用，规则见下文） |
 | `Contracts/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册菜单与权限节点（下文） |
@@ -36,8 +38,12 @@
 | `Actions/CreateRole`、`UpdateRole`、`DeleteRole`、`ChangeRoleStatus` | 角色的新增、修改、删除、启用 / 停用（规则见下文“角色管理”） |
 | `Actions/SyncRolePermissions` | 保存角色的权限码：防提权、保留操作者管不到的授权、补齐祖先（由 CreateRole、UpdateRole 调用） |
 | `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`、`viewOptions` |
+| `Actions/CreateUser`、`UpdateUser`、`DeleteUser`、`ChangeUserStatus` | 用户的新增、修改、删除、启用 / 停用（规则见下文“用户管理”）；重置密码复用 `ResetUserPassword::handle()` |
+| `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管（由 CreateUser、UpdateUser 调用） |
+| `Actions/EnsureSuperAdminRemains` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用） |
+| `Policies/UserPolicy` | 用户的授权：标准方法 + `changeStatus`、`resetPassword`，记录级方法检查数据范围 |
 | `Contracts/DataScopeProvider`、`Services/DataScopeRegistry` | 扩展点：数据范围提供者与其登记（下文“数据权限”） |
-| `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`） |
+| `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`）；`dataScopeOwnerColumns()` 声明“仅本人”的归属列 |
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
@@ -96,6 +102,7 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 | `super-admin` 改标识 / 停用 / 提交 `permissions` | 422（`name` / `status` / `permissions`） | `UpdateRole`、`ChangeRoleStatus` |
 | 删除已分配给用户的角色 | 422（只有 `message`） | `DeleteRole` |
 | 授予自己没有、且角色原本也没有的权限码（非超管） | 422（`permissions`） | `SyncRolePermissions` |
+| 选用（改为）自己不可授予的数据范围（非超管；保持原值不拦） | 422（`data_scope`） | `CreateRole::ensureGrantableDataScope()`（`CreateRole`、`UpdateRole` 调用） |
 | 标识重复 | 422（`name`） | 表单校验；并发时 `CreateRole::save()` 捕获唯一索引冲突 |
 
 保存权限码（`SyncRolePermissions`）：
@@ -106,8 +113,33 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 3. 补齐每个节点的全部祖先（`PermissionRegistry::withAncestors()`），再 `syncPermissions()`；spatie 随之清除权限缓存，
    `/auth/codes`、`/menu/all` 立即按新授权计算。停用角色同样立即生效。
 
+- 非超管不能修改、启停 `super-admin` 角色（`RolePolicy::update()`、`changeStatus()`，403）。
+
 guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它，`CreateRole` 显式写入 `guard_name`；
 否则 spatie 会取当前请求的 guard（`auth:sanctum` 下为 `sanctum`），找不到角色与权限。
+
+## 用户管理
+
+接口见设计文档 §6.5（`/system/users`），由后台入口的 `UserController`、`UserStatusController`、`UserPasswordController` 调用本模块的 Action；
+403 / 422 按 §6.1 分工：
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 没有对应的权限码；超出数据范围 | 403 | `UserPolicy` |
+| 删除 / 停用自己；在用户管理中重置自己的密码 | 403 | `UserPolicy::delete()`、`changeStatus()`、`resetPassword()` |
+| 非超管编辑、重置密码、启停、删除超管用户 | 403 | `UserPolicy` |
+| 修改接口中提交 `status: disabled` 停用自己 | 422（`status`） | `ChangeUserStatus` |
+| 最后一个启用的超管：删除 / 停用 / 去掉超管角色 | 422（只有 `message` / `status` / `roles`） | `EnsureSuperAdminRemains`（`DeleteUser`、`ChangeUserStatus`、`SyncUserRoles` 调用） |
+| 非超管授予或收回 `super-admin`；分配管不到的角色（权限码或数据范围超出自身） | 422（`roles`） | `SyncUserRoles` |
+| 用户名、邮箱重复 | 422（`username` / `email`） | 表单校验；并发时 `CreateUser::save()` 捕获唯一索引冲突 |
+
+- 用户名统一存为小写（`CreateUser::only()`，表单也先转小写再校验唯一）；`created_by` 写入操作者；
+- 分配角色（`SyncUserRoles`，spatie 的 `syncRoles()`）：非超管只能分配、移除权限码全部在自己有效权限码之内、且数据范围可授予的角色；
+  用户原本就有、但操作者管不到的角色（含 `super-admin`）无论是否提交都保留；超管不受限；
+- 最后一个启用的超管（`EnsureSuperAdminRemains`）：在写入的同一事务中先对 `super-admin` 角色那一行 `lockForUpdate()`，
+  把删除、停用、去掉超管角色串行化，再按数据库的当前状态数启用的超管；不在事务中调用时抛出 `LogicException`；
+- 停用走 `DisableUser`（会话与 token 立即失效），启用走 `EnableUser`；重置密码（`ResetUserPassword::handle()`）、删除（`DeleteUser`）
+  同样吊销对方的会话与 token。
 
 ## 数据权限
 
@@ -124,13 +156,19 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
   ```
 
 - `Services/DataScopeRegistry`：单例（`#[Singleton]`），只保存注册的提供者；key 重复或不合法时抛出 `InvalidArgumentException`。
-  本模块注册 `all`（`AllDataScope`，不限制）与 `self`（`SelfDataScope`，按记录的 `created_by`）；
+  `grantableKeysFor($user)` / `canGrant($user, $key)` 是数据范围的防提权（§8.5）：超管或任一启用角色为 `all` → 全部已登记范围，
+  否则为各启用角色的范围；角色管理、分配角色、`/system/roles/data-scopes` 的选项共用。
+  本模块注册 `all`（`AllDataScope`，不限制）与 `self`（`SelfDataScope`，按模型声明的归属列，见下）；
 - `Models/Concerns/HasDataScope`：`Model::query()->visibleTo($user)` 与 `$record->isVisibleTo($user)`（Policy 复用），规则：
   1. 超管，或任一启用角色的范围是 `all` → 不限制；
   2. 否则各启用角色的范围 OR 并集（每个提供者收到选用它的启用角色，条件包在独立的括号组中）；
   3. 没有启用角色，或范围 key 未登记（该角色不贡献范围）→ 拒绝：查询加 `1 = 0`，单条判定为 false。
 
-所有查询入口（列表、详情、下拉选项、导出、统计）都要经过它；使用 `self` 范围的模型需要 `created_by` 列（由 Action 写入）。
+- “仅本人”的归属列：`HasDataScope::dataScopeOwnerColumns()`，任一列的值等于用户 id 即属于该用户（多列为 OR），默认 `['created_by']`；
+  `User` 覆盖为 `['created_by', 'id']`（本人与自己创建的用户）。`SelfDataScope` 的 `constrain()` 与 `contains()` 读取同一组列。
+  本人可见不等于可操作：删除、停用自己仍由 `UserPolicy` 拒绝。
+
+所有查询入口（列表、详情、下拉选项、导出、统计）都要经过它；使用 `self` 范围的模型需要归属列（默认 `created_by`，由 Action 写入）。
 
 ## 依赖 Core 的能力
 
