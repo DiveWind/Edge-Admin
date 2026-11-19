@@ -1,8 +1,9 @@
 <?php
 
+use App\Core\System\Actions\StoreAttachment;
 use App\Core\System\Enums\Status;
-use App\Core\System\Models\User;
-use Illuminate\Support\Facades\{DB, Hash};
+use App\Core\System\Models\{Attachment, User};
+use Illuminate\Support\Facades\{DB, Hash, Storage};
 use Tests\Http\Admin\VbenClient;
 
 /*
@@ -18,11 +19,10 @@ beforeEach(function (): void {
 });
 
 describe('profile information', function (): void {
-    it('updates the name, email and avatar', function (): void {
+    it('updates the name and email', function (): void {
         $this->client->put('/api/admin/user/profile-information', [
             'name' => 'Alice Liddell',
             'email' => 'liddell@example.com',
-            'avatar' => 'https://example.com/alice.png',
         ])
             ->assertOk()
             ->assertExactJson(['code' => 0, 'data' => null, 'message' => 'ok']);
@@ -30,7 +30,6 @@ describe('profile information', function (): void {
         expect($this->user->refresh())
             ->name->toBe('Alice Liddell')
             ->email->toBe('liddell@example.com')
-            ->avatar->toBe('https://example.com/alice.png')
             ->email_verified_at->toBeNull();
     });
 
@@ -60,7 +59,50 @@ describe('profile information', function (): void {
         'missing name' => [['name' => ''], 'name'],
         'invalid email' => [['email' => 'not-an-email'], 'email'],
         'email taken by another user' => [['email' => 'taken@example.com'], 'email'],
-        'avatar with a script URL' => [['avatar' => 'javascript:alert(1)'], 'avatar'],
+        'avatar that is not an attachment id' => [['avatar_id' => 'https://example.com/alice.png'], 'avatar_id'],
+    ]);
+});
+
+describe('avatar', function (): void {
+    beforeEach(function (): void {
+        Storage::fake('local');
+    });
+
+    it('sets an own uploaded image as the avatar and replaces the previous one', function (): void {
+        $previous = Attachment::factory()->boundTo($this->user, User::AVATAR_COLLECTION)->withFile()->create();
+        $upload = resolve(StoreAttachment::class)->handle(uploadedFile('me.png', pngBytes()), $this->user);
+
+        $this->client->put('/api/admin/user/profile-information', ['name' => 'Alice', 'avatar_id' => $upload->id])->assertOk();
+
+        expect($this->user->avatar()->sole()->id)->toBe($upload->id)
+            ->and(Attachment::query()->find($previous->id))->toBeNull();
+        Storage::disk('local')->assertMissing($previous->path);
+    });
+
+    it('keeps the avatar when the current one is submitted again, and removes it with null', function (): void {
+        $avatar = Attachment::factory()->for($this->user, 'creator')->boundTo($this->user, User::AVATAR_COLLECTION)->withFile()->create();
+
+        $this->client->put('/api/admin/user/profile-information', ['name' => 'Alice', 'avatar_id' => $avatar->id])->assertOk();
+        expect($this->user->avatar()->sole()->id)->toBe($avatar->id);
+
+        $this->client->put('/api/admin/user/profile-information', ['name' => 'Alice'])->assertOk();
+        expect($this->user->avatar()->sole()->id)->toBe($avatar->id);
+
+        $this->client->put('/api/admin/user/profile-information', ['name' => 'Alice', 'avatar_id' => null])->assertOk();
+        expect($this->user->avatar()->first())->toBeNull();
+        Storage::disk('local')->assertMissing($avatar->path);
+    });
+
+    it('rejects the attachment of someone else, a bound attachment and a non-image', function (Closure $attachment, string $message): void {
+        $this->client->put('/api/admin/user/profile-information', ['name' => 'Alice', 'avatar_id' => $attachment($this->user)->id])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.avatar_id', [$message]);
+
+        expect($this->user->avatar()->first())->toBeNull();
+    })->with([
+        'uploaded by someone else' => [fn (User $user): Attachment => Attachment::factory()->create(), 'The selected avatar is invalid.'],
+        'avatar of another user' => [fn (User $user): Attachment => Attachment::factory()->for($user, 'creator')->boundTo(User::factory()->create(), User::AVATAR_COLLECTION)->create(), 'The selected avatar is invalid.'],
+        'not an image' => [fn (User $user): Attachment => Attachment::factory()->for($user, 'creator')->ofType('application/pdf', 'pdf')->create(), 'The avatar field must be a file of type: image/jpeg, image/png, image/gif, image/webp.'],
     ]);
 });
 

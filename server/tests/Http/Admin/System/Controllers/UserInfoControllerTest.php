@@ -1,6 +1,8 @@
 <?php
 
-use App\Core\System\Models\{Role, User};
+use App\Core\System\Models\{Attachment, Role, User};
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Storage;
 use Tests\Http\Admin\VbenClient;
 
 /*
@@ -20,7 +22,6 @@ it('returns the Vben user info of the logged-in user', function (): void {
         'username' => 'alice',
         'name' => 'Alice Liddell',
         'email' => 'alice@example.com',
-        'avatar' => 'https://example.com/alice.png',
     ]);
     $client = new VbenClient($this);
     $client->login('alice');
@@ -34,7 +35,7 @@ it('returns the Vben user info of the logged-in user', function (): void {
                 'username' => 'alice',
                 'realName' => 'Alice Liddell',
                 'email' => 'alice@example.com',
-                'avatar' => 'https://example.com/alice.png',
+                'avatar' => null,
                 'twoFactorEnabled' => false,
                 'roles' => [],
                 'desc' => '',
@@ -47,12 +48,29 @@ it('returns the Vben user info of the logged-in user', function (): void {
 it('returns a null email and avatar and the configured home path', function (): void {
     config(['core.apps.admin.home_path' => '/workspace']);
 
-    $this->actingAs(User::factory()->create(['email' => null, 'avatar' => null]))
+    $this->actingAs(User::factory()->create(['email' => null]))
         ->getJson('/api/admin/user/info')
         ->assertOk()
         ->assertJsonPath('data.email', null)
         ->assertJsonPath('data.avatar', null)
         ->assertJsonPath('data.homePath', '/workspace');
+});
+
+it('returns a signed preview URL of the avatar that stays the same within a day and expires', function (): void {
+    Storage::fake('local');
+    $user = User::factory()->create();
+    $avatar = Attachment::factory()->boundTo($user, User::AVATAR_COLLECTION)->withFile(pngBytes())->create();
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 08:10:00'));
+    $url = $this->actingAs($user)->getJson('/api/admin/user/info')->assertOk()->json('data.avatar');
+
+    expect($url)->toStartWith(url("/api/admin/attachments/{$avatar->id}/preview?expires=".CarbonImmutable::parse('2026-11-22 00:00:00')->getTimestamp().'&'))
+        ->and($this->getJson('/api/admin/user/info')->json('data.avatar'))->toBe($url);
+
+    $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png');
+
+    $this->travel(49)->hours();
+    $this->get($url)->assertForbidden();
 });
 
 it('reports two-factor authentication as enabled only once it is confirmed', function (bool $confirmed): void {

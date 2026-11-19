@@ -54,4 +54,27 @@ return [
             ],
         ],
     ],
+    'attachment' => [
+        'title' => 'system.setting.attachment.title',
+        'order' => 30,
+        'settings' => [
+            // 上传的类型白名单（设计文档 §6.8）：按文件内容探测出的扩展名与客户端的扩展名都必须在其中（AllowedUpload）。
+            // 纯文本类（csv 等）的内容常被探测为 txt，允许 csv 时也要允许 txt
+            'allowed_extensions' => [
+                'type' => 'string',
+                'name' => 'system.setting.attachment.allowedExtensions',
+                'remark' => 'system.setting.attachment.allowedExtensionsRemark',
+                'default' => 'jpg,jpeg,png,gif,webp,pdf,txt,csv,doc,docx,xls,xlsx,ppt,pptx,zip',
+                'rules' => ['regex:/^[a-z0-9]+(,[a-z0-9]+)*$/'],
+            ],
+            // 上传大小上限（KB）；PHP 的 upload_max_filesize、post_max_size 与 Web 服务器的请求体上限须不小于它
+            'max_size' => [
+                'type' => 'int',
+                'name' => 'system.setting.attachment.maxSize',
+                'remark' => 'system.setting.attachment.maxSizeRemark',
+                'default' => 10240,
+                'rules' => ['min:1', 'max:2097152'],
+            ],
+        ],
+    ],
 ];

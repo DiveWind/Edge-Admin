@@ -127,5 +127,6 @@
     "Built-in dictionary items cannot be deleted.": "内置字典项不能删除。",
     "The code of a built-in dictionary type cannot be changed.": "内置字典类型的编码不能修改。",
     "The value of a built-in dictionary item cannot be changed.": "内置字典项的值不能修改。",
-    "Unknown enum: :names.": "未登记的枚举：:names。"
+    "Unknown enum: :names.": "未登记的枚举：:names。",
+    "Attachments in use cannot be deleted.": "已被使用的附件不能删除。"
 }

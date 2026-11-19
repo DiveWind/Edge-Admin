@@ -33,7 +33,8 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // 不注册框架的 /storage/{path} 签名路由（storage.local）：附件的下载、预览只经过后台入口的签名路由（设计文档 §6.8）
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

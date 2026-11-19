@@ -3,13 +3,13 @@
 namespace App\Core\System\Models;
 
 use App\Core\System\Enums\Status;
-use App\Core\System\Models\Concerns\HasDataScope;
+use App\Core\System\Models\Concerns\{HasAttachments, HasDataScope};
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use Database\Factories\Core\System\Models\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\{Fillable, Hidden};
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphOne};
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -27,19 +27,25 @@ use Spatie\Permission\Traits\HasRoles;
  *   不使用 hasRole() 等 spatie 的判定 API（PHPStan 拦截）；除“是否超管”（isSuperAdmin()）外不按角色判断；
  * - created_by：创建人，供“仅本人”数据范围使用（§8.4、§8.5），由 Action 写入；
  * - HasDataScope：数据权限，`User::query()->visibleTo($actor)` 与 `$user->isVisibleTo($actor)`（用户管理的列表、详情、Policy 使用）；
- *   “仅本人”范围下，自己创建的用户与本人都可见（dataScopeOwnerColumns()）。可见不等于可操作：删除、停用自己仍由 UserPolicy 拒绝。
+ *   “仅本人”范围下，自己创建的用户与本人都可见（dataScopeOwnerColumns()）。可见不等于可操作：删除、停用自己仍由 UserPolicy 拒绝；
+ * - HasAttachments：头像是 `avatar` 用途上绑定的附件（avatar()，设计文档 §6.8），由本人在个人资料中设置；用户删除时一并删除。
  */
-#[Fillable(['username', 'name', 'email', 'avatar', 'password', 'status'])]
+#[Fillable(['username', 'name', 'email', 'password', 'status'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasDataScope, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable, UsesAppTimezone;
+    use HasApiTokens, HasAttachments, HasDataScope, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable, UsesAppTimezone;
 
     /**
      * spatie 的 guard：角色与权限统一使用 web（用设备 token 认证的也是同一个 User，设计文档 §8.1）。
      */
     public const string GUARD = 'web';
+
+    /**
+     * 头像附件的用途名（设计文档 §6.8）。
+     */
+    public const string AVATAR_COLLECTION = 'avatar';
 
     /**
      * spatie 查找、分配角色时使用的 guard。不声明时 spatie 取当前请求的默认 guard（auth:sanctum 下为 sanctum），会找不到角色。
@@ -96,6 +102,16 @@ class User extends Authenticatable
     public function creator(): BelongsTo
     {
         return $this->belongsTo(self::class, 'created_by');
+    }
+
+    /**
+     * 头像（`avatar` 用途上绑定的附件，没有时为 null）。
+     *
+     * @return MorphOne<Attachment, $this>
+     */
+    public function avatar(): MorphOne
+    {
+        return $this->attachmentIn(self::AVATAR_COLLECTION);
     }
 
     /**

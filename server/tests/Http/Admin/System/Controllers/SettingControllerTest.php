@@ -20,7 +20,7 @@ it('lists the groups declared by the System module', function (): void {
     $this->actingAs(superAdminActor())
         ->getJson('/api/admin/system/settings')
         ->assertOk()
-        ->assertJsonPath('data.*.group', ['site', 'auth'])
+        ->assertJsonPath('data.*.group', ['site', 'auth', 'attachment'])
         ->assertJsonPath('data.1.settings.0.key', 'auth.login_rate_limit');
 });
 

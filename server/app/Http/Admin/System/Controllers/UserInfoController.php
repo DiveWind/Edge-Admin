@@ -18,6 +18,6 @@ class UserInfoController
      */
     public function __invoke(#[CurrentUser] User $user): UserInfoResource
     {
-        return new UserInfoResource($user);
+        return new UserInfoResource($user->loadMissing('avatar'));
     }
 }

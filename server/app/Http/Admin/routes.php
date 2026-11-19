@@ -2,7 +2,7 @@
 
 use App\Http\Admin\AdminServiceProvider;
 use App\Http\Admin\Monitor\Controllers\{FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
-use App\Http\Admin\System\Controllers\{AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserInfoController, UserPasswordController, UserStatusController};
+use App\Http\Admin\System\Controllers\{AttachmentController, AttachmentDownloadController, AttachmentPreviewController, AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -27,6 +27,12 @@ Route::get('sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])->name('
 // 公开参数（设计文档 §6.7）：不需要登录，只输出声明为 public 的系统参数（登录页的站点名称、提示文案等）
 Route::get('settings/public', PublicSettingsController::class)->name('settings.public');
 
+// 附件的下载与预览（设计文档 §6.8）：签名的临时 URL（签发时已授权），不需要登录；过期或签名不对 403
+Route::middleware('signed')->group(function (): void {
+    Route::get('attachments/{attachment}/download', AttachmentDownloadController::class)->whereNumber('attachment')->name('attachments.download');
+    Route::get('attachments/{attachment}/preview', AttachmentPreviewController::class)->whereNumber('attachment')->name('attachments.preview');
+});
+
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('user/info', UserInfoController::class)->name('user.info');
     Route::get('auth/codes', AuthCodesController::class)->name('auth.codes');
@@ -35,6 +41,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // 表单下拉的选项（设计文档 §6.7）：字典（启用项）与已登记的枚举，登录即可访问
     Route::get('options/dicts', DictOptionsController::class)->name('options.dicts');
     Route::get('options/enums', EnumOptionsController::class)->name('options.enums');
+
+    // 附件（设计文档 §6.8）：上传只需登录，另经过上传限流（admin-uploads）；详情的访问权委托给绑定对象
+    Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:'.AdminServiceProvider::UPLOAD_LIMITER)->name('attachments.store');
+    Route::get('attachments/{attachment}', [AttachmentController::class, 'show'])->whereNumber('attachment')->name('attachments.show');
 
     // 系统管理（设计文档 §6.5）
     Route::prefix('system')->name('system.')->group(function (): void {
@@ -61,6 +71,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->where(['setting' => '[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*']);
         Route::apiResource('setting-groups', SettingGroupController::class)->only(['update'])
             ->where(['setting_group' => '[a-z][a-z0-9_]*']);
+
+        // 附件管理（§6.8）：列表与删除；上传与详情在上面的 /attachments
+        Route::apiResource('attachments', AttachmentController::class)->only(['index', 'destroy'])->whereNumber('attachment');
     });
 
     // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位，失败任务的 {failed_job} 是 UUID；

@@ -5,6 +5,7 @@ use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Models\{Role, User};
 use App\Core\System\Services\{PermissionRegistry, SettingRegistryService};
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -118,4 +119,32 @@ function demoSettings(): array
             'options' => ['type' => 'json', 'name' => 'demo.options', 'default' => ['a' => 1]],
         ],
     ]];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 附件（设计文档 §6.8）
+|--------------------------------------------------------------------------
+|
+| 测试环境没有 GD，不用 UploadedFile::fake()->image()：直接用真实的文件内容，服务端按内容探测 MIME（finfo）。
+|
+*/
+
+/**
+ * 1×1 的 PNG 图片内容。
+ */
+function pngBytes(): string
+{
+    return base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', true);
+}
+
+/**
+ * 内容为 $contents 的上传文件；$clientMimeType 是客户端声称的 Content-Type（服务端不信任它）。
+ */
+function uploadedFile(string $name, string $contents, ?string $clientMimeType = null): UploadedFile
+{
+    $path = tempnam(sys_get_temp_dir(), 'upload');
+    file_put_contents($path, $contents);
+
+    return new UploadedFile($path, $name, $clientMimeType, null, true);
 }

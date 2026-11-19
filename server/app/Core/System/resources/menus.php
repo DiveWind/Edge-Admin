@@ -84,6 +84,17 @@ return [
                     'update' => 'common.edit',
                 ],
             ],
+            [
+                // 附件管理：列表与删除（已绑定的不能删）；上传是所有登录用户的能力，不归这里（§6.8）
+                'name' => 'system.attachment',
+                'type' => 'menu',
+                'path' => '/system/attachment',
+                'component' => '/system/attachment/list',
+                'meta' => ['title' => 'system.attachment.title', 'icon' => 'lucide:paperclip', 'order' => 60],
+                'buttons' => [
+                    'delete' => 'common.delete',
+                ],
+            ],
         ],
     ],
 ];

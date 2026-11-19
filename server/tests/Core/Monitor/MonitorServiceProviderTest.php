@@ -3,6 +3,7 @@
 use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
 use App\Core\Monitor\MonitorServiceProvider;
 use App\Core\Monitor\Policies\PersonalAccessTokenPolicy;
+use App\Core\System\Models\Attachment;
 use Illuminate\Console\Scheduling\{Event, Schedule};
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
@@ -62,8 +63,8 @@ function scheduledEvent(string $command): Event
 }
 
 it('prunes the old scheduled task logs every day', function (): void {
-    expect(scheduledEvent('model:prune')->command)->toContain(ScheduledTaskLog::class)
-        ->and(scheduledEvent('model:prune')->expression)->toBe('0 0 * * *');
+    expect(scheduledEvent('ScheduledTaskLog')->command)->toContain('model:prune')
+        ->and(scheduledEvent('ScheduledTaskLog')->expression)->toBe('0 0 * * *');
 });
 
 it('deletes the scheduled task logs older than the configured days', function (): void {
@@ -89,7 +90,7 @@ it('monitors the other scheduled tasks and syncs them', function (): void {
     $this->artisan('schedule-monitor:sync')->assertSuccessful();
 
     expect(ScheduledTask::query()->orderBy('name')->pluck('name')->all())
-        ->toBe(['activitylog:clean --force', "model:prune --model='".ScheduledTaskLog::class."'"]);
+        ->toBe(['activitylog:clean --force', "model:prune --model='".ScheduledTaskLog::class."'", "model:prune --model='".Attachment::class."'"]);
 });
 
 /**

@@ -42,6 +42,7 @@ return [
     'ends_with' => ':attribute 必须以 :values 结尾。',
     'enum' => '所选的 :attribute 无效。',
     'exists' => '所选的 :attribute 不存在。',
+    'extensions' => ':attribute 的扩展名必须是 :values 之一。',
     'file' => ':attribute 必须是文件。',
     'filled' => ':attribute 不能为空。',
     'gt' => [
@@ -137,7 +138,8 @@ return [
         'email' => '邮箱',
         'password' => '密码',
         'username' => '用户名',
-        'avatar' => '头像',
+        'avatar_id' => '头像',
+        'file' => '文件',
         'current_password' => '当前密码',
         'code' => '动态验证码',
         'recovery_code' => '恢复码',

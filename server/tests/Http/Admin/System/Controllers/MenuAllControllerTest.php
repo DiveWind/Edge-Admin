@@ -29,7 +29,7 @@ it('returns the System menus to the seeded admin', function (): void {
         ->assertOk()
         ->assertJsonPath('data.0.name', 'system')
         ->assertJsonPath('data.0.meta', ['title' => 'system.title', 'icon' => 'lucide:settings', 'order' => 9000])
-        ->assertJsonPath('data.0.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting'])
+        ->assertJsonPath('data.0.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
         ->assertJsonPath('data.0.children.0.component', '/system/user/list')
         ->assertJsonMissingPath('data.0.component')
         ->assertJsonMissingPath('data.0.children.0.children');

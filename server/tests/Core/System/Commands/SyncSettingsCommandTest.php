@@ -37,7 +37,7 @@ it('creates the declared settings without values', function (): void {
 it('syncs the settings declared by the System module', function (): void {
     $this->artisan('core:sync-settings')->assertSuccessful();
 
-    expect(Setting::query()->orderBy('id')->pluck('key')->all())->toBe(['site.name', 'site.login_notice', 'auth.login_rate_limit']);
+    expect(Setting::query()->orderBy('id')->pluck('key')->all())->toBe(['site.name', 'site.login_notice', 'auth.login_rate_limit', 'attachment.allowed_extensions', 'attachment.max_size']);
 });
 
 it('is idempotent', function (): void {

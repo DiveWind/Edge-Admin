@@ -215,6 +215,7 @@ it('syncs the nodes declared by the Core modules', function (): void {
         'system.menu', 'system.menu.create', 'system.menu.update', 'system.menu.delete',
         'system.dict', 'system.dict.create', 'system.dict.update', 'system.dict.delete',
         'system.setting', 'system.setting.update',
+        'system.attachment', 'system.attachment.delete',
         'monitor', 'monitor.online', 'monitor.online.logout', 'monitor.operation-log', 'monitor.login-log',
         'monitor.schedule', 'monitor.schedule.run', 'monitor.failed-job', 'monitor.failed-job.retry', 'monitor.failed-job.delete',
         'monitor.health', 'monitor.health.check',

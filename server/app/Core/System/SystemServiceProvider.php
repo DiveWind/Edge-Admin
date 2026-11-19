@@ -6,7 +6,7 @@ use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPass
 use App\Core\System\Commands\{SyncCommand, SyncDictsCommand, SyncPermissionsCommand, SyncSettingsCommand};
 use App\Core\System\Contracts\{DictRegistry, MenuRegistry, SettingRegistry};
 use App\Core\System\Enums\{PermissionType, SettingType, Status};
-use App\Core\System\Models\{DictItem, DictType, Permission, Role, Setting, User};
+use App\Core\System\Models\{Attachment, DictItem, DictType, Permission, Role, Setting, User};
 use App\Core\System\Services\{AllDataScope, DataScopeRegistry, DictRegistryService, EnumRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope, SettingRegistryService, Settings};
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -67,6 +67,7 @@ class SystemServiceProvider extends ServiceProvider
             'dict_type' => DictType::class,
             'dict_item' => DictItem::class,
             'setting' => Setting::class,
+            'attachment' => Attachment::class,
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');

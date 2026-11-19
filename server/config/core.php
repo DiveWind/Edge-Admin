@@ -38,7 +38,8 @@ return [
     | - trusted：受信任的入口可直接读取模型；受限入口只能通过模块的 Contracts（设计文档 §5.2，tests/Arch 强制）；
     | - prefix：URL 前缀；
     | - rate_limit：每分钟请求上限（已登录按用户、未登录按 IP 计数）；
-    | - ops_rate_limit：运维动作的每分钟上限（限流器 admin-ops，按用户计数）。
+    | - ops_rate_limit：运维动作的每分钟上限（限流器 admin-ops，按用户计数）；
+    | - upload_rate_limit：上传附件的每分钟上限（限流器 admin-uploads，按用户计数）。
     |
     */
 
@@ -53,6 +54,9 @@ return [
 
             // 运维动作（定时任务的立即执行、失败任务的重试、立即健康检查）另外的每分钟上限，按用户计数（设计文档 §6.6）
             'ops_rate_limit' => (int) env('CORE_ADMIN_OPS_RATE_LIMIT', 10),
+
+            // 上传附件（POST /attachments）另外的每分钟上限，按用户计数（设计文档 §6.8）
+            'upload_rate_limit' => (int) env('CORE_ADMIN_UPLOAD_RATE_LIMIT', 30),
 
             // 列表分页（设计文档 §6.3）：page 从 1 开始；pageSize 缺省时取 page_size，超过 max_page_size 返回 422
             'pagination' => [
@@ -153,6 +157,31 @@ return [
             'schedule_heartbeat_minutes' => (int) env('CORE_HEALTH_SCHEDULE_MINUTES', 2),
             'environment' => env('CORE_HEALTH_ENVIRONMENT', 'production'),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 附件（设计文档 §6.8）
+    |--------------------------------------------------------------------------
+    |
+    | 部署级配置；上传的类型白名单与大小上限是后台可调的系统参数（attachment.allowed_extensions、attachment.max_size）。
+    |
+    | - disk：存储盘（config/filesystems.php 中的盘名）。默认 local（storage/app/private，不在 Web 根目录下）；
+    |   生产可换成 S3 等私有盘，不要用 public 盘。下载、预览一律经过后台入口的签名路由；
+    | - url_ttl：签名的下载、预览地址的时间窗口（分钟）：过期时间对齐到窗口，`expires = (floor(now / ttl) + 2) * ttl`，
+    |   同一窗口内签出的地址相同（浏览器可以缓存），有效期在 ttl 与 2 × ttl 之间；
+    | - avatar_url_ttl：头像地址（/user/info 的 avatar）的时间窗口（分钟），默认 24 小时；
+    | - orphan_ttl：上传后一直没有绑定的附件，超过多少小时由 model:prune 连同文件删除。
+    |
+    | 上传大小同时受 PHP 的 upload_max_filesize、post_max_size 与 Web 服务器的请求体上限约束，它们须不小于 attachment.max_size。
+    |
+    */
+
+    'attachments' => [
+        'disk' => env('CORE_ATTACHMENT_DISK', 'local'),
+        'url_ttl' => (int) env('CORE_ATTACHMENT_URL_TTL', 30),
+        'avatar_url_ttl' => (int) env('CORE_ATTACHMENT_AVATAR_URL_TTL', 1440),
+        'orphan_ttl' => (int) env('CORE_ATTACHMENT_ORPHAN_HOURS', 24),
     ],
 
 ];

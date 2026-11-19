@@ -305,8 +305,8 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、唯一性冲突。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
@@ -318,9 +318,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | `POST /login`、`POST /logout` | Fortify | 登录只接受 `username`、`password`、`remember`；返回 `{ two_factor: true/false }` |
 | `POST /two-factor-challenge` | Fortify | 提交动态码或恢复码完成登录 |
 | `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码；返回 `{ message }`。找回密码**无论邮箱是否存在都返回成功**，不暴露哪些邮箱已注册 |
-| 两步验证的开启、确认、关闭、二维码、密钥、恢复码；确认密码；修改资料、修改密码 | Fortify | 个人设置中使用 |
+| 两步验证的开启、确认、关闭、二维码、密钥、恢复码；确认密码；修改资料、修改密码 | Fortify | 个人设置中使用。修改资料（`PUT /user/profile-information`）接受 `name`、`email`、`avatar_id`（头像附件的 id，`null` 去掉头像，§6.8） |
 | `GET /auth/codes` | 自建 | 当前用户的有效权限码（目录、菜单、按钮都含，口径见 §8.1），`string[]` |
-| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`（字符串）、`username`、`realName`、`email`（可为 null）、`avatar`（可为 null）、`twoFactorEnabled`（两步验证已确认开启）、`roles`（启用角色的标识，即 `roles.name`，§8.5）、`desc`、`homePath` |
+| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`（字符串）、`username`、`realName`、`email`（可为 null）、`avatar`（头像的预览地址：签名的临时 URL，过期时间按 `avatar_url_ttl` 的窗口对齐，同一窗口内不变；没有头像时为 null，§6.8）、`twoFactorEnabled`（两步验证已确认开启）、`roles`（启用角色的标识，即 `roles.name`，§8.5）、`desc`、`homePath` |
 | `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致（见下方“菜单节点”） |
 
 **菜单节点**（`/menu/all` 的输出，即 Vben 的路由结构）。节点类型采用 Vben 的 5 种：
@@ -703,8 +703,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 限流：admin 入口的总限流（未登录按 IP，`core.apps.admin.rate_limit`）；数据来自缓存，开销很小，不另设限流器。
 - 缓存头：使用框架默认的 `Cache-Control: no-cache, private`：管理员修改后立即生效，且响应可能带会话 Cookie（不能被共享缓存）；服务端已有缓存，重复请求不查库。
 - System 声明的公开参数：`site.name`（站点名称，默认 `config('app.name')`）、`site.login_notice`（登录页提示文案，`text`，默认空字符串）。
+- System 声明的其他分组：`auth`（`auth.login_rate_limit`，§7.2）、`attachment`（上传的类型白名单 `attachment.allowed_extensions` 与大小上限 `attachment.max_size`，§6.8）。
 
-**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config。
+**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8）同样是部署级配置。
 
 **枚举选项**（`GET /options/enums?names=a,b`）
 
@@ -745,6 +746,102 @@ return [
 3. 从声明中移除的参数：取消 `is_builtin` 并取消 `is_public`，保留 `value`，**不删除**；它们不再出现在列表与公开接口中，代码也读不到（未声明），重新声明时收编并沿用原来的值。这样留在库中的废弃参数无害，不提供清理命令（需要时用迁移删除）。
 
 `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即以它的非 0 退出码结束，后面的不再执行；`DatabaseSeeder` 与部署流程（§11.4）都用它，三个单独的命令保留。它**不包含** `schedule-monitor:sync`：那是 Monitor 所用的包的命令（System 不依赖 Monitor），同步的是调度定义而不是模块的声明，并且会删除调度中已不存在的任务，在部署流程中单独执行。
+
+### 6.8 附件接口
+
+前缀与 §6.5 相同；内核模块 `app/Core/System`，接口在 `app/Http/Admin/System`。附件是“上传的文件 + 一条记录”，由各业务表单引用（提交附件 id），本身不是业务数据。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `POST /attachments` | 上传（`multipart/form-data`，字段 `file`），返回附件（201）；限流 | 登录即可（`AttachmentPolicy::create`） |
+| `GET /attachments/{attachment}` | 附件详情，含重新签发的下载、预览地址 | `AttachmentPolicy::view`（下文“访问权”） |
+| `GET /attachments/{attachment}/download` | 下载：**签名的临时 URL**，不需要登录（签名即凭据） | 有效签名 |
+| `GET /attachments/{attachment}/preview` | 预览（只限图片白名单）：签名的临时 URL | 有效签名 |
+| `GET /system/attachments` | 附件管理：分页，经过数据范围 | `system.attachment` |
+| `DELETE /system/attachments/{attachment}` | 删除附件（连同文件）；已绑定的不能删 | `system.attachment.delete` |
+
+**菜单节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.attachment`（`/system/attachment`，组件 `/system/attachment/list`，`lucide:paperclip`，`order` 60；按钮 `delete`）。附件只能上传与删除，没有新增、修改按钮：上传是所有登录用户的能力（下文），不归附件管理页。
+
+**表与模型**
+
+- 表 `attachments`：`disk`（存储盘名）、`path`（盘内路径）、`name`（客户端提供的原始文件名，只用于显示与下载时的文件名，最长 255 字符）、`mime_type`（**服务端按文件内容探测**，不用客户端的 `Content-Type`）、`extension`（由探测到的 MIME 推断，不用客户端的扩展名）、`size`（字节）、`sha256`、`created_by`（上传者，外键，用户删除后置空）、`attachable_type` / `attachable_id`（绑定对象，可空的多态关联，存多态别名，§4.5；`attachable_id` 为整数，绑定对象须为自增整数主键的模型）、`collection`（绑定时的用途名，如 `avatar`，可空）、时间戳。模型 `Attachment`（多态别名 `attachment`），`HasDataScope`（归属列 `created_by`，§8.4）。
+- **“已绑定”**：`attachable_type` 非空。上传后尚未被业务引用的附件是**未绑定**的（孤儿），只属于上传者。
+- 路径：`attachments/<年>/<月>/<日>/<40 位随机串>.<探测出的扩展名>`（框架的 `hashName()`），**不使用客户端的文件名**，因此没有路径穿越与覆盖他人文件的可能；下载时按 id 找记录、用库中的 `path` 读文件，请求中不出现任何路径。
+- **不去重**：同一用户上传相同 `sha256` 的文件也是两条记录、两个文件。去重要处理“共享文件谁删”“已绑定的能不能复用”，收益只是省一点存储；`sha256` 留作校验与以后按需去重。
+
+**存储**
+
+- 存储盘为部署级配置：`config('core.attachments.disk')`（`CORE_ATTACHMENT_DISK`，默认 `local`，即 `storage/app/private`，**不在 Web 根目录下**）。生产可换成 S3 等私有盘；**不要配成 `public` 盘**（任何人都能按路径直接访问）。
+- 下载、预览一律经过本入口的签名路由（`URL::temporarySignedRoute()`），由 `Storage::disk()->download()` / `response()` 流式输出。
+- **过期时间对齐到固定的时间窗口**：`expires = (floor(now / ttl) + 2) × ttl`（Unix 秒）。同一个窗口内签出的地址**完全相同**，浏览器可以缓存；有效期在 ttl 与 2 × ttl 之间，至少一个 ttl，不会刚签出就过期。窗口长度：下载、预览为 `config('core.attachments.url_ttl')` 分钟（`CORE_ATTACHMENT_URL_TTL`，默认 30）；头像为 `config('core.attachments.avatar_url_ttl')` 分钟（`CORE_ATTACHMENT_AVATAR_URL_TTL`，默认 1440，即 24 小时）。**不使用**框架 `local` 盘的 `storage.local` 签名路由（`config/filesystems.php` 中 `local.serve` 为 false，不注册 `/storage/{path}`）与 S3 的 `temporaryUrl()`：
+  - 同一套做法适用于任何盘，响应头（下文“安全”）在一处统一设置，过期、篡改的处理也只有一种；
+  - 授权在**签发时**完成：只有已经通过授权的接口（上传、附件详情、业务记录自己的接口）才签发 URL；签名路由本身不需要登录，`<img src>`、`<a href>`、新标签页都能直接使用，不依赖 Cookie 与 `Authorization` 头；
+  - 代价是文件经过 PHP 输出；大文件走 S3 时，以后可以按需改为 S3 的 `temporaryUrl()`（带 `ResponseContentDisposition`），接口字段不变。
+- 签名为绝对地址（含域名）：前端与 API 不同子域时也可直接使用。反向代理后须配置可信代理（§11.5），否则签发与校验的地址不一致。过期或签名不对 → 403（框架的 `InvalidSignatureException`）；附件不存在 → 404。
+- **头像也用签名 URL，不放公开盘**：只有一种存储与一种访问方式，S3 私有桶同样适用，不需要 `storage:link`；上传的文件不会因为“设为头像”而变成永久公开的地址。头像地址的窗口更长（默认 24 小时，有效 24～48 小时），同一窗口内 `/user/info` 返回的地址不变，页面上已加载的头像可以被浏览器缓存，不会在一次使用中途失效；前端启动、刷新页面时会拿到新窗口的地址。
+
+**上传**（`POST /attachments`）
+
+- 字段只有 `file`（必填）。校验规则 `App\Core\System\Rules\AllowedUpload`（继承框架的 `File` 规则，模块提供，所有入口共用）：
+  - **类型**：按文件内容探测的 MIME 推断出的扩展名（`mimes`）**且**客户端文件名的扩展名（`extensions`）都必须在白名单中。改扩展名（`evil.php` 改名为 `a.png`）、伪造 `Content-Type` 都不能通过；
+  - **大小**：不超过上限（KB）。
+  - 白名单与上限是后台可调的业务开关，放在**系统参数**（§6.7，System 的 `attachment` 分组）：`attachment.allowed_extensions`（`string`，逗号分隔的小写扩展名，默认 `jpg,jpeg,png,gif,webp,pdf,txt,csv,doc,docx,xls,xlsx,ppt,pptx,zip`）、`attachment.max_size`（`int`，KB，默认 10240，即 10 MB）。纯文本类（`csv` 等）的内容常被探测为 `text/plain`，推断的扩展名是 `txt`，因此允许 `csv` 时也要允许 `txt`。
+- **上传大小同时受 PHP 与 Web 服务器限制**：`upload_max_filesize`、`post_max_size`（php.ini）与 Nginx 的 `client_max_body_size`（或 Caddy 的 `request_body`）必须**不小于** `attachment.max_size`，否则超过它们的文件到不了应用：超过 `upload_max_filesize` 时文件上传失败（422，`file`），超过 `post_max_size` 时为 413，超过 Web 服务器的限制时由 Web 服务器直接返回 413。系统信息（§6.6）的 `runtime.upload_max_filesize`、`post_max_size` 可用于核对。
+- **登录即可上传，不需要权限码**：各模块的表单都要上传，按权限码控制就要给每个用到上传的角色授权，授权会失控（与字典选项同理，§6.7）。防滥用靠：
+  - 限流：在 admin 入口的总限流之外，另经过 `admin-uploads` 限流器，每个用户每分钟 `config('core.apps.admin.upload_rate_limit')`（`CORE_ADMIN_UPLOAD_RATE_LIMIT`，默认 30）次，超过 429；
+  - 类型白名单与大小上限（上文）；
+  - 孤儿清理：上传后一直没有绑定的附件在 N 小时后连同文件删除（下文“清理”），不绑定就不能长期占用存储，也拿不到长期有效的地址。
+  - 规则在 `AttachmentPolicy::create()`（允许任何已登录的启用用户），控制器照常声明 `#[Authorize('create', Attachment::class)]`：项目需要限制上传时只改 Policy。
+- 成功返回 201 与附件（下文“输出字段”）。上传的文件内容不进操作日志：操作日志的 `payload` 只取请求体中的表单字段（`$request->post()`，§6.6）。
+
+**输出字段**：`id`、`name`（原始文件名）、`mime_type`、`extension`、`size`、`sha256`、`is_bound`、`attachable_type`（多态别名）、`attachable_id`、`collection`、`created_by`、`creator`（`{ id, username, name }`，上传者已删除时为 null；只在附件管理的列表中输出）、`download_url`（签名的下载地址）、`preview_url`（可预览的图片才有，否则为 null）、`url_expires_at`（两个地址的过期时间，对齐到窗口）、`created_at`、`updated_at`。不输出 `disk`、`path`（存储的内部细节）。
+
+**引用附件：归属校验与绑定**（§9）
+
+- 业务表单提交附件 id（单个或数组）；校验用模块提供的规则 `App\Core\System\Rules\OwnedAttachment`：
+
+  ```php
+  'cover_id' => ['nullable', 'integer', new OwnedAttachment($actor, record: $article, collection: 'cover', mimeTypes: Attachment::PREVIEWABLE_MIME_TYPES)],
+  'files' => ['array'], 'files.*' => ['integer', new OwnedAttachment($actor, record: $article, collection: 'files')],
+  ```
+
+  通过的条件（任一）：① **自己上传的、尚未绑定的**附件；② **已经绑定在这条记录的这个用途上的**附件（编辑表单时原样提交现有附件——能编辑这条记录，就能保留它的附件）。新增记录时 `record` 为 null，只能用 ①。给了 `mimeTypes` 时附件的 MIME 还必须在其中。不通过 → 422（`validation.exists`，挂在该字段上），**不区分“不存在”“不是你的”“已被别处使用”**，不暴露别人的附件 id。已绑定在其他记录上的附件，即使自己能访问也不能引用：绑定是一对一的，引用就等于把它从原记录上挪走。需要跨记录复用同一个文件时，应改为**复制附件**（复制文件并新建一条未绑定、上传者为操作者的附件，再绑定到新记录），而不是放宽这条规则；目前没有提供复制。
+- 绑定：Action `SyncAttachments::handle($record, $collection, $ids)`：把这些附件绑定到记录的该用途上（`attachable` + `collection`），该用途下原有、但这次没有提交的附件**删除**（连同文件，事务提交后）。在一个事务中执行，先对提交的附件 `lockForUpdate()` 再复核“未绑定或已绑定在这里”，并发时两个记录抢同一个附件只有一个成功，另一个 422。
+- 模型 trait `App\Core\System\Models\Concerns\HasAttachments`：`attachments()`（`morphMany`）与按用途的关联；**绑定对象被删除时，它的附件一并删除**（连同文件，事务提交后；软删除的模型在彻底删除时才删）。附件从属于记录，记录没了附件也没有意义，也没有人还能访问它（访问权跟随记录，下文）。
+
+**访问权**（`AttachmentPolicy::view`，`GET /attachments/{attachment}` 使用；业务接口签发 URL 前自己的 Policy 已经判定过记录）
+
+1. 未绑定的附件：只有**上传者本人**可以访问（上传后、提交表单前的预览）；
+2. 已绑定的附件：**委托给绑定对象**——能 `view` 那条记录的人才能访问（`$actor->can('view', $attachment->attachable)`，即那条记录的 Policy，含它的数据范围）。上传者本人也不例外：附件交给记录之后，访问权就跟随记录。与日志“委托给 causer”（§6.6）是同一思路，业务模块新增的记录类型不用为附件写任何授权代码；
+3. 以上都不满足时：有 `system.attachment` 且附件在数据范围内（按上传者 `created_by`，§8.4）也可以访问——附件管理员在管理页中查看、下载。
+4. 否则 403。绑定对象已不存在（理论上已随记录删除）时第 2 条不成立。
+
+业务记录自己的接口输出附件时（如文章详情带封面），由入口的 `AttachmentResource` 签发 URL：记录已经通过了它自己的 `view`，不再逐个检查附件。
+
+**下载与预览的安全**
+
+- 下载（`/download`）：一律 `Content-Disposition: attachment`，文件名按 RFC 6266 编码：`filename*=UTF-8''…` 为原始文件名；`filename=` 为 ASCII 回退（`Str::ascii()` 转换并去掉 `%` 与路径分隔符），转换后扩展名前没有任何字母或数字时（纯中文等转成空串、空白或标点）为 `attachment-<id>.<扩展名>`（`Attachment::asciiFileName()`，预览同样）。`Content-Type` 为探测到的 MIME。
+- 预览（`/preview`）：**只放行图片白名单** `image/jpeg`、`image/png`、`image/gif`、`image/webp`（`Attachment::PREVIEWABLE_MIME_TYPES`）以 `inline` 输出；其他类型（**含 SVG**、HTML、PDF）没有预览地址，请求预览 404。SVG 可以作为普通附件上传（管理员把 `svg` 加入白名单时），但只能下载，不会被浏览器内联执行。
+- 两者都带 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'; sandbox`（与框架 `storage.local` 路由相同），即使浏览器内联打开也不能执行脚本；下载与预览都带 `Cache-Control: private, max-age=<地址剩余的有效秒数>`：只允许浏览器私有缓存，不超过地址的有效期。
+- 路由参数 `{attachment}` 只匹配数字（§9）。
+
+**附件管理**（`GET /system/attachments`、`DELETE /system/attachments/{attachment}`）
+
+- 列表：经过数据范围（`visibleTo`，按上传者）；预加载 `creator`；筛选 `name`、`mime_type`（模糊，如 `image/`）、`created_by`、`collection`（精确）、`is_bound`（`true` / `false`，`1` / `0`）、`created_at`（区间，§6.3）；排序 `id`、`size`、`created_at`，默认 `-id`。
+- 删除：成功返回 `data: null`，记录与文件一起删除，**文件在事务提交后才删**（回滚时文件保留）。**已绑定的附件不能删除 —— 403**（只看附件本身就能判定，§6.1）：它被某条记录使用（如某人的头像），要删请在那条记录中移除或替换它（`SyncAttachments` 会删除被替换的附件），或删除那条记录。未绑定的孤儿可以删，也会被自动清理。
+- Policy（`AttachmentPolicy`）：`viewAny`（`system.attachment`）、`view`（上文“访问权”）、`create`（登录即可）、`delete`（`system.attachment.delete`、未绑定、数据范围内），其余方法拒绝（附件没有修改）。
+
+**清理**
+
+- 孤儿：`Attachment` 使用框架的 `Prunable`，`model:prune` 删除**未绑定**且创建于 `config('core.attachments.orphan_ttl')` 小时（`CORE_ATTACHMENT_ORPHAN_HOURS`，默认 24）之前的附件。逐条删除（不用 `MassPrunable`），以便触发删除文件。调度每天执行（`routes/console.php`）。N 是存储维护策略，与日志保留天数一样放在 config，不进系统参数。
+- 删除附件记录（管理接口、`SyncAttachments` 替换、绑定对象被删除、孤儿清理）时，由模型的 `deleted` 事件在**事务提交后**删除文件（`DB::afterCommit()`，不在事务中时立即执行），事务回滚时文件保留，不会出现“记录还在、文件没了”。反过来“文件还在、记录没了”只会在提交后删文件失败时出现（只 `report()`），无害。
+
+**头像**（第一个使用方）
+
+- 头像是用户在 `avatar` 用途上绑定的附件（`User` 使用 `HasAttachments`，`avatar()` 为该用途的 `morphOne`），`users` 表不再有 `avatar` 列。
+- 设置：个人资料（Fortify 的 `PUT /user/profile-information`，§7.2）提交 `avatar_id`：自己上传的、未绑定的图片附件（`OwnedAttachment`，`mimeTypes` 为预览白名单），或当前的头像；`null` 表示去掉头像。替换或去掉后，原头像附件连同文件删除。未提交 `avatar_id` 表示不变。
+- 输出：`/user/info` 的 `avatar` 为头像的**预览地址**（签名 URL，窗口为 `avatar_url_ttl`，同一窗口内不变），没有头像时为 null（§6.2）。
+- 用户管理**不能**设置他人头像：头像是个人资料，由本人维护；用户管理的接口与输出不变。
 
 ## 7. 认证
 
@@ -1029,6 +1126,12 @@ public function delete(User $actor, User $user): Response
 - 只能修改已声明的参数；未声明的键或分组 —— 404；分组批量修改中提交了未声明的参数名 —— 422（该键）。接口不能新增、删除参数（Policy 的 `create`、`delete` 一律拒绝）。
 - 值不符合类型或声明的校验规则 —— 422（单个修改挂在 `value`，分组修改挂在参数名）。
 
+**附件**（§6.8）
+
+- 已绑定的附件不能在附件管理中删除 —— 403（超管也一样）；在绑定它的记录中替换、移除，或删除那条记录。
+- 无权访问附件（未绑定的不是自己上传的；已绑定的看不了所属记录；附件管理之外，或超出数据范围）—— 403。
+- 上传的文件类型不在白名单、超过大小上限 —— 422（`file`）；引用不是自己上传的未绑定附件、也不是这条记录已有的附件，或 MIME 不符合用途 —— 422（对应字段，不区分原因）。
+
 **在线会话与 token**（§6.6）
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
@@ -1042,7 +1145,7 @@ public function delete(User $actor, User $user): Response
 | 输出 | API Resource 逐个列出字段，禁止整模型 `toArray()` 输出；敏感字段加 `#[Hidden]` |
 | 输入 | 写接口拒绝未声明字段（`failOnUnknownFields`）；网址类字段只允许 `http` / `https` |
 | 富文本 | **保存时在后端净化**（`symfony/html-sanitizer`，落地前核实版本），去除脚本与危险属性 |
-| 上传 | 随机文件名；校验 MIME 与大小；**引用附件时校验归属**（只能使用自己上传或有权访问的附件） |
+| 上传 | 随机文件名（按日期分目录，扩展名由服务端探测的 MIME 推断）；**按文件内容**校验类型（探测的 MIME 与客户端扩展名都在白名单中，不信任客户端的 `Content-Type`）与大小（白名单与上限是系统参数；PHP 的 `upload_max_filesize`、`post_max_size` 与 Web 服务器的请求体上限须不小于它）；默认私有盘，下载只经过签名的临时 URL，一律 `attachment` 并带 `nosniff`、CSP `sandbox`，只有图片白名单可内联预览（SVG 不内联）；**引用附件时校验归属**（`OwnedAttachment`：只能使用自己上传的未绑定附件，或这条记录已有的附件）；绑定后访问权跟随所属记录（§6.8） |
 | 路由参数 | 统一格式约束（数字 ID、ULID、UUID），非法参数直接 404 |
 | XSS 纵深防御 | Web 服务器下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
 | 依赖 | CI 执行 `composer audit`、`npm audit` |
@@ -1188,7 +1291,7 @@ Scramble 的兼容性在引入时另行验证。
 | 文件名大小写、换行符 | CI 在 Linux 运行；`.gitattributes` 统一 LF |
 | Windows 缺失组件（Horizon、`df` 等） | 按环境注册，配置开关隔离 |
 | HTTPS、代理、Cookie | `APP_URL` 用 https；线上 `SESSION_SECURE_COOKIE`；配置可信代理与 Sanctum 有状态域名 |
-| 上传大小 | PHP 与 Web 服务器的限制一致 |
+| 上传大小 | PHP（`upload_max_filesize`、`post_max_size`）与 Web 服务器（`client_max_body_size`）的限制一致，且不小于系统参数 `attachment.max_size`（§6.8） |
 | PHP 版本与扩展 | `composer.json` 固定平台为 8.5；必要扩展在运行时镜像中安装 |
 
 ## 12. 依赖清单
@@ -1274,7 +1377,7 @@ Scramble 的兼容性在引入时另行验证。
 | 操作日志 | 记录写请求的中间件（排除认证请求、脱敏、耗时、请求 ID，响应后写入且失败不影响响应）、日志的只读查询接口（数据范围委托给操作者）、按日志名区分的模型 | spatie/laravel-activitylog（含 `activitylog:clean`）、`Context`、`defer()` |
 | 字典 | 字典类型 / 字典项与管理接口（内置项的保护）、扩展点 `DictRegistry`（`resources/dicts.php` 声明）与同步命令 `core:sync-dicts`、整体缓存的读取服务 `Dictionary`、`InDict` 校验规则、选项下发接口（`/options/dicts`） | Cache（`Cache::memo()`）、Validation、模型事件（提交后清除缓存） |
 | 系统参数 | 后台可修改值的键值参数（只能改已声明的，`null` 表示使用默认值）、扩展点 `SettingRegistry`（`resources/settings.php` 声明分组、类型、默认值或 config 键、是否公开、校验规则、引用的字典）与同步命令 `core:sync-settings`（三个同步由 `core:sync` 依次执行）、按类型校验与转换（`SettingType`）、读取服务 `Settings`（缓存、默认值）、按分组的管理接口、公开参数接口（`/settings/public`，只输出声明为公开的） | Cache（`Cache::memo()`）、Validation、`json` cast |
-| 附件 | 上传记录、归属校验、删除时清理文件 | Storage |
+| 附件 | 附件表与上传（`AllowedUpload`：内容 MIME + 扩展名白名单、大小上限，取自系统参数）、签名的下载 / 预览路由（统一响应头）、归属校验 `OwnedAttachment`、绑定 Action `SyncAttachments` 与模型 trait `HasAttachments`（记录删除时级联）、访问权委托给绑定对象的 `AttachmentPolicy`、事务提交后删除文件、孤儿清理（`Prunable`）、附件管理接口、头像（§6.8） | Storage、`File` 校验规则、`URL::temporarySignedRoute()`、`Prunable`、`DB::afterCommit()` |
 | 通知中心 | 我的通知、已读、全部已读接口 | Laravel 数据库通知 |
 | 公告 | 公告管理、发布后分批群发 | Notifications、`Bus::batch` |
 | 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
@@ -1289,7 +1392,7 @@ Scramble 的兼容性在引入时另行验证。
 
 | 事项 | 现状 |
 |---|---|
-| 附件 | 暂保留自建，需要缩略图时换 medialibrary |
+| 附件 | 保留自建（§6.8）：只有上传、归属、访问委托与清理，规模不大；需要缩略图、图片转换、响应式图片时再换 spatie/laravel-medialibrary（它的 `media` 表与多态关联可承接本表的字段）。大文件经 S3 时可改为 S3 的 `temporaryUrl()` 直出，接口字段不变 |
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |

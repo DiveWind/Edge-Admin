@@ -17,17 +17,19 @@
 - 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）；
 - 字典（设计文档 §6.7）：`Models/DictType`、`Models/DictItem`、扩展点 `DictRegistry` 与同步命令 `core:sync-dicts`、读取服务 `Dictionary`、校验规则 `InDict`（下文“字典”）；
 - 系统参数（设计文档 §6.7）：`Models/Setting`、扩展点 `SettingRegistry` 与同步命令 `core:sync-settings`、读取服务 `Settings`、本模块的参数分组 `resources/settings.php`（下文“系统参数”）；
-- 枚举选项（设计文档 §6.7）：显式白名单 `Services/EnumRegistry`（下文“枚举选项”）。
+- 枚举选项（设计文档 §6.7）：显式白名单 `Services/EnumRegistry`（下文“枚举选项”）；
+- 附件（设计文档 §6.8）：`Models/Attachment`、上传校验 `Rules/AllowedUpload`、归属校验 `Rules/OwnedAttachment`、绑定 `Actions/SyncAttachments` 与
+  模型 trait `Models/Concerns/HasAttachments`、访问权委托 `Policies/AttachmentPolicy`、孤儿清理、头像（下文“附件”）。
 
-不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）。
-附件等在后续接入。
+不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）；
+附件的下载、预览路由与签名 URL 的签发（入口的事，后台入口见 `app/Http/Admin/System/Controllers/Attachment*Controller` 与 `AttachmentResource`）。
 
 ## 对外提供
 
 | 类 | 用途 |
 |---|---|
 | `Actions/AuthenticateUser` | 用户名 + 密码校验；停用账号抛出 422（`username`），抛出前派发 `Failed`（只带用户名，供 Monitor 的登录日志）。由 `Fortify::authenticateUsing()` 调用 |
-| `Actions/UpdateUserProfileInformation` | 修改姓名、邮箱、头像（Fortify：`PUT /user/profile-information`） |
+| `Actions/UpdateUserProfileInformation` | 修改姓名、邮箱、头像（`avatar_id`，附件 id；Fortify：`PUT /user/profile-information`） |
 | `Actions/UpdateUserPassword` | 修改密码，其他会话与全部 token 失效（Fortify：`PUT /user/password`） |
 | `Actions/ResetUserPassword` | 重置密码，全部会话与 token 失效（Fortify：`POST /reset-password`） |
 | `Actions/DisableUser` | 停用用户：不能再登录，已登录的会话与 token 立即失效（由 `ChangeUserStatus` 调用） |
@@ -69,6 +71,14 @@
 | `Policies/SettingPolicy` | 系统参数的授权：查看、修改值；新增、删除一律拒绝 |
 | `Services/EnumRegistry` | 可下发给前端的枚举（显式白名单，`/options/enums`） |
 | `Contracts/HasColor` | 枚举的语义色（可选）：`color()` 为 antd 预设色名或 hex，`/options/enums` 据此输出 `color`；`Status` 已实现 |
+| `Models/Attachment` | 附件：`PREVIEWABLE_MIME_TYPES`（可预览、可作头像的图片白名单）、`isBound()`、`isBoundTo()`、`isPreviewable()`、`asciiFileName()`（下载的 ASCII 回退文件名）；`Prunable`（孤儿清理）；删除后在事务提交后删除文件 |
+| `Models/Concerns/HasAttachments` | 模型 trait：`attachments()`、`attachmentsIn()`、`attachmentIn()`；记录删除时一并删除附件（已用于 `User` 的头像 `avatar()`） |
+| `Actions/StoreAttachment` | 保存上传的文件并登记为未绑定的附件（随机文件名、服务端探测 MIME、sha256） |
+| `Actions/SyncAttachments` | 把附件绑定到记录的某个用途上，替换、移除的删除；加锁复核“未绑定或已在这里”（422） |
+| `Actions/DeleteAttachment` | 删除附件，文件在事务提交后删除 |
+| `Rules/AllowedUpload` | 上传校验：内容 MIME 推断的扩展名与客户端扩展名都在白名单中、大小上限（系统参数 `attachment.*`） |
+| `Rules/OwnedAttachment` | 引用附件的归属校验：自己上传的未绑定附件，或这条记录已有的附件；可限定 MIME |
+| `Policies/AttachmentPolicy` | 附件的授权：上传只需登录；访问权委托给绑定对象；附件管理按 `system.attachment` 与数据范围；已绑定的不能删 |
 | `Commands/SyncCommand` | `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即停止（非 0 退出）；`DatabaseSeeder` 与部署使用 |
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
@@ -281,7 +291,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 
 接口见设计文档 §6.7（`/system/settings`、`/system/setting-groups/{group}`、`/settings/public`）。只放管理员在运行时调整的业务参数；部署级的配置留在 config 与环境变量。
 
-- 声明（扩展点 `SettingRegistry`，单例）：本模块的分组在 `resources/settings.php`（`site`：站点名称、登录页提示，公开；`auth`：登录限流次数）。
+- 声明（扩展点 `SettingRegistry`，单例）：本模块的分组在 `resources/settings.php`（`site`：站点名称、登录页提示，公开；`auth`：登录限流次数；`attachment`：上传的类型白名单与大小上限）。
   业务模块同样注册自己的分组（一个分组只属于一个模块，键为 `<分组>.<参数名>`）：
 
   ```php
@@ -324,6 +334,46 @@ public function boot(EnumRegistry $enums): void
 }
 ```
 
+## 附件
+
+接口见设计文档 §6.8（`/attachments`、`/system/attachments`）。附件是“上传的文件 + 一条记录”，由业务表单提交附件 id 引用。
+
+- 存储：`config('core.attachments.disk')`（默认私有的 `local` 盘），路径 `attachments/<年>/<月>/<日>/<40 位随机串>.<扩展名>`（`hashName()`，扩展名由服务端探测的 MIME 推断），
+  不使用客户端的文件名；不按 sha256 去重。下载、预览只经过入口签发的签名临时 URL（过期时间对齐到 `core.attachments.url_ttl` 分钟的窗口，头像为 `avatar_url_ttl`），本模块不签发 URL；
+  下载的 ASCII 回退文件名见 `Attachment::asciiFileName()`。跨记录复用文件应复制附件，不能引用别处已绑定的附件。
+- 上传：`'file' => ['required', new AllowedUpload]`——白名单 `attachment.allowed_extensions` 与上限 `attachment.max_size`（KB）是本模块 `resources/settings.php`
+  的系统参数，内容探测的扩展名（`mimes`）与客户端扩展名（`extensions`）都必须在白名单中。PHP 的 `upload_max_filesize`、`post_max_size` 须不小于上限。
+  上传只需登录（`AttachmentPolicy::create()`），由入口限流。
+- 业务模块接入（以文章的附件为例）：
+
+  ```php
+  // 模型
+  class Article extends Model
+  {
+      use HasAttachments;
+  }
+
+  // Form Request：只能用自己上传的未绑定附件，或这篇文章已有的附件
+  'files' => ['array'],
+  'files.*' => ['integer', new OwnedAttachment($this->user(), record: $this->route('article'), collection: 'files')],
+
+  // Action：保存文章后绑定（被移除的附件连同文件删除）
+  resolve(SyncAttachments::class)->handle($article, 'files', $validated['files'] ?? [], 'files');
+  ```
+
+  已绑定的附件，访问权委托给记录的 Policy（`can('view', $article)`），业务模块不需要为附件写授权代码；删除文章时它的附件一并删除。
+  目前 `attachable_id` 是整数列，绑定对象须为自增整数主键的模型。
+- 删除：记录删除后（事务提交后）删除文件，回滚时文件保留；附件管理中已绑定的附件不能删除（403）。
+- 孤儿清理：`model:prune` 删除未绑定、创建于 `core.attachments.orphan_ttl` 小时之前的附件（`routes/console.php` 每天执行）。
+- 头像：`User` 在 `avatar` 用途上绑定的附件，本人在个人资料中提交 `avatar_id` 设置（`OwnedAttachment`，限图片），`null` 去掉；用户管理不能设置他人头像。
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 访问未绑定且不是自己上传的附件；访问已绑定附件但看不了所属记录（附件管理员在数据范围内除外） | 403 | `AttachmentPolicy::view()` |
+| 附件管理中删除已绑定的附件（超管也一样）；没有 `system.attachment.delete`；超出数据范围 | 403 | `AttachmentPolicy::delete()` |
+| 上传的类型不在白名单、超过上限 | 422（`file`） | `AllowedUpload` |
+| 引用别人的、已绑定在别处的、不存在的附件；MIME 不符合用途 | 422（对应字段） | `OwnedAttachment`；并发时 `SyncAttachments` 加锁复核 |
+
 ## 依赖 Core 的能力
 
 无。`Contracts/HasLabel` 是本模块提供给 Core 与业务模块的枚举接口。
@@ -333,6 +383,8 @@ public function boot(EnumRegistry $enums): void
 `config/permission.php`：模型指向本模块的 `Permission`、`Role`；`register_permission_check_method = false`；`register_octane_reset_listener = true`。
 
 `config/core.php` 的 `auth`：`login_rate_limit`（系统参数 `auth.login_rate_limit` 的默认值）、`frontend_url` 与 `reset_password_path`（重置密码的前端页面）。
+
+`config/core.php` 的 `attachments`：`disk`（存储盘，私有盘）、`url_ttl`、`avatar_url_ttl`（签名地址与头像地址的时间窗口，分钟；过期时间对齐到窗口，有效期为 1～2 个窗口）、`orphan_ttl`（未绑定附件的保留小时数）。
 
 ## 生成命令
 
