@@ -4,12 +4,14 @@ namespace App\Core\System\Commands;
 
 use App\Core\System\Actions\SyncPermissions;
 use App\Core\System\Models\Role;
+use DomainException;
 use Illuminate\Console\Attributes\{Description, Signature};
 use Illuminate\Console\Command;
 
 /**
  * core:sync-permissions：把各模块在 MenuRegistry 中声明的菜单与权限节点同步到 permissions 表（设计文档 §8.2）。
  * 由 DatabaseSeeder 调用，部署时在 `php artisan optimize` 之后执行（§11.4）。规则见 SyncPermissions。
+ * 声明节点的 path 被已有的其他节点占用时，列出冲突并以退出码 1 结束，不写入任何数据。
  */
 #[Signature('core:sync-permissions')]
 #[Description('同步各模块声明的菜单与权限节点（幂等：新增、收编同名自定义节点、修正结构性字段，不覆盖管理员的调整，不删除任何节点）')]
@@ -20,7 +22,18 @@ class SyncPermissionsCommand extends Command
      */
     public function handle(SyncPermissions $sync): int
     {
-        $result = $sync->handle();
+        try {
+            $result = $sync->handle();
+        } catch (DomainException $e) {
+            $lines = explode("\n", $e->getMessage());
+            $this->components->error(array_shift($lines));
+
+            foreach ($lines as $line) {
+                $this->line($line);
+            }
+
+            return self::FAILURE;
+        }
 
         $changes = count($result['created']) + count($result['updated']) + count($result['adopted']) + count($result['released']);
 

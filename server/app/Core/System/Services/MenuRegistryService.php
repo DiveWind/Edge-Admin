@@ -12,11 +12,13 @@ use InvalidArgumentException;
  * MenuRegistry 的实现（单例，SystemServiceProvider 的 $singletons）：只保存启动时注册的静态声明，不保存请求数据。
  *
  * 注册时逐个校验，一组声明全部合法才登记：
- * - name：小写点分（`system`、`system.user`、`system.user.create`），全局唯一；
+ * - name：小写点分、以字母开头（`system`、`system.user`、`system.user.create`），全局唯一
+ *   （Permission::isValidName()，与菜单管理的写接口同一规则）；
  * - type：PermissionType 的值，层级合法（catalog / menu / embedded / link 在根或 catalog 下，button 在 menu 下）；
  * - path：路由节点必填、以 `/` 开头且互不相同；按钮没有 path；
  * - component：menu 必填，其他类型不能有；embedded 必须有 meta.iframeSrc，link 必须有 meta.link；
- * - meta：title 必填；icon 为字符串；order 为整数；其余键只能是 Permission::META_KEYS 中的；
+ * - meta：title 必填；icon 为字符串；order 为整数；其余键只能是 Permission::META_KEYS 中的，且适用于该类型
+ *   （PermissionType::allowsMetaKey()：按钮没有路由 meta，iframeSrc 只用于 embedded，link 只用于 link）；
  * - buttons：只用于 menu，`键 => 标题`，展开为 `<父 name>.<键>` 的按钮节点。
  */
 class MenuRegistryService implements MenuRegistry
@@ -27,8 +29,6 @@ class MenuRegistryService implements MenuRegistry
      * @var list<string>
      */
     private const array KEYS = ['name', 'type', 'path', 'component', 'meta', 'children', 'buttons'];
-
-    private const string NAME_PATTERN = '/^[a-z0-9_-]+(\.[a-z0-9_-]+)*$/';
 
     private const string BUTTON_KEY_PATTERN = '/^[a-z0-9_-]+$/';
 
@@ -79,8 +79,8 @@ class MenuRegistryService implements MenuRegistry
 
         $name = $node['name'] ?? null;
 
-        if (! is_string($name) || preg_match(self::NAME_PATTERN, $name) !== 1) {
-            $this->fail($where, 'name 必须是小写点分的权限码，如 system.user');
+        if (! is_string($name) || ! Permission::isValidName($name)) {
+            $this->fail($where, 'name 必须是小写点分、以字母开头的权限码，如 system.user');
         }
 
         if (($unknown = array_diff(array_map(strval(...), array_keys($node)), self::KEYS)) !== []) {
@@ -160,6 +160,10 @@ class MenuRegistryService implements MenuRegistry
 
         if (($unknown = array_diff(array_map(strval(...), array_keys($extra)), Permission::META_KEYS)) !== []) {
             $this->fail($name, 'meta 中不允许的键 '.implode('、', $unknown).'（允许 title、icon、order 与 '.implode('、', Permission::META_KEYS).'）');
+        }
+
+        if (($mismatched = array_filter(array_map(strval(...), array_keys($extra)), fn (string $key): bool => ! $type->allowsMetaKey($key))) !== []) {
+            $this->fail($name, "{$type->value} 不能有 meta.".implode('、meta.', $mismatched));
         }
 
         $path = $node['path'] ?? null;

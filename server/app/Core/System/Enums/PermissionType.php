@@ -94,6 +94,22 @@ enum PermissionType: string implements HasLabel
     }
 
     /**
+     * meta 列中的键 $key（Permission::META_KEYS 之一）是否适用于本类型：按钮只作为权限码，没有路由 meta；
+     * iframeSrc 只用于内嵌页，link 只用于外链。与类型不符的键在声明与写接口中都被拒绝。
+     */
+    public function allowsMetaKey(string $key): bool
+    {
+        return match ($this) {
+            self::Button => false,
+            default => match ($key) {
+                'iframeSrc' => $this === self::Embedded,
+                'link' => $this === self::Link,
+                default => true,
+            },
+        };
+    }
+
+    /**
      * 节点必须在 meta 中提供的键：内嵌页的 iframeSrc、外链的 link。
      */
     public function requiredMetaKey(): ?string

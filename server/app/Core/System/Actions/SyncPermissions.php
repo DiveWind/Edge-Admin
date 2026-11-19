@@ -6,6 +6,7 @@ use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Data\MenuNodeData;
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, Role};
+use DomainException;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -20,6 +21,10 @@ use Spatie\Permission\PermissionRegistrar;
  * 3. 从声明中移除的内置节点：取消 is_builtin，转为自定义节点并保留授权；不删除任何节点；
  * 4. 确保 super-admin 角色存在；
  * 5. 最后清除 spatie 的权限缓存。
+ *
+ * path 唯一（§8.2）：写入前先检查，声明节点的 path 已被另一个不在声明中的节点（自定义节点、已转为自定义的节点）占用时，
+ * 抛出 DomainException 列出全部冲突，什么都不写入。声明之间互换 path 时先清空要变更的 path 再写入，不会撞上唯一索引。
+ * 全部写入在一个事务中：任何一步失败都整体回滚。
  */
 class SyncPermissions
 {
@@ -40,6 +45,9 @@ class SyncPermissions
 
             /** @var array<string, Permission> $existing */
             $existing = Permission::query()->get()->keyBy('name')->all();
+
+            $this->ensureNoPathConflicts($existing);
+            $this->releaseChangedPaths($existing);
 
             foreach ($this->menus->all() as $name => $node) {
                 $permission = $existing[$name] ?? null;
@@ -80,6 +88,58 @@ class SyncPermissions
         $this->registrar->forgetCachedPermissions();
 
         return $result;
+    }
+
+    /**
+     * 声明节点的 path 不能被不在声明中的节点占用（声明之间的 path 已由 MenuRegistry 保证互不相同）。
+     *
+     * @param  array<string, Permission>  $existing
+     *
+     * @throws DomainException
+     */
+    private function ensureNoPathConflicts(array $existing): void
+    {
+        $occupants = [];
+
+        foreach ($existing as $name => $permission) {
+            if ($permission->path !== null && ! $this->menus->has($name)) {
+                $occupants[$permission->path] = $name;
+            }
+        }
+
+        $conflicts = [];
+
+        foreach ($this->menus->all() as $name => $node) {
+            if ($node->path !== null && isset($occupants[$node->path])) {
+                $conflicts[] = "  - {$name} 的 path {$node->path} 已被节点 {$occupants[$node->path]}（id {$existing[$occupants[$node->path]]->id}）占用";
+            }
+        }
+
+        if ($conflicts !== []) {
+            throw new DomainException(implode("\n", [
+                '菜单声明的 path 与已有节点冲突，本次同步没有写入任何数据：',
+                ...$conflicts,
+                '请在菜单管理中修改（或删除）占用这些 path 的节点，然后重新执行 php artisan core:sync-permissions。',
+            ]));
+        }
+    }
+
+    /**
+     * 先清空 path 将要变更的已有声明节点的 path：声明之间互换 path 时，逐个写入不会撞上唯一索引（内存中的模型保留原值，照常判断是否修正）。
+     *
+     * @param  array<string, Permission>  $existing
+     */
+    private function releaseChangedPaths(array $existing): void
+    {
+        $changed = array_keys(array_filter(
+            $this->menus->all(),
+            fn (MenuNodeData $node, string $name): bool => isset($existing[$name]) && $existing[$name]->path !== null && $existing[$name]->path !== $node->path,
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        if ($changed !== []) {
+            Permission::query()->whereIn('name', $changed)->update(['path' => null]);
+        }
     }
 
     /**

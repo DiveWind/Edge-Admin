@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserController, UserInfoController, UserPasswordController, UserStatusController};
+use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, MenuController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -38,5 +38,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('roles/data-scopes', RoleDataScopesController::class)->name('roles.data-scopes');
         Route::put('roles/{role}/status', RoleStatusController::class)->whereNumber('role')->name('roles.status');
         Route::apiResource('roles', RoleController::class)->whereNumber('role');
+
+        Route::apiResource('menus', MenuController::class)->whereNumber('menu');
     });
 });

@@ -43,6 +43,33 @@ it('leaves other abilities to the policies, for super admins too', function (): 
         ->and($this->admin->can('unknown.code'))->toBeFalse();
 });
 
+it('leaves abilities with arguments to the policies, even when a node has the same name', function (string $name): void {
+    Permission::factory()->catalog()->create(['name' => $name, 'path' => "/{$name}"]);
+    $this->role->givePermissionTo($name);
+    $record = new stdClass;
+    $calls = [];
+    Gate::define($name, function (User $user, stdClass $argument) use (&$calls): bool {
+        $calls[] = $argument;
+
+        return false;
+    });
+
+    expect($this->user->fresh()?->can($name))->toBeTrue()
+        ->and($this->admin->can($name))->toBeTrue()
+        ->and($this->user->fresh()?->can($name, $record))->toBeFalse()
+        ->and($this->admin->can($name, [$record]))->toBeFalse()
+        ->and($calls)->toBe([$record, $record]);
+})->with(['update', 'export']);
+
+it('decides super-admin record rules by the policy for a node named after the ability', function (): void {
+    syncBuiltinPermissions();
+    Permission::factory()->catalog()->create(['name' => 'delete', 'path' => '/delete']);
+    $superAdminRole = Role::query()->where('name', Role::SUPER_ADMIN)->sole();
+
+    expect($this->admin->can('delete'))->toBeTrue()
+        ->and(Gate::forUser($this->admin)->inspect('delete', $superAdminRole)->message())->toBe('The super admin role cannot be deleted.');
+});
+
 it('does not register the spatie permission check on the gate', function (): void {
     $this->role->update(['status' => Status::Disabled]);
 

@@ -134,18 +134,22 @@ Core 与 Modules 下的模块结构相同，按需创建子目录，不建空目
 
 ```
 app/Modules/Content/
-├── Models/            Eloquent 模型
+├── Models/            Eloquent 模型（与迁移、工厂、Policy 一起由 core:make-model 生成）
+│   └── Concerns/      模型 trait（如 Core/System 的 HasDataScope，供各模块的模型使用）
 ├── Actions/           写操作用例（一个类一个用例，handle() 方法）
-├── Policies/          授权规则
+├── Policies/          授权规则（每个模型一个，标准方法齐全，§8.3）
 ├── Queries/           复杂查询、统计指标（只读）
 ├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
+├── Commands/          Artisan 命令（在模块 Provider 中 $this->commands([...]) 登记，§4.5）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
 ├── Rules/  Casts/
-├── Contracts/  Data/  Services/   需要向受限入口开放时才有：接口、只读数据对象（`<Name>Data`）与接口的实现
+├── Contracts/  Data/  Services/   接口、只读数据对象（`<Name>Data`）与接口的实现：向受限入口开放的契约（§5.2），
+│                                  以及 Core 提供的扩展点（如 Core/System 的 MenuRegistry、DataScopeProvider 与 MenuNodeData，§5.5）
 ├── resources/
 │   ├── lang/          模块自己的语言包（命名空间 content::）
 │   ├── views/         邮件、PDF、导出模板（不对外访问）
-│   └── menus.php      本模块的菜单与权限节点声明（§8.2）
+│   └── menus.php      本模块的菜单与权限节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
+│                      `$menus->register(require __DIR__.'/resources/menus.php')`，由 core:sync-permissions 写入数据库
 ├── README.md          模块说明：职责、对外提供什么、依赖了 Core 的哪些能力
 └── ContentServiceProvider.php    注册本模块的命令、监听、语言包、视图，并通过扩展点接入 Core（§5.5）
 ```
@@ -300,7 +304,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
   - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码）、非超管操作超管用户、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改 `name` / `type` / `path` / `component`、节点类型层级不合法、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、唯一性冲突。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
@@ -329,7 +333,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
 | 字段 | 规则 |
 |---|---|
-| `name` | 节点的**权限码**，同时是 spatie 的 permission name 与 Vben 的路由 name，**全局唯一**。小写点分：目录 `system`、菜单 `system.user`、按钮 `system.user.create` |
+| `name` | 节点的**权限码**，同时是 spatie 的 permission name 与 Vben 的路由 name，**全局唯一**。小写点分、以字母开头（`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$`）：目录 `system`、菜单 `system.user`、按钮 `system.user.create`。权限码检查总是无参数（`can('system.user.create')`），与带模型参数的 Policy 调用不会混淆（§8.1） |
 | `path` | 路由路径，以 `/` 开头；非按钮节点之间唯一 |
 | `component` | 见上表 |
 | `meta` | `title`、`icon`、`order`，以及节点 `meta` 列中的白名单键（§8.2） |
@@ -374,7 +378,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 ### 6.4 字段命名与数据格式
 
 - **自有资源的字段一律 snake_case**（`parent_id`、`created_at`、`data_scope`）：校验错误的键、query-builder 的字段名、前端 `setFormErrors` 都要求**表单字段名 = 接口字段名**。只有 Vben 规定的结构使用 camelCase：`/user/info`、`/menu/all` 与菜单节点的 `meta.*`，以及分页参数 `pageSize`。
-- **状态统一为字符串枚举 `enabled` / `disabled`**：通用枚举 `App\Core\System\Enums\Status`（实现 `HasLabel`），用户、角色、菜单节点共用；现有的 `UserStatus` 在开发时并入 `Status`。前端适配层 `CellSwitch` / `CellTag` 的默认值相应改为 `'enabled'` / `'disabled'`。
+- **状态统一为字符串枚举 `enabled` / `disabled`**：通用枚举 `App\Core\System\Enums\Status`（实现 `HasLabel`），用户、角色、菜单节点共用。前端适配层 `CellSwitch` / `CellTag` 的默认值相应改为 `'enabled'` / `'disabled'`。
 - **时间**输出带时区偏移的 ISO 8601（§10.1），前端表格列用 formatter 格式化。
 - **id** 为自增整数（对外开放的入口使用 ULID，见 §5.7）。
 - **不提供“名称 / 路径是否已存在”这类检查接口**：唯一性一律在保存时由 422 返回，前端用 `setFormErrors` 回填到对应字段。
@@ -404,14 +408,29 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `GET /system/roles/permission-tree` | 授权用的节点树：只含启用节点，精简字段 `{ name, type, meta: { title, icon }, children }` | `system.role.create` 或 `system.role.update` |
 | `GET /system/roles/data-scopes` | 数据范围选项 `[{ value, label }]`（§8.4），只含操作者可授予的范围（§8.5） | `system.role.create` 或 `system.role.update` |
 | `GET /system/menus` | 整棵节点树（数组，**不分页**，是 §6.3 列表契约的例外） | `system.menu` |
-| `GET /system/menus/{menu}` | 详情 | `system.menu` |
-| `POST /system/menus` | 新增：`parent_id`、`type`、`name`、`path`、`component`、`status`、`meta.*` | `system.menu.create` |
+| `GET /system/menus/{menu}` | 详情（不含 `children`） | `system.menu` |
+| `POST /system/menus` | 新增自定义节点：`parent_id`、`type`、`name`、`path`、`component`、`status`、`meta.*` | `system.menu.create` |
 | `PUT /system/menus/{menu}` | 修改：字段同新增 | `system.menu.update` |
 | `DELETE /system/menus/{menu}` | 删除 | `system.menu.delete` |
 
-- 菜单节点的写接口中，`meta.title`、`meta.icon` 存入 `title`、`icon` 列，`meta.order` 存入 `sort` 列（不接受顶层 `sort`），其余 `meta.*` 按白名单存入 `meta` 列（§8.2）。
-- 内置节点的 `name`、`type`、`path`、`component` 在前端只读；提交的值与库中不同时返回 422（§8.6）。
-- 菜单管理页拿到的节点：顶层 `id`、`parent_id`、`type`、`name`、`path`、`component`、`status`、`is_builtin`、`children`，以及 `meta`（含 `title`、`icon`、`order` 和 `meta` 列中的键）。
+- **菜单节点**（`/system/menus`，路由参数 `{menu}` 绑定 `Permission`）：
+  - 输出字段：顶层 `id`、`parent_id`（根为 null）、`type`、`name`、`path`（按钮为 null）、`component`（只有 `menu` 有值，其余为 null；与 `/menu/all` 不同，不换成 `IFrameView`）、`status`、`is_builtin`，以及 `meta`（`title`、`icon`（可为 null）、`order`，和 `meta` 列中已设置的白名单键）。列表的每个节点另有 `children`（叶子为空数组）；详情与新增、修改的响应不含 `children`。
+  - 列表：整棵树，含停用节点与按钮，同级按 `sort`、`id` 排序；一次查询取出全部节点后在内存中组装。
+  - 写入字段：`type`、`name`、`meta.title` 必填；`parent_id`（已存在的节点）、`status` 可选——新增时默认根节点、`enabled`，修改时未提交表示不变；`path`、`component`、`meta.*` 按下表。`meta.title`（i18n key 或纯文本）、`meta.icon` 存入 `title`、`icon` 列，`meta.order`（整数，默认 0）存入 `sort` 列（不接受顶层 `sort`、`title`、`icon`），其余键按白名单（§8.2）存入 `meta` 列；`meta` 整体替换：未提交的 `icon` 为 null、`order` 为 0、其余键去掉，值为 null 的键视为未设置。未知的 `meta` 键 → 422（错误挂在 `meta.<键>`）。新增成功返回 201，`guard_name` 为 `web`，`is_builtin` 为 false。
+  - 按类型的字段（**与类型不符的字段一律拒绝**：提交了非空值 → 422，挂在该字段上，不静默清空；null 视为未提交）：
+
+    | `type` | `path` | `component` | `meta.iframeSrc` | `meta.link` | 其余 `meta` 白名单键 |
+    |---|---|---|---|---|---|
+    | `catalog` | 必填 | 不允许 | 不允许 | 不允许 | 可选 |
+    | `menu` | 必填 | 必填 | 不允许 | 不允许 | 可选 |
+    | `embedded` | 必填 | 不允许 | 必填 | 不允许 | 可选 |
+    | `link` | 必填 | 不允许 | 不允许 | 必填 | 可选 |
+    | `button` | 不允许 | 不允许 | 不允许 | 不允许 | 不允许（只有 `title`、`icon`、`order`） |
+
+    `name` 的格式见 §6.2，全局唯一；`path` 以 `/` 开头，非按钮节点之间唯一（数据库唯一索引兜底并发）；`component` 以 `/` 开头（相对 `src/views`）；`meta.iframeSrc`、`meta.link` 只允许 `http` / `https` 网址；`meta.activePath` 以 `/` 开头；`keepAlive`、`affixTab`、`hide*` 为布尔值；`badgeType` 为 `dot` / `normal`；其余为字符串。
+  - 内置节点的 `name`、`type`、`path`、`component`、`meta.iframeSrc`、`meta.link` 在前端只读（它们由同步命令维护）；提交的值与库中不同时返回 422（§8.6）。其余字段可以修改，再次同步不会覆盖。
+  - 类型层级、成环、生命线节点、有子节点不能删等规则见 §8.6。写入后 spatie 的权限缓存随之清除，`/menu/all`、`/auth/codes` 立即按新数据计算。
+  - Policy（`PermissionPolicy`）方法：`viewAny` / `view`（`system.menu`）、`create`、`update`、`delete`（删除内置节点 403）；节点不按数据范围过滤。
 - **用户**的输出字段：`id`、`username`、`name`、`email`（可为 null）、`status`、`roles`、`created_at`、`updated_at`；不输出密码与两步验证的字段。
   - `roles` 在**读接口**（列表、详情，以及新增、修改、启停的响应）中输出为对象数组 `[{ name: 标识, title: 显示名 }]`（含停用的角色，按 `sort`、`id` 排序）：列表要显示角色名，而能看用户列表的人不一定有角色下拉（`/system/roles/options`）的权限。**写接口**的 `roles` 入参是角色标识 `string[]`，前端回填表单时取 `roles.map(r => r.name)`。
   - 列表：经过数据范围（`visibleTo`，§8.4）；筛选 `username`、`name`、`email`（模糊）、`status`（精确）、`created_at`（区间，§6.3）；排序 `id`、`username`、`created_at`，默认 `-id`。
@@ -425,7 +444,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 新增、修改：`name`、`title` 必填；`status`（默认 `enabled`）、`data_scope`（必须是已登记的范围，默认 `self`；非超管只能选自己可授予的范围，§8.5）、`remark`、`sort`（默认 0）、`permissions`（已登记的权限码）可选；修改时未提交 `permissions` 表示权限不变，`super-admin` 角色不能提交 `permissions`（422）。新增成功返回 201。
   - Policy（`RolePolicy`）方法：`viewAny` / `view`（`system.role`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.role.status`）、`viewFormOptions`（授权树与数据范围选项）、`viewOptions`（角色下拉）。
 - **授权树**节点：`{ name, type, meta: { title, icon }, children }`，`icon` 可为 null，叶子的 `children` 为空数组；只含生效节点（本身及全部祖先都启用，含按钮与没有子节点的目录），同级按 `sort`、`id` 排序。
-- 路由参数加格式约束（§9）：`{user}`、`{role}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
+- 路由参数加格式约束（§9）：`{user}`、`{role}`、`{menu}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
 - 业务保护规则（不能删除自己、内置节点不能删等）见 §8.6。
 
 ## 7. 认证
@@ -486,8 +505,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 模型 `App\Core\System\Models\Permission`、`Role` 继承 spatie 的模型，在 `config/permission.php` 中指向它们；guard 统一为 `web`（用设备 token 认证的也是同一个 `User`）：`User::guardName()` 固定返回 `web`，新建角色时显式写入 `guard_name`，否则 spatie 会取当前请求的 guard（`auth:sanctum` 下为 `sanctum`）。
   - `permission.register_permission_check_method = false`（不注册 spatie 自带的 Gate 检查）；`permission.register_octane_reset_listener = true`。
 - **权限判定由自建的 `Gate::before` 完成**（在 `SystemServiceProvider` 中注册），只处理权限码：
-  - ability 是**已登记的权限码**（以是否登记为准，不看格式；顶级目录 `system` 也是权限码）：在用户的有效权限码中 → `true`，否则 → `false`。节点或其任一祖先停用时，超管也得到 `false`。
-  - 其他 ability（未登记的名称，如 Policy 方法名 `update`）→ 返回 `null`，交给 Policy。因此超管只对权限码直接放行，同样受 Policy 中记录级规则的约束（不能删除自己、不能删除内置节点等）。
+  - **无参数的调用**（`can('system.user.create')`、`#[Authorize('system.user')]`），且 ability 是**已登记的权限码**（以是否登记为准，不看格式；顶级目录 `system` 也是权限码）：在用户的有效权限码中 → `true`，否则 → `false`。节点或其任一祖先停用时，超管也得到 `false`。
+  - **带参数的调用**一律返回 `null`，交给 Policy：Policy 调用总带模型或类（`can('update', $model)`、`can('create', User::class)`、`#[Authorize('update', 'user')]`），权限码检查总是无参数。因此即使有节点恰好叫 `update`、`export`，也不会绕过 Policy。
+  - 其他 ability（未登记的名称，如无参数的 `publish`）→ 返回 `null`，交给 Gate 中定义的规则。因此超管只对权限码直接放行，同样受 Policy 中记录级规则的约束（不能删除自己、不能删除内置节点等）。
 - **有效权限码**由 `#[Scoped]` 的 `PermissionRegistry` 计算，每个请求只算一次。`Gate::before`、`/auth/codes`、`/menu/all` 都使用它，三处口径一致：
   - 普通用户：节点本身及全部祖先都**启用**，且都在用户**启用角色**的权限码中，该节点才生效；
   - 超管：全部启用节点（节点本身及全部祖先都启用）。
@@ -500,11 +520,11 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 | 列 | 说明 |
 |---|---|
-| `name`（spatie 原有） | 权限码，规则见 §6.2 |
+| `name`（spatie 原有） | 权限码，规则见 §6.2（格式由 `Permission::isValidName()` 判定，模块声明与菜单管理共用） |
 | `parent_id` | 上级节点；根节点为 null |
 | `type` | `catalog` / `menu` / `embedded` / `link` / `button`（§6.2） |
 | `title` | 标题（前端 i18n key 或纯文本），输出为 `meta.title` |
-| `path` | 路由路径；按钮为空 |
+| `path` | 路由路径；按钮为空；唯一索引（null 不参与） |
 | `component` | 页面组件，只有 `menu` 使用 |
 | `icon` | 图标，输出为 `meta.icon` |
 | `sort` | 排序，输出为 `meta.order` |
@@ -564,6 +584,7 @@ return [
 3. 从声明中移除的内置节点：取消 `is_builtin`，转为自定义节点并保留授权，在命令输出中列出；**不删除任何节点**。
 4. 确保 `super-admin` 角色存在。
 5. 最后清除 spatie 的权限缓存。
+6. `path` 唯一：写入前先检查，声明节点的 `path` 已被另一个不在声明中的节点（自定义节点、已转为自定义的节点）占用时，命令列出每个冲突（声明节点、`path`、占用它的节点）与处理建议（在菜单管理中改掉或删除占用的节点后重跑），以非 0 退出码结束，**不写入任何数据**。整次同步在一个事务中，要么全部成功，要么全部回滚；声明之间互换 `path` 正常完成。
 
 ### 8.3 Policy 规范
 
@@ -668,12 +689,13 @@ public function delete(User $actor, User $user): Response
 
 **菜单节点**
 
-- 内置节点不能删除 —— 403。
-- 内置节点的 `name`、`type`、`path`、`component` 不可修改：前端只读，提交的值与库中不同 —— 422（对应字段）；`path`、`component` 只能由同步命令修改（§8.2）。
-- `system.menu`、`system.menu.update` 两个节点及其祖先不能停用，防止把所有人锁在外面 —— 422（`status`）。
-- 类型层级：`catalog` / `menu` / `embedded` / `link` 只能挂在根或 `catalog` 下，`button` 只能挂在 `menu` 下；修改类型后仍要能容纳现有的子节点 —— 422（`type` / `parent_id`）。
-- 有子节点的节点不能删除 —— 422（`message`）。
-- 非按钮节点的 `path` 唯一，且以 `/` 开头 —— 422（`path`）。
+- 内置节点不能删除 —— 403（超管也一样）。
+- 内置节点的结构性字段 `name`、`type`、`path`、`component`、`meta.iframeSrc`、`meta.link` 不可修改：前端只读，提交的值与库中不同 —— 422（对应字段，如 `meta.link`）；它们只能由同步命令修改（§8.2）。
+- `system.menu`、`system.menu.update` 两个节点及其祖先必须保持启用，防止把所有人锁在外面：停用它们或它们（修改后的）祖先 —— 422（`status`）；把它们或其祖先移到停用的节点下 —— 422（`parent_id`）。祖先按修改后的上级计算（`system.menu` 被移到别的目录下后，新目录不能停用，原来的 `system` 可以停用）；修改前就已失效的不拦，只拦本次修改造成的失效。
+- 类型层级：`catalog` / `menu` / `embedded` / `link` 只能挂在根或 `catalog` 下，`button` 只能挂在 `menu` 下 —— 422（新增、移动上级时挂 `parent_id`；只改类型时挂 `type`）；修改类型后仍要能容纳现有的子节点 —— 422（`type`）。
+- 上级不能是自己或自己的子孙（成环）—— 422（`parent_id`）。
+- 有子节点的节点不能删除 —— 422（`message`）。删除节点时角色的授权随之删除（spatie 在删除前解除，外键 `cascadeOnDelete` 兜底）。
+- 权限码全局唯一 —— 422（`name`）；非按钮节点的 `path` 唯一，且以 `/` 开头 —— 422（`path`）。并发写入撞上唯一索引时 Action 同样返回 422。
 - 停用向子孙级联生效。
 
 ## 9. 安全规范
@@ -758,7 +780,7 @@ Scramble 的兼容性在引入时另行验证。
 ### 10.5 测试
 
 - Pest；`tests/` 目录与 `app/` 对应。
-- `tests/Pest.php` 提供统一辅助：以某权限登录、断言无权限返回 403、断言数据权限过滤。
+- `tests/Pest.php` 提供统一辅助：同步内置节点（`syncBuiltinPermissions()`）、拥有某些权限码的用户（`userWithPermissions()`，角色范围为 `self`）、指定数据范围的用户（`userWithDataScope()`）、超管（`superAdminActor()`）；403、数据权限过滤用框架自带的断言（`assertForbidden()`、`Gate::forUser()->inspect()` 等）。
 - 每个接口至少覆盖：成功、无权限 403、数据权限之外 403/404、校验失败 422。
 - 授权相关的约定测试（`tests/Arch`）：
   - 每条受保护路由都有授权声明；
@@ -906,8 +928,10 @@ Scramble 的兼容性在引入时另行验证。
 | 能力 | 自建内容 | 依托的官方能力 / 包 |
 |---|---|---|
 | Vben 响应格式 | 响应包装中间件 + 响应宏 | 框架响应宏 |
-| 菜单权限 | 建在 `permissions` 表上的菜单树（Vben 的 5 种节点类型）、`MenuRegistry` 与同步命令 `core:sync-permissions`、`Gate::before` 与 `PermissionRegistry`、按 Vben 路由结构输出菜单、权限码接口 | spatie/laravel-permission、Gate |
-| 数据权限 | `DataScopeProvider` 接口与 `DataScopeRegistry`、默认“全部 / 仅本人”、模型 trait `HasDataScope` | Eloquent 查询范围、Policy |
+| 菜单权限 | 建在 `permissions` 表上的菜单树（Vben 的 5 种节点类型，按类型的规则在 `PermissionType`）、扩展点 `MenuRegistry`（`resources/menus.php` 声明，注册时校验）与同步命令 `core:sync-permissions`、`Gate::before` 与 `#[Scoped]` 的 `PermissionRegistry`（有效权限码、停用级联）、按 Vben 路由结构输出菜单（`/menu/all`）、权限码接口（`/auth/codes`）、菜单管理（类型校验、层级、成环、内置节点与生命线保护） | spatie/laravel-permission、Gate |
+| 角色与用户的防提权 | 授予权限码、数据范围、分配角色时的“只能给自己有的”、保留操作者管不到的授权、最后一个超管（加锁） | spatie/laravel-permission、数据库行锁 |
+| 数据权限 | `DataScopeProvider` 接口与 `DataScopeRegistry`（含可授予范围的防提权）、默认“全部 / 仅本人”、模型 trait `HasDataScope`（`visibleTo()` / `isVisibleTo()`，归属列可声明） | Eloquent 查询范围、Policy |
+| 列表查询 | 时间区间筛选 `DateTimeRangeFilter`（ISO 8601 带时区）；query-builder 的未知筛选 / 排序异常（`InvalidQuery`，默认 400）统一映射为 422（`VbenResponse`） | spatie/laravel-query-builder |
 | 认证补充 | 登录日志、在线会话与强制下线、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
 | 操作日志 | 记录写请求的中间件（脱敏、请求 ID），写入 activitylog | spatie/laravel-activitylog、`Context` |
 | 字典 | 字典类型 / 字典项、缓存、`InDict` 校验规则、选项下发接口 | Cache、Validation |
@@ -931,3 +955,4 @@ Scramble 的兼容性在引入时另行验证。
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
+| `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |

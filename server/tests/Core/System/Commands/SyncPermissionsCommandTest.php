@@ -215,3 +215,65 @@ it('syncs the nodes declared by the System module', function (): void {
         'system.menu', 'system.menu.create', 'system.menu.update', 'system.menu.delete',
     ])->and(node('system.menu')->component)->toBe('/system/menu/list');
 });
+
+it('keeps the adjustments made to built-in nodes in menu management', function (): void {
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    $actor = superAdminActor();
+    $catalog = Permission::factory()->create(['name' => 'custom', 'path' => '/custom']);
+
+    $this->actingAs($actor)
+        ->putJson('/api/admin/system/menus/'.node('system.role')->id, [
+            'parent_id' => $catalog->id,
+            'type' => 'menu',
+            'name' => 'system.role',
+            'path' => '/system/role',
+            'component' => '/system/role/list',
+            'status' => 'disabled',
+            'meta' => ['title' => 'Roles', 'icon' => 'lucide:users', 'order' => 1, 'hideInMenu' => true, 'keepAlive' => true],
+        ])
+        ->assertOk();
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('没有变更')
+        ->assertSuccessful();
+
+    expect(node('system.role'))
+        ->parent_id->toBe($catalog->id)
+        ->status->toBe(Status::Disabled)
+        ->title->toBe('Roles')
+        ->icon->toBe('lucide:users')
+        ->sort->toBe(1)
+        ->meta->toBe(['keepAlive' => true, 'hideInMenu' => true])
+        ->is_builtin->toBeTrue();
+});
+
+it('fails without writing anything when a declared path is taken by another node', function (): void {
+    $custom = Permission::factory()->create(['name' => 'custom', 'path' => '/demo/docs']);
+    declareMenus(demoMenus());
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('demo.docs 的 path /demo/docs 已被节点 custom')
+        ->expectsOutputToContain('本次同步没有写入任何数据')
+        ->expectsOutputToContain('重新执行 php artisan core:sync-permissions')
+        ->assertFailed();
+
+    expect(Permission::query()->pluck('name')->all())->toBe(['custom'])
+        ->and(Role::query()->exists())->toBeFalse()
+        ->and($custom->fresh()?->path)->toBe('/demo/docs');
+});
+
+it('swaps the paths of declared nodes', function (): void {
+    declareMenus(demoMenus());
+    $this->artisan('core:sync-permissions')->assertSuccessful();
+    $menus = demoMenus();
+    $menus[0]['children'][0]['path'] = '/demo/docs';
+    $menus[0]['children'][1]['path'] = '/demo/page';
+    declareMenus($menus);
+
+    $this->artisan('core:sync-permissions')
+        ->expectsOutputToContain('修正 2 个')
+        ->assertSuccessful();
+
+    expect(node('demo.page')->path)->toBe('/demo/docs')
+        ->and(node('demo.docs')->path)->toBe('/demo/page');
+});

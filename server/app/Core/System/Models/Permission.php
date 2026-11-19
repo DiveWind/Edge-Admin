@@ -31,6 +31,20 @@ class Permission extends SpatiePermission
     use HasFactory, UsesAppTimezone;
 
     /**
+     * 权限码（name）的格式：小写点分，以字母开头，如 `system`、`system.user`、`system.user.create`。
+     * 模块的声明（MenuRegistry）与菜单管理的写接口使用同一规则。
+     */
+    public const string NAME_PATTERN = '/^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$/';
+
+    /**
+     * 生命线节点（§8.6）：菜单管理的查看与修改权限。它们及其祖先必须保持生效（不能停用、不能移到停用的节点下），
+     * 否则包括超管在内的所有人都会被关在菜单管理之外，无法再启用。
+     *
+     * @var list<string>
+     */
+    public const array LIFELINE_NAMES = ['system.menu', 'system.menu.update'];
+
+    /**
      * meta 列允许的键（Vben 路由 meta 的子集，设计文档 §8.2）；title、icon、order 存在各自的列中。
      *
      * @var list<string>
@@ -59,6 +73,14 @@ class Permission extends SpatiePermission
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id');
+    }
+
+    /**
+     * 权限码的格式是否合法（NAME_PATTERN）。
+     */
+    public static function isValidName(string $name): bool
+    {
+        return preg_match(self::NAME_PATTERN, $name) === 1;
     }
 
     /**

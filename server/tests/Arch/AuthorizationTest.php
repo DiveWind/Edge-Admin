@@ -1,7 +1,6 @@
 <?php
 
 use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Models\Permission;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route as RouteDefinition;
@@ -39,12 +38,6 @@ const LOGIN_ONLY_ROUTES = [
  * Policy 的标准方法（§8.3）。
  */
 const POLICY_METHODS = ['viewAny', 'view', 'create', 'update', 'delete', 'restore', 'forceDelete', 'deleteAny', 'restoreAny', 'forceDeleteAny'];
-
-/**
- * 暂时还没有 Policy 的模型（临时豁免）：Permission 的 Policy 在 5.4（菜单管理）中加入。
- * TODO: 5.4 完成后移除；对应的 Policy 加入后本名单中的条目会让测试失败，提醒删除。
- */
-const MODELS_PENDING_POLICY = [Permission::class];
 
 /**
  * spatie 的判定 API（§8.1）。
@@ -105,12 +98,6 @@ test('每个模型都有 Policy，且标准方法齐全', function (): void {
 
     foreach ($models as $model) {
         $policy = Gate::getPolicyFor($model);
-
-        if (in_array($model, MODELS_PENDING_POLICY, true)) {
-            expect($policy)->toBeNull("{$model} 已有 Policy：请从 MODELS_PENDING_POLICY 中移除");
-
-            continue;
-        }
 
         expect($policy)->not->toBeNull("{$model} 缺少 Policy：执行 php artisan core:make-policy（设计文档 §8.3）");
 

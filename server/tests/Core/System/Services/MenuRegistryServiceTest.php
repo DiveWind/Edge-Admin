@@ -70,7 +70,8 @@ it('rejects invalid declarations', function (mixed $nodes, string $message): voi
         ->and($registry->all())->toBe([]);
 })->with([
     'not an array' => ['menus', '声明必须是节点数组'],
-    'upper-case name' => [[menuNode('Demo', 'catalog')], 'name 必须是小写点分的权限码'],
+    'upper-case name' => [[menuNode('Demo', 'catalog')], 'name 必须是小写点分、以字母开头的权限码'],
+    'name starting with a digit' => [[menuNode('2fa', 'catalog')], 'name 必须是小写点分、以字母开头的权限码'],
     'unknown key' => [[menuNode('demo', 'catalog', ['redirect' => '/x'])], '未知的键 redirect'],
     'unknown type' => [[menuNode('demo', 'page')], 'type 必须是'],
     'missing title' => [[menuNode('demo', 'catalog', ['meta' => []])], 'meta.title 必填'],
@@ -85,6 +86,8 @@ it('rejects invalid declarations', function (mixed $nodes, string $message): voi
     'catalog with component' => [[menuNode('demo', 'catalog', ['component' => '/demo'])], 'catalog 不能有 component'],
     'path without a slash' => [[menuNode('demo', 'catalog', ['path' => 'demo'])], 'path 必填，以 / 开头'],
     'button with path' => [[menuNode('demo', 'menu', ['children' => [menuNode('demo.save', 'button', ['path' => '/save'])]])], '按钮没有 path'],
+    'link meta on a menu' => [[menuNode('demo', 'menu', ['meta' => ['title' => 'x', 'link' => 'https://example.com']])], 'menu 不能有 meta.link'],
+    'route meta on a button' => [[menuNode('demo', 'menu', ['children' => [menuNode('demo.save', 'button', ['meta' => ['title' => 'x', 'hideInMenu' => true]])]])], 'button 不能有 meta.hideInMenu'],
     'embedded without iframeSrc' => [[menuNode('demo', 'embedded')], 'embedded 必须有 meta.iframeSrc'],
     'link without link' => [[menuNode('demo', 'link')], 'link 必须有 meta.link'],
     'duplicate name' => [[menuNode('demo', 'catalog'), menuNode('demo', 'catalog', ['path' => '/other'])], '权限码重复声明'],

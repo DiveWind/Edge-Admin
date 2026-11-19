@@ -13,10 +13,11 @@
   有效权限码 `PermissionRegistry` 与 `Gate::before`；
 - 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
 - 用户管理（设计文档 §6.5、§8.5、§8.6）：`Policies/UserPolicy` 与用户的 Action（下文“用户管理”）；
+- 菜单管理（设计文档 §6.5、§8.2、§8.6）：`Policies/PermissionPolicy`、节点的 Action 与 `Queries/PermissionTree`（下文“菜单管理”）；
 - 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）。
 
 不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）。
-菜单的管理（Policy、Action、接口）、字典、参数、附件等在后续接入。
+字典、参数、附件等在后续接入。
 
 ## 对外提供
 
@@ -30,7 +31,11 @@
 | `Actions/EnableUser` | 启用用户（由 `ChangeUserStatus` 调用） |
 | `Actions/RevokeUserSessions` | 删除用户的会话（database 驱动，按 `sessions.user_id`，可保留一个）与全部 token |
 | `Actions/SyncPermissions` | 把声明的节点同步到 `permissions` 表（`core:sync-permissions` 调用，规则见下文） |
+| `Commands/SyncPermissionsCommand` | `php artisan core:sync-permissions`：调用 `SyncPermissions` 并输出变更（在 `SystemServiceProvider` 中登记） |
 | `Contracts/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册菜单与权限节点（下文） |
+| `Data/MenuNodeData` | 已校验、已展开 `buttons` 的一个声明节点（`MenuRegistry::all()` 的元素）；`structuralMeta()` 为同步命令修正的 meta 键 |
+| `Models/Permission` | 菜单与权限节点；`isValidName()`（权限码格式，声明与写接口共用）、`META_KEYS`（meta 列白名单）、`LIFELINE_NAMES`（生命线节点） |
+| `Enums/PermissionType` | 5 种节点类型与按类型的规则：`canBeChildOf()` / `canContain()`（层级）、`isRoute()`（有 path）、`usesComponent()`、`requiredMetaKey()`、`allowsMetaKey()`、`routeComponent()`（`/menu/all` 的 component） |
 | `Services/PermissionRegistry` | 有效权限码与菜单树（`#[Scoped]`），`Gate::before`、`/auth/codes`、`/menu/all` 共用 |
 | `Enums/Status` | 通用的启用 / 停用状态，用户、角色、菜单节点共用 |
 | `Models/User::isSuperAdmin()` | 是否拥有启用的 `super-admin` 角色（`Role::SUPER_ADMIN`）；`enabledRoles()` 为启用的角色 |
@@ -43,6 +48,9 @@
 | `Actions/EnsureSuperAdminRemains` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用） |
 | `Policies/UserPolicy` | 用户的授权：标准方法 + `changeStatus`、`resetPassword`，记录级方法检查数据范围 |
 | `Contracts/DataScopeProvider`、`Services/DataScopeRegistry` | 扩展点：数据范围提供者与其登记（下文“数据权限”） |
+| `Actions/CreatePermission`、`UpdatePermission`、`DeletePermission` | 菜单节点的新增、修改、删除（规则见下文“菜单管理”） |
+| `Queries/PermissionTree` | 菜单管理用的整棵节点树（含停用节点与按钮，一次查询组装） |
+| `Policies/PermissionPolicy` | 菜单节点的授权：标准方法，删除内置节点 403 |
 | `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`）；`dataScopeOwnerColumns()` 声明“仅本人”的归属列 |
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
@@ -64,10 +72,10 @@ public function boot(MenuRegistry $menus): void
 ```
 
 格式与 Vben 的路由节点同构（`name`、`type`、`path`、`component`、`meta`、`children`），`buttons`（`键 => 标题`）展开为 `<父 name>.<键>` 的按钮节点。
-注册时校验结构，声明有误直接抛出 `InvalidArgumentException`：name 小写点分且全局唯一；type 合法且层级合法
+注册时校验结构，声明有误直接抛出 `InvalidArgumentException`：name 小写点分、以字母开头（`Permission::isValidName()`）且全局唯一；type 合法且层级合法
 （catalog / menu / embedded / link 在根或 catalog 下，button 在 menu 下）；路由节点的 path 以 `/` 开头且互不相同、按钮没有 path；
 menu 必须有 component、其他类型不能有；embedded 必须有 `meta.iframeSrc`、link 必须有 `meta.link`；meta 只能有 title、icon、order 与白名单键
-（`Permission::META_KEYS`）。标题是前端的 i18n key，后端不翻译。
+（`Permission::META_KEYS`），且要适用于该类型（`PermissionType::allowsMetaKey()`：按钮没有路由 meta，iframeSrc 只用于 embedded，link 只用于 link）。标题是前端的 i18n key，后端不翻译。
 
 ### 同步：`php artisan core:sync-permissions`
 
@@ -80,16 +88,45 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 4. 确保 `super-admin` 角色存在；
 5. 清除 spatie 的权限缓存。
 
+`path` 唯一：声明节点的 path 被不在声明中的节点占用时，命令列出冲突（哪个声明节点、哪个 path、被哪个节点占用）与处理建议，
+退出码 1，不写入任何数据（检查在写入前、整次同步在一个事务中）。声明之间互换 path 时先清空要变更的 path，不会撞上唯一索引。
+
 ### 判定：`PermissionRegistry` 与 `Gate::before`
 
 - 节点从 spatie 的 `PermissionRegistrar` 缓存读取，不额外查库；`#[Scoped]`，每个请求内复用计算结果，spatie 的缓存被清除后重新计算；
 - 生效节点：节点本身及全部祖先都启用（停用向子孙级联，超管也受约束）；
 - 有效权限码：普通用户要求节点本身及全部祖先都生效，且都授予了用户的**启用**角色；超管为全部生效节点；
-- `Gate::before`（`SystemServiceProvider`）：ability 是已登记的权限码 → 按有效权限码返回 true / false；其他 ability → null，交给 Policy
+- `Gate::before`（`SystemServiceProvider`）：无参数的调用且 ability 是已登记的权限码 → 按有效权限码返回 true / false；
+  带参数的调用（Policy：`can('update', $model)`）与其他 ability → null，交给 Policy（节点恰好叫 `update` 也不会绕过 Policy）
   （超管同样受 Policy 中记录级规则的约束）。spatie 自带的 Gate 检查已关闭（`config/permission.php`）；
 - `menuTreeFor()`：`/menu/all` 的节点树（不含按钮，没有可见子节点的目录剔除，同级按 sort、id 排序），输出格式由后台入口的 `MenuRouteResource` 负责。
 
 判定一律走 `can()` / Gate / Policy；spatie 的判定 API（`hasRole()`、`hasPermissionTo()` 等）与 `role:` / `permission:` 中间件被 PHPStan 与 `tests/Arch` 禁止。
+
+## 菜单管理
+
+接口见设计文档 §6.5（`/system/menus`），由后台入口的 `MenuController` 调用本模块的 Action 与 `Queries/PermissionTree`；
+按类型的字段校验（必填 / 不允许提交）在后台入口的 `MenuRequest` 中。403 / 422 按 §6.1 分工：
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 没有对应的权限码 | 403 | `PermissionPolicy` |
+| 删除内置节点（超管也一样） | 403 | `PermissionPolicy::delete()` |
+| 内置节点改 `name` / `type` / `path` / `component` / `meta.link` / `meta.iframeSrc` | 422（对应字段） | `UpdatePermission` |
+| 上级是自己或自己的子孙 | 422（`parent_id`） | `UpdatePermission` |
+| 类型层级不合法（新增；修改时移动了上级） | 422（`parent_id`） | `CreatePermission`、`UpdatePermission` |
+| 修改类型后不能挂在现在的上级下，或容纳不了现有的子节点 | 422（`type`） | `UpdatePermission` |
+| 停用 `system.menu`、`system.menu.update` 或它们（当前）的祖先 | 422（`status`） | `UpdatePermission` |
+| 把这两个节点（或其祖先）移到停用的节点下 | 422（`parent_id`） | `UpdatePermission` |
+| 删除有子节点的节点 | 422（只有 `message`） | `DeletePermission` |
+| 权限码、path 重复 | 422（`name` / `path`） | 表单校验；并发时 `CreatePermission::save()` 捕获唯一索引冲突 |
+
+- 新增的节点是自定义节点（`is_builtin = false`），guard 为 `web`；内置节点只能由同步命令新增，管理员可以调整它的 `title`、`icon`、`sort`、
+  `status`、`parent_id` 与其余 meta 键，再次同步不会覆盖；
+- 生命线只拦截本次修改造成的失效（修改前就已失效的不拦，以免挡住修复），祖先按修改后的上级计算：`system.menu` 被移到别的目录下后，
+  新目录不能停用，原来的 `system` 可以停用；
+- 删除节点时授权由 spatie 在 `deleting` 事件中解除，外键 `cascadeOnDelete` 兜底；
+- 写入后 spatie 自动清除权限缓存（`Permission` 的 saved / deleted 事件），`/menu/all`、`/auth/codes` 与 `Gate::before` 立即按新数据计算。
 
 ## 角色管理
 

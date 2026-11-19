@@ -75,15 +75,21 @@ class SystemServiceProvider extends ServiceProvider
     /**
      * 权限判定（设计文档 §8.1）：Gate::before 只处理权限码。
      *
-     * - ability 是已登记的权限码（permissions 表中有，不看格式）：在用户的有效权限码中为 true，否则为 false
-     *   （节点或其任一祖先停用时，超管也为 false）；
-     * - 其他 ability（Policy 方法名等）返回 null，交给 Policy：超管只对权限码直接放行，同样受 Policy 中记录级规则的约束。
+     * - 无参数的调用（`can('system.user.create')`、`#[Authorize('system.user')]`），且 ability 是已登记的权限码
+     *   （permissions 表中有，不看格式）：在用户的有效权限码中为 true，否则为 false（节点或其任一祖先停用时，超管也为 false）；
+     * - 带参数的调用（Policy：`can('update', $model)`、`can('create', User::class)`）一律返回 null，交给 Policy——
+     *   即使有节点恰好叫 `update`，也不会绕过 Policy 的记录级规则；
+     * - 其他 ability（未登记的名称）返回 null，交给 Policy：超管只对权限码直接放行，同样受 Policy 中记录级规则的约束。
      *
      * spatie 自带的 Gate 检查已关闭（config/permission.php 的 register_permission_check_method）。
      */
     protected function configureAuthorization(): void
     {
-        Gate::before(function (User $user, string $ability): ?bool {
+        Gate::before(function (User $user, string $ability, array $arguments): ?bool {
+            if ($arguments !== []) {
+                return null;
+            }
+
             $registry = resolve(PermissionRegistry::class);
 
             return $registry->isRegistered($ability) ? $registry->allows($user, $ability) : null;

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\{Cache, Schema};
  * spatie/laravel-permission 的表（发布后按本项目整理），设计文档 §8.2、§8.5：
  *
  * - permissions 即菜单树：spatie 原有的 name（权限码）、guard_name 之外，加节点的结构与显示字段；
+ *   path 唯一（按钮的 path 为 null，不参与唯一）；parent_id 不级联：有子节点的节点不能删除（§8.6）；
+ * - 删除节点或角色时，授权（role_has_permissions、model_has_permissions）由外键级联删除；
  * - roles：spatie 原有列之外加显示名、状态、数据范围、备注、排序；
  * - 不使用 spatie 的 teams 功能，表名与列名使用 config/permission.php 的默认值。
  */
@@ -35,6 +37,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['name', 'guard_name']);
+            $table->unique('path');
         });
 
         Schema::create('roles', function (Blueprint $table): void {
