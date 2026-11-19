@@ -111,5 +111,21 @@
     "Invalid two-factor code": "动态码或恢复码错误",
     "You cannot log out your current session. Sign out instead.": "不能强制下线自己当前的会话，请使用退出登录。",
     "You cannot revoke the token used by this request. Sign out instead.": "不能吊销本次请求使用的 token，请使用退出登录。",
-    "Password reset": "重置密码"
+    "Password reset": "重置密码",
+    "Code": "编码",
+    "Dictionary name": "字典名称",
+    "Value": "值",
+    "Label": "标签",
+    "Color": "颜色",
+    "String": "字符串",
+    "Text": "多行文本",
+    "Integer": "整数",
+    "Decimal": "数字",
+    "Boolean": "布尔",
+    "JSON": "JSON",
+    "Built-in dictionary types cannot be deleted.": "内置字典类型不能删除。",
+    "Built-in dictionary items cannot be deleted.": "内置字典项不能删除。",
+    "The code of a built-in dictionary type cannot be changed.": "内置字典类型的编码不能修改。",
+    "The value of a built-in dictionary item cannot be changed.": "内置字典项的值不能修改。",
+    "Unknown enum: :names.": "未登记的枚举：:names。"
 }

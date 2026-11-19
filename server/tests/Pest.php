@@ -1,8 +1,9 @@
 <?php
 
 use App\Core\System\Actions\SyncPermissions;
+use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\{PermissionRegistry, SettingRegistryService};
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -77,4 +78,44 @@ function superAdminActor(): User
     $role = Role::query()->where('name', Role::SUPER_ADMIN)->first() ?? Role::factory()->superAdmin()->create();
 
     return User::factory()->create()->assignRole($role);
+}
+
+/*
+|--------------------------------------------------------------------------
+| 系统参数（设计文档 §6.7）
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * 用给定的分组声明替换容器中的 SettingRegistry（之后解析的 Settings、接口的路由绑定都使用它）。
+ *
+ * @param  array<string, mixed>  $groups
+ */
+function declareSettings(array $groups): SettingRegistryService
+{
+    $registry = new SettingRegistryService;
+    $registry->register($groups);
+    app()->instance(SettingRegistry::class, $registry);
+
+    return $registry;
+}
+
+/**
+ * 测试用的分组 demo：每种类型一个参数，另有一个默认值来自 config 的、一个公开的。
+ *
+ * @return array<string, mixed>
+ */
+function demoSettings(): array
+{
+    return ['demo' => [
+        'title' => 'demo.title',
+        'settings' => [
+            'name' => ['type' => 'string', 'name' => 'demo.name', 'default' => 'Demo', 'public' => true],
+            'notice' => ['type' => 'text', 'name' => 'demo.notice', 'default' => ''],
+            'limit' => ['type' => 'int', 'name' => 'demo.limit', 'config' => 'core.auth.login_rate_limit', 'rules' => ['min:1', 'max:100']],
+            'ratio' => ['type' => 'float', 'name' => 'demo.ratio', 'default' => 0.5],
+            'enabled' => ['type' => 'bool', 'name' => 'demo.enabled', 'default' => false],
+            'options' => ['type' => 'json', 'name' => 'demo.options', 'default' => ['a' => 1]],
+        ],
+    ]];
 }

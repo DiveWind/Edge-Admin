@@ -2,6 +2,8 @@
 
 namespace App\Http\Admin;
 
+use App\Core\System\Contracts\SettingRegistry;
+use App\Core\System\Data\{SettingData, SettingGroupData};
 use App\Http\Admin\Middleware\{ForceJson, FormatResponse, RecordOperationLog};
 use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenResponse};
 use App\Http\Middleware\EnsureUserIsEnabled;
@@ -16,6 +18,7 @@ use Laravel\Fortify\Contracts\{FailedPasswordResetLinkRequestResponse, FailedPas
 use Laravel\Fortify\Fortify;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use LogicException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 /**
@@ -137,6 +140,8 @@ class AdminServiceProvider extends ServiceProvider
      */
     protected function configureRoutes(): void
     {
+        $this->configureRouteBindings();
+
         if ($this->app->routesAreCached()) {
             return;
         }
@@ -145,6 +150,16 @@ class AdminServiceProvider extends ServiceProvider
             ->prefix(self::prefix())
             ->name(self::NAME.'.')
             ->group(__DIR__.'/routes.php');
+    }
+
+    /**
+     * 不是模型的路由参数（官方的显式绑定，路由缓存时同样生效）：系统参数的键 {setting} 与分组 {setting_group}
+     * 解析为 SettingRegistry 中的声明，未声明的为 404（设计文档 §6.7）。
+     */
+    protected function configureRouteBindings(): void
+    {
+        Route::bind('setting', fn (string $key): SettingData => resolve(SettingRegistry::class)->get($key) ?? throw new NotFoundHttpException);
+        Route::bind('setting_group', fn (string $key): SettingGroupData => resolve(SettingRegistry::class)->group($key) ?? throw new NotFoundHttpException);
     }
 
     /**

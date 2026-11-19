@@ -29,6 +29,8 @@ require_once __DIR__.'/helpers.php';
 const LOGIN_ONLY_ROUTES = [
     // 后台入口：当前用户自己的信息、权限码与菜单（§6.2）
     'admin.user.info', 'admin.auth.codes', 'admin.menu.all',
+    // 后台入口：表单下拉的字典与枚举选项（§6.7）
+    'admin.options.dicts', 'admin.options.enums',
     // Fortify：登出、确认密码、修改自己的资料与密码、两步验证（§7.2）
     'logout', 'password.confirmation', 'password.confirm.store',
     'user-profile-information.update', 'user-password.update', 'two-factor.*',

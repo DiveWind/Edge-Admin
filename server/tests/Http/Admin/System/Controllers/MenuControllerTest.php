@@ -85,7 +85,7 @@ describe('index', function (): void {
             ->getJson('/api/admin/system/menus')
             ->assertOk()
             ->assertJsonPath('data.*.name', ['demo', 'other', 'system', 'monitor'])
-            ->assertJsonPath('data.2.children.*.name', ['system.user', 'system.role', 'system.menu'])
+            ->assertJsonPath('data.2.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting'])
             ->assertJsonPath('data.2.children.0.status', 'disabled')
             ->assertJsonPath('data.2.children.0.children.*.name', [
                 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password',
@@ -339,7 +339,7 @@ describe('store', function (): void {
             ->assertCreated();
 
         $this->actingAs($actor)->getJson('/api/admin/auth/codes')->assertJsonFragment(['demo']);
-        $this->actingAs($actor)->getJson('/api/admin/menu/all')->assertJsonPath('data.0.children.*.name', ['demo', 'system.user', 'system.role', 'system.menu']);
+        $this->actingAs($actor)->getJson('/api/admin/menu/all')->assertJsonPath('data.0.children.*.name', ['demo', 'system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting']);
     });
 });
 

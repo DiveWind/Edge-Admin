@@ -86,8 +86,8 @@ return [
     | 后台使用 Sanctum SPA 模式（会话 Cookie）+ Fortify 登录流程；Fortify 的路由挂在后台入口下（config/fortify.php），
     | 限流器、找回密码链接等在 App\Core\System\SystemServiceProvider 中配置。
     |
-    | - login_rate_limit：同一“用户名 + IP”每分钟最多登录几次，两步验证（同一待验证用户）同样按此次数；
-    |   以后改由后台的系统参数控制（设计文档 §7.2）；
+    | - login_rate_limit：系统参数 `auth.login_rate_limit` 的默认值（同一“用户名 + IP”每分钟最多登录几次，两步验证同样按此次数）。
+    |   限流次数由后台的系统参数控制（设计文档 §7.2、§6.7）：管理员没有改过时使用这里的值，改过后以系统参数为准；
     | - frontend_url、reset_password_path：找回密码邮件中的重置链接指向前端页面
     |   `<frontend_url><reset_password_path>?token=…&email=…`（Vben 默认 hash 路由，故路径以 /#/ 开头）。
     |

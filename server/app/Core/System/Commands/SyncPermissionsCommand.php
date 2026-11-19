@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 
 /**
  * core:sync-permissions：把各模块在 MenuRegistry 中声明的菜单与权限节点同步到 permissions 表（设计文档 §8.2）。
- * 由 DatabaseSeeder 调用，部署时在 `php artisan optimize` 之后执行（§11.4）。规则见 SyncPermissions。
+ * 由 core:sync 依次调用（DatabaseSeeder 与部署时在 `php artisan optimize` 之后执行，§11.4），也可单独执行。规则见 SyncPermissions。
  * 声明节点的 path 被已有的其他节点占用时，列出冲突并以退出码 1 结束，不写入任何数据。
  */
 #[Signature('core:sync-permissions')]

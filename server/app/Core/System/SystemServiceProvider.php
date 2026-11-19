@@ -3,10 +3,11 @@
 namespace App\Core\System;
 
 use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPassword, UpdateUserProfileInformation};
-use App\Core\System\Commands\SyncPermissionsCommand;
-use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Models\{Permission, Role, User};
-use App\Core\System\Services\{AllDataScope, DataScopeRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope};
+use App\Core\System\Commands\{SyncCommand, SyncDictsCommand, SyncPermissionsCommand, SyncSettingsCommand};
+use App\Core\System\Contracts\{DictRegistry, MenuRegistry, SettingRegistry};
+use App\Core\System\Enums\{PermissionType, SettingType, Status};
+use App\Core\System\Models\{DictItem, DictType, Permission, Role, Setting, User};
+use App\Core\System\Services\{AllDataScope, DataScopeRegistry, DictRegistryService, EnumRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope, SettingRegistryService, Settings};
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -30,16 +31,21 @@ use Laravel\Fortify\Fortify;
  * 基于 PermissionRegistry 的 Gate::before。
  *
  * 数据权限（设计文档 §8.4）：DataScopeRegistry 扩展点，本模块注册默认的 `all`、`self` 两个范围。
+ *
+ * 字典、系统参数与枚举选项（设计文档 §6.7）：DictRegistry、SettingRegistry 扩展点（本模块的参数分组见 resources/settings.php）、
+ * 同步命令 core:sync-dicts、core:sync-settings，以及 EnumRegistry 中本模块的枚举。
  */
 class SystemServiceProvider extends ServiceProvider
 {
     /**
-     * 单例：只保存启动时注册的静态声明（菜单与权限节点），不保存请求数据。
+     * 单例：只保存启动时注册的静态声明（菜单与权限节点、字典类型、系统参数分组），不保存请求数据。
      *
      * @var array<class-string, class-string>
      */
     public array $singletons = [
         MenuRegistry::class => MenuRegistryService::class,
+        DictRegistry::class => DictRegistryService::class,
+        SettingRegistry::class => SettingRegistryService::class,
     ];
 
     /**
@@ -53,18 +59,27 @@ class SystemServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(MenuRegistry $menus, DataScopeRegistry $scopes): void
+    public function boot(MenuRegistry $menus, DataScopeRegistry $scopes, SettingRegistry $settings, EnumRegistry $enums): void
     {
         Relation::morphMap([
             'permission' => Permission::class,
             'role' => Role::class,
+            'dict_type' => DictType::class,
+            'dict_item' => DictItem::class,
+            'setting' => Setting::class,
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
         $scopes->register(new AllDataScope, new SelfDataScope);
+        $settings->register(require __DIR__.'/resources/settings.php');
+        $enums->register([
+            'status' => Status::class,
+            'permission_type' => PermissionType::class,
+            'setting_type' => SettingType::class,
+        ]);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncPermissionsCommand::class]);
+            $this->commands([SyncCommand::class, SyncPermissionsCommand::class, SyncDictsCommand::class, SyncSettingsCommand::class]);
         }
 
         $this->configureAuthorization();
@@ -113,14 +128,15 @@ class SystemServiceProvider extends ServiceProvider
     }
 
     /**
-     * 限流器（config/fortify.php 的 limiters），每分钟次数见 config('core.auth.login_rate_limit')：
+     * 限流器（config/fortify.php 的 limiters），每分钟次数为系统参数 `auth.login_rate_limit`（设计文档 §7.2；
+     * 默认值来自 config('core.auth.login_rate_limit')，每次请求时读取，后台修改后立即生效）：
      * - login：按“用户名 + IP”计数，超出时返回 429，提示还需等待的秒数（同时挂在 username 上），并派发框架标准的 Lockout 事件
      *   （Fortify 使用命名限流器时不派发它；Monitor 的登录日志据此记录，设计文档 §7.3）；
      * - two-factor：按待验证的用户（登录后会话中的 login.id）计数。
      */
     protected function configureRateLimiting(): void
     {
-        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(config()->integer('core.auth.login_rate_limit'))
+        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(self::loginRateLimit())
             ->by(Str::transliterate(Str::lower($request->string(Fortify::username())->toString()).'|'.$request->ip()))
             ->response(function (Request $request, array $headers): JsonResponse {
                 event(new Lockout($request));
@@ -134,9 +150,17 @@ class SystemServiceProvider extends ServiceProvider
         RateLimiter::for('two-factor', function (Request $request): Limit {
             $pending = $request->hasSession() ? $request->session()->get('login.id') : null;
 
-            return Limit::perMinute(config()->integer('core.auth.login_rate_limit'))
+            return Limit::perMinute(self::loginRateLimit())
                 ->by('two-factor|'.(is_scalar($pending) ? $pending : $request->ip()));
         });
+    }
+
+    /**
+     * 登录与两步验证每分钟的次数（系统参数 auth.login_rate_limit）。
+     */
+    protected static function loginRateLimit(): int
+    {
+        return resolve(Settings::class)->integer('auth.login_rate_limit');
     }
 
     /**

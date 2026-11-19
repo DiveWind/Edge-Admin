@@ -27,7 +27,7 @@ it('is available with the role create or update code', function (string $code): 
         ->getJson('/api/admin/system/roles/permission-tree')
         ->assertOk()
         ->assertJsonPath('data.0.name', 'system')
-        ->assertJsonPath('data.0.children.*.name', ['system.user', 'system.role', 'system.menu'])
+        ->assertJsonPath('data.0.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting'])
         ->assertJsonPath('data.0.children.1.children.*.name', ['system.role.create', 'system.role.update', 'system.role.delete', 'system.role.status']);
 })->with(['system.role.create', 'system.role.update']);
 

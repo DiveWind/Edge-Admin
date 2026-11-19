@@ -213,6 +213,8 @@ it('syncs the nodes declared by the Core modules', function (): void {
         'system.user', 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password',
         'system.role', 'system.role.create', 'system.role.update', 'system.role.delete', 'system.role.status',
         'system.menu', 'system.menu.create', 'system.menu.update', 'system.menu.delete',
+        'system.dict', 'system.dict.create', 'system.dict.update', 'system.dict.delete',
+        'system.setting', 'system.setting.update',
         'monitor', 'monitor.online', 'monitor.online.logout', 'monitor.operation-log', 'monitor.login-log',
         'monitor.schedule', 'monitor.schedule.run', 'monitor.failed-job', 'monitor.failed-job.retry', 'monitor.failed-job.delete',
         'monitor.health', 'monitor.health.check',

@@ -148,8 +148,10 @@ app/Modules/Content/
 ├── resources/
 │   ├── lang/          模块自己的语言包（命名空间 content::）
 │   ├── views/         邮件、PDF、导出模板（不对外访问）
-│   └── menus.php      本模块的菜单与权限节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
-│                      `$menus->register(require __DIR__.'/resources/menus.php')`，由 core:sync-permissions 写入数据库
+│   ├── menus.php      本模块的菜单与权限节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
+│   │                  `$menus->register(require __DIR__.'/resources/menus.php')`，由 core:sync-permissions 写入数据库
+│   ├── dicts.php      本模块用到的字典类型与初始字典项（§6.7），注册到 DictRegistry，由 core:sync-dicts 写入
+│   └── settings.php   本模块的系统参数分组（§6.7），注册到 SettingRegistry，由 core:sync-settings 写入
 ├── README.md          模块说明：职责、对外提供什么、依赖了 Core 的哪些能力
 └── ContentServiceProvider.php    注册本模块的命令、监听、语言包、视图，并通过扩展点接入 Core（§5.5）
 ```
@@ -239,12 +241,12 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 |---|---|
 | 菜单与权限节点 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\MenuRegistry` 注册本模块的目录、菜单、按钮节点；由同步命令 `core:sync-permissions` 统一写入（§8.2） |
 | 数据权限范围提供者 | 实现 `App\Core\System\Contracts\DataScopeProvider` 并注册到 `DataScopeRegistry`（如按部门、区域），角色表单中自动出现（§8.4） |
-| 系统参数分组 | 注册本模块的参数分组与默认值 |
-| 字典类型 | 声明本模块用到的字典类型与初始字典项 |
+| 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`（如 `device.heartbeat_interval`） |
+| 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
 | 日志 | 数据变更审计写入 activitylog 时使用本模块的日志名（模块名小写，如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
 | 通知 | 定义本模块的通知类，统一出现在通知中心 |
 | 异步导出 | 实现导出接口，即接入统一的异步导出、完成通知与下载 |
-| 枚举选项 | 枚举实现统一接口，即可由选项接口下发给前端 |
+| 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在 Provider 的 `boot()` 中向 `App\Core\System\Services\EnumRegistry` 登记对外名称（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
 | Core 事件 | 监听 Core 发出的事件（如用户被删除），清理本模块的数据 |
 
 ### 5.6 强制手段
@@ -303,8 +305,8 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、唯一性冲突。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
@@ -608,6 +610,142 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - **不按数据范围过滤**：定时任务、失败任务、健康状态与系统信息属于系统本身，不属于、也不“关于”某个用户（没有 `created_by`、causer 或所属用户可以委托，§8.4），能否访问只由权限码决定。失败任务的 payload 与异常可能含任意用户的数据，只授予可信的运维角色。
 - **限流**：立即执行、重试（单条与全部）、立即检查在 admin 入口的总限流之外，另经过 `admin-ops` 限流器：每个用户每分钟 `config('core.apps.admin.ops_rate_limit')`（`CORE_ADMIN_OPS_RATE_LIMIT`，默认 10）次，超过返回 429。
 
+### 6.7 字典、参数与选项接口
+
+前缀与 §6.5 相同；内核模块 `app/Core/System`，接口在 `app/Http/Admin/System`。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `GET /options/dicts?types=a,b` | 字典选项：`{ 类型: [{ value, label, color }] }`（下文“选项下发”） | 登录即可 |
+| `GET /options/enums?names=a,b` | 枚举选项：`{ 名称: [{ value, label }] }`（下文“枚举选项”） | 登录即可 |
+| `GET /settings/public` | 公开参数：`{ 键: 值 }`（下文“公开参数”） | **无需登录** |
+| `GET /system/dict-types` | 字典类型分页；筛选 `code`、`name`（模糊）、`status`（精确） | `system.dict` |
+| `GET /system/dict-types/{dict_type}` | 详情 | `system.dict` |
+| `POST /system/dict-types` | 新增：`code`、`name`、`status`、`remark` | `system.dict.create` |
+| `PUT /system/dict-types/{dict_type}` | 修改：字段同新增 | `system.dict.update` |
+| `DELETE /system/dict-types/{dict_type}` | 删除，连同其下的字典项 | `system.dict.delete` |
+| `GET /system/dict-types/{dict_type}/items` | 该类型的字典项分页；筛选 `value`、`label`（模糊）、`status`（精确） | `system.dict` |
+| `POST /system/dict-types/{dict_type}/items` | 新增字典项：`value`、`label`、`color`、`sort`、`status` | `system.dict.create` |
+| `PUT /system/dict-items/{dict_item}` | 修改字典项：字段同新增 | `system.dict.update` |
+| `DELETE /system/dict-items/{dict_item}` | 删除字典项 | `system.dict.delete` |
+| `GET /system/settings` | 全部已声明的参数，按分组（数组，**不分页**，§6.3 的例外） | `system.setting` |
+| `PUT /system/settings/{key}` | 修改单个参数：`{ value }` | `system.setting.update` |
+| `PUT /system/setting-groups/{group}` | 按分组批量修改：`{ <参数名>: 值, … }` | `system.setting.update` |
+
+**菜单节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.dict`（`/system/dict`，组件 `/system/dict/list`，`lucide:book-open-text`，`order` 40；按钮 `create`、`update`、`delete`，字典类型与字典项共用）、`system.setting`（`/system/setting`，组件 `/system/setting/index`，`lucide:sliders-horizontal`，`order` 50；按钮 `update`——参数不能新增、删除，没有对应按钮）。字典页是“类型列表 + 选中类型的字典项”，参数页是按分组的表单（与 `monitor.health` 一样用 `index`）。
+
+**字典与枚举的分工**：代码要按值分支的固定集合（状态、类型、事件）用**枚举**（§10.1），值随代码发布、不能在后台改；管理员可以增删改、代码只校验“是否合法”的值列表（文章来源、客户行业）用**字典**。
+
+**字典**
+
+- 表：`dict_types`（`code` 唯一、`name`、`status`、`remark`、`is_builtin`）与 `dict_items`（`dict_type_id`、`value`、`label`、`color`、`sort`、`status`、`is_builtin`；同一类型内 `value` 唯一，数据库唯一索引兜底并发）。模型 `DictType`、`DictItem`（多态别名 `dict_type`、`dict_item`）。
+- 格式：`code` 为小写点分的标识（`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`，最长 64，如 `content.article_source`）；`value` 为字符串（最长 64，接口中一律输出字符串）；`name`、`label` 与菜单的 `meta.title` 相同，存前端的 i18n key 或纯文本，**后端不翻译**（§6.2）；`color` 可空，给前端 Tag 用：antd 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等，小写字母与 `-`）或 `#RGB` / `#RRGGBB`；`sort` 为非负整数（默认 0）；`status` 为 `Status`（§6.4，默认 `enabled`）。
+- 输出：类型 `id`、`code`、`name`、`status`、`remark`、`is_builtin`、`created_at`、`updated_at`；字典项 `id`、`dict_type_id`、`value`、`label`、`color`、`sort`、`status`、`is_builtin`、`created_at`、`updated_at`。
+- 列表：类型筛选 `code`、`name`（模糊）、`status`（精确），排序 `id`、`code`、`created_at`，默认 `id`；字典项筛选 `value`、`label`（模糊）、`status`（精确），排序 `sort`、`id`、`value`，默认 `sort,id`。
+- 写入：`code`、`name` / `value`、`label` 必填，其余可选（新增时取默认值，修改时未提交表示不变；`remark`、`color` 可提交 null 清空）。新增成功返回 201，`is_builtin` 为 false。字典项所属的类型由路径决定，不能修改。
+- 内置（模块声明的，下文“声明与同步”）：内置类型**不能删除**（403）、`code` 不能修改（422，`code`）；内置字典项**不能删除**（403）、`value` 不能修改（422，`value`）。名称、备注、`label`、`color`、`sort`、`status` 都可以修改，再次同步不覆盖。代码依赖的只有类型的 `code` 与字典项的 `value`（`InDict`、业务判断），所以只保护它们。
+- **删除类型时级联删除其下的字典项**（Action 先删字典项，外键 `cascadeOnDelete` 兜底），不做“有字典项不能删”：字典项完全从属于类型，没有类型就没有意义，逐条删除只增加操作；而内置字典项只会出现在内置类型下（同步只在声明的类型下收编、新增内置项，类型转为自定义时其内置项一并转为自定义），级联不会绕过“内置项不能删”。前端删除前提示会一并删除字典项。
+- 没有单独的启用 / 停用接口：`status` 在修改接口中提交。
+- Policy：`DictTypePolicy`、`DictItemPolicy`：`viewAny` / `view`（`system.dict`）、`create`、`update`、`delete`（内置的 403，超管也一样），其余方法拒绝；不按数据范围过滤（字典属于系统本身，§8.4）。
+
+**选项下发**（`GET /options/dicts?types=a,b`）
+
+- `types` 必填，逗号分隔的类型编码（最多 50 个，格式同 `code`，重复的去掉），否则 422（`types`）。响应是以请求的类型为键的对象，按请求顺序；每个类型的值是 `[{ value, label, color }]`：只含**启用类型下的启用项**，按 `sort`、`id` 排序，`color` 没有设置时为 null。不存在或已停用的类型返回 `[]`，不报错：类型是后台可删改的数据，页面不应因此报错。
+- **登录即可访问**（`LOGIN_ONLY_ROUTES`），不需要权限码：字典是各模块表单共用的参考数据（不是业务数据），按权限码控制就要给每个用到下拉的角色都授权字典，授权会失控。默认拒绝仍然成立：未登录 401（停用账号 401）；只输出启用项的 `value`、`label`、`color`，不输出 `remark`、`is_builtin`、停用项等管理字段；**敏感的值列表不要做成字典**——放在模块自己的表中，由模块的接口按权限码与数据范围下发（§8.4）。
+- 缓存：Service `Dictionary` 把全部启用类型的启用项整体缓存（`Cache::rememberForever('core:dicts')`，经 `Cache::memo()` 读取，同一请求内只访问一次缓存存储）；字典类型、字典项的任何写入（模型的 saved / deleted，**事务提交后**）与同步命令都清除缓存，下一次读取重新加载。`Dictionary` 不保存任何状态（每次调用 `Cache::memo()`，它是 scoped 绑定），常驻内存安全。
+- 校验：`App\Core\System\Rules\InDict`——`'source' => ['required', new InDict('content.article_source')]`：值必须是该类型（启用）下启用项的 `value`（接受字符串或整数，按字符串比较），否则为 `validation.in` 的错误；类型不存在或已停用时一律不通过。读的是同一份缓存。
+
+**系统参数**
+
+- 用途：简单的、后台可调的业务开关与参数（§5.8）。**部署级的配置留在 config 与环境变量**（入口与前缀、API 限流阈值、分页上限、前端地址、脱敏键名、日志保留天数等），改动需重新部署；只有“运行时由管理员调整”的才进系统参数。
+- 声明（`resources/settings.php`，注册到 `SettingRegistry`，单例，只保存启动时注册的静态声明）：
+
+  ```php
+  return [
+      'auth' => [                                     // 分组：小写标识，一个分组只属于一个模块
+          'title' => 'system.setting.auth.title',     // i18n key 或纯文本，后端不翻译
+          'order' => 20,                              // 分组的顺序
+          'settings' => [
+              'login_rate_limit' => [                 // 键为 auth.login_rate_limit
+                  'type' => 'int',                    // SettingType：string、text、int、float、bool、json
+                  'name' => 'system.setting.auth.loginRateLimit',
+                  'remark' => 'system.setting.auth.loginRateLimitRemark',   // 可选
+                  'config' => 'core.auth.login_rate_limit',  // 默认值来源：config 键；或用 'default' => 值，二者选一
+                  'public' => false,                  // 是否出现在公开参数接口中，默认 false
+                  'rules' => ['min:1', 'max:1000'],   // 额外校验规则，可选
+              ],
+              'default_level' => [
+                  'type' => 'string',
+                  'name' => 'system.setting.auth.defaultLevel',
+                  'default' => 'basic',
+                  'dict' => 'customer_level',         // 引用字典（只用于 string、int）：值必须是该字典的启用项
+              ],
+          ],
+      ],
+  ];
+  ```
+
+  注册时校验，声明有误抛出 `InvalidArgumentException`：分组与参数名为小写标识（`^[a-z][a-z0-9_]*$`），键 `<分组>.<参数名>` 不超过 128 个字符；分组不能重复注册；`type` 合法；`default` 与 `config` 恰好一个，`default` 的类型与 `type` 一致；`dict` 为字典类型的编码，且 `type` 是 `string` 或 `int`。
+- **引用字典**（`dict`）：值的可选范围由字典决定——校验自动追加 `new InDict('<code>')`（只接受启用项的 `value`，`int` 按字符串比较），管理接口输出 `dict`，前端据此调用 `/options/dicts` 渲染下拉。引用的字典类型在库中不存在（或已停用）时任何非 null 的值都校验失败，这是预期行为（null 仍可恢复默认值）；默认值不检查是否在字典中。不另设静态的可选值列表，可选值一律用字典表达。
+- 类型（`SettingType`）：`string`（单行，最长 255）、`text`（多行，最长 65535）、`int`、`float`、`bool`、`json`（数组或对象）。决定接口的校验规则与读取时的类型；声明的 `rules` 追加在类型规则之后。
+- 表 `settings`：`key`（唯一）、`group`、`type`、`name`、`remark`、`value`（JSON 编码，可空）、`is_public`、`is_builtin`。**`value` 为 null 表示管理员没有改过**，读取时使用声明的默认值；改过才存值。因此“管理员改过的值”与“默认值”始终可区分：同步不写 `value`，默认值（含 config 中的环境变量）的变化对没改过的参数立即生效。
+- 读取（给代码用）：注入或 `resolve()` 服务 `App\Core\System\Services\Settings`，**不提供全局 helper 与 facade**：`get($key)`，以及按声明类型返回的 `string()`、`integer()`、`float()`、`boolean()`、`array()`（声明类型不符时抛出 `LogicException`）。读取未声明的键抛出 `InvalidArgumentException`（参数必须先声明）。值的来源：库中的值（类型与声明一致时）→ 否则声明的默认值（`default`，或读取 `config`）。整张表的值整体缓存（`Cache::rememberForever('core:settings')`，经 `Cache::memo()`），写入（事务提交后）与同步命令清除缓存。服务不保存状态，常驻内存安全。
+- 管理接口：
+  - `GET /system/settings`：`[{ group, title, settings: [...] }]`，分组按 `order`、注册顺序，参数按声明顺序；参数输出 `key`、`name`、`remark`、`type`、`value`（当前生效的值）、`default`（声明的默认值）、`is_customized`（库中有管理员改过的值）、`is_public`、`dict`（引用的字典类型，没有时为 null）。只列出已声明的参数。
+  - `PUT /system/settings/{key}`：`{ value }`（必须提交，可为 null）；`PUT /system/setting-groups/{group}`：请求体的键是该分组的参数名（不带分组前缀，校验错误挂在参数名上，前端表单字段名 = 参数名），只修改提交的参数，未声明的键 → 422。**`value` 为 null 表示恢复默认值**（空字符串经框架的 `ConvertEmptyStringsToNull` 同样视为 null，因此字符串参数不能存空字符串，除非默认值就是空字符串）。按类型校验（`int` 为整数，`bool` 接受 `true` / `false` / `0` / `1`，`json` 为数组或对象）并追加声明的 `rules`（引用字典时再加 `InDict`），不通过 → 422（单个挂在 `value`，分组挂在参数名）；保存前按类型转换（`"10"` → `10`，`"1"` → `true`）。未声明的键或分组 → 404。响应为修改后的参数 / 分组（格式同列表）。
+  - **只能修改已声明的参数，接口不能新增、删除参数**：参数是给代码读的，代码不读的参数没有意义；需要新参数就在模块中声明（随代码发布，类型、默认值、校验一起评审）。需要后台自由增减的键值，用字典或模块自己的表。
+  - Policy：`SettingPolicy`：`viewAny` / `view`（`system.setting`）、`update`（`system.setting.update`），`create`、`delete` 等一律拒绝。
+- 声明与同步见下文。
+
+**公开参数**（`GET /settings/public`）
+
+- **不需要登录**（在 `auth:sanctum` 分组之外）：前端在登录前读取站点名称、登录页文案等。响应 `{ 键: 值 }`，只含**声明为 `public` 的参数**（以代码中的声明为准，不读库中的 `is_public`，库中的标记改了也不会泄露）；没有公开参数时为 `[]`（§6.6 的数组解码说明）。
+- 限流：admin 入口的总限流（未登录按 IP，`core.apps.admin.rate_limit`）；数据来自缓存，开销很小，不另设限流器。
+- 缓存头：使用框架默认的 `Cache-Control: no-cache, private`：管理员修改后立即生效，且响应可能带会话 Cookie（不能被共享缓存）；服务端已有缓存，重复请求不查库。
+- System 声明的公开参数：`site.name`（站点名称，默认 `config('app.name')`）、`site.login_notice`（登录页提示文案，`text`，默认空字符串）。
+
+**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config。
+
+**枚举选项**（`GET /options/enums?names=a,b`）
+
+- `names` 必填，逗号分隔的对外名称；响应是以名称为键的对象，按请求顺序，每个枚举的值是 `[{ value, label, color? }]`（按 `cases()` 顺序），`label` 是 `HasLabel::label()`，**按 `Accept-Language` 翻译**（与提示文案相同，§6.1）；枚举另外实现了 `HasColor` 时每个选项有 `color`（规则同字典项的 `color`），没有实现时不输出该键。
+- **显式白名单**：只下发在 `EnumRegistry` 中登记过对外名称的枚举，名称不在登记中 → 422（`names`），不按类名反射。登记时校验：名称为小写点分标识、不重复，类是实现 `HasLabel` 的 backed enum；实现了 `HasColor` 的，每个 case 的颜色都合法。模块在 Provider 的 `boot()` 中登记：`$enums->register(['content.article_status' => ArticleStatus::class])`。
+- 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）。
+- **登录即可访问**：枚举是代码中的固定集合，不是业务数据；不开放给未登录请求（登录页不需要），默认拒绝。不缓存（直接由代码计算）。
+
+**声明与同步**
+
+字典与参数的声明与菜单节点同构：Core 提供接口（`Contracts/DictRegistry`、`Contracts/SettingRegistry`）与 `Services` 中的单例实现，只保存启动时注册的静态声明；各模块在 Provider 的 `boot()` 中 `register(require __DIR__.'/resources/dicts.php')`（`settings.php` 同理）；同步命令由 `core:sync` 依次执行（`DatabaseSeeder` 调用，部署时也执行，§11.4）。都幂等（再次执行没有变更），在一个事务中，结束时清除缓存，在命令输出中列出每一类变更。
+
+```php
+// resources/dicts.php
+return [
+    [
+        'code' => 'content.article_source',
+        'name' => 'content.dict.articleSource',       // i18n key 或纯文本
+        'remark' => null,                             // 可选
+        'items' => [
+            ['value' => 'original', 'label' => 'content.dict.articleSource.original', 'color' => 'success'],
+            ['value' => 'reprint', 'label' => 'content.dict.articleSource.reprint'],   // color、sort 可选；sort 默认为声明中的序号
+        ],
+    ],
+];
+```
+
+`php artisan core:sync-dicts`：
+
+1. 声明中有、库中没有的类型：新增并标记 `is_builtin`（启用），连同声明的字典项（内置、启用）；库中已有同 `code` 的自定义类型时收编（标记 `is_builtin`）。
+2. 已有类型下：声明中有、库中没有的字典项新增为内置项；同 `value` 的自定义项收编。**结构性字段只有标识**（类型的 `code`、字典项的 `value` 与所属类型），已有的类型与字典项的名称、备注、`label`、`color`、`sort`、`status` 以库为准，管理员的调整不被覆盖。
+3. 从声明中移除的内置字典项、内置类型（连同其全部内置项）：取消 `is_builtin`，转为自定义，**不删除**。
+
+`php artisan core:sync-settings`：
+
+1. 声明中有、库中没有的参数：新增（`is_builtin`，`value` 为 null，即使用默认值）。
+2. 已有参数修正结构性字段：`type`、`group`、`name`、`remark`、`is_public`（都由声明决定，接口不能修改），未标记的收编为内置；`value` 不动。声明修改了类型、库中的值已不符合新类型时，把 `value` 置为 null（恢复默认值）并在输出中列出。
+3. 从声明中移除的参数：取消 `is_builtin` 并取消 `is_public`，保留 `value`，**不删除**；它们不再出现在列表与公开接口中，代码也读不到（未声明），重新声明时收编并沿用原来的值。这样留在库中的废弃参数无害，不提供清理命令（需要时用迁移删除）。
+
+`php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即以它的非 0 退出码结束，后面的不再执行；`DatabaseSeeder` 与部署流程（§11.4）都用它，三个单独的命令保留。它**不包含** `schedule-monitor:sync`：那是 Monitor 所用的包的命令（System 不依赖 Monitor），同步的是调度定义而不是模块的声明，并且会删除调度中已不存在的任务，在部署流程中单独执行。
+
 ## 7. 认证
 
 ### 7.1 方案
@@ -626,7 +764,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 | 功能 | 说明 |
 |---|---|
-| 登录、登出、登录限流 | 登录字段配置为 `username`；在 `Fortify::authenticateUsing()` 中拒绝已禁用账号；限流次数由系统参数控制 |
+| 登录、登出、登录限流 | 登录字段配置为 `username`；在 `Fortify::authenticateUsing()` 中拒绝已禁用账号；限流次数由系统参数控制：`auth.login_rate_limit`（同一“用户名 + IP”每分钟的登录次数，两步验证按同一次数；默认值来自 `config('core.auth.login_rate_limit')`，环境变量 `CORE_LOGIN_RATE_LIMIT`，§6.7），限流器每次请求时读取，后台修改后立即生效 |
 | 两步验证 | TOTP 动态码 + 恢复码，开启后需确认才生效 |
 | 找回密码、重置密码 | 邮件链接重置 |
 | 邮箱验证 | 按需开启 |
@@ -756,7 +894,7 @@ return [
 ];
 ```
 
-**同步命令** `php artisan core:sync-permissions`：由 `DatabaseSeeder` 调用，部署时也执行（§11.4）。
+**同步命令** `php artisan core:sync-permissions`：由 `core:sync` 调用（`DatabaseSeeder` 与部署时执行，§6.7、§11.4），也可单独执行。
 
 1. 声明中有、数据库中没有的节点：新增并标记 `is_builtin`；上级按 `name` 查找，管理员移动过上级也能找到。数据库中已有同名的自定义节点时直接收编：标记 `is_builtin` 并按第 2 条修正结构性字段，在命令输出中列出。
 2. 已有节点只修正结构性字段：`type`、`path`、`component`、`meta.link`、`meta.iframeSrc`；`title`、`icon`、`sort`、`status`、`parent_id` 与 `hide*` 系列以数据库为准，管理员的调整不被覆盖。
@@ -879,6 +1017,18 @@ public function delete(User $actor, User $user): Response
 - 权限码全局唯一 —— 422（`name`）；非按钮节点的 `path` 唯一，且以 `/` 开头 —— 422（`path`）。并发写入撞上唯一索引时 Action 同样返回 422。
 - 停用向子孙级联生效。
 
+**字典**（§6.7）
+
+- 内置的字典类型、字典项不能删除 —— 403（超管也一样）。
+- 内置类型的 `code`、内置字典项的 `value` 不能修改 —— 422（`code` / `value`）；它们只能由同步命令维护。
+- 类型的 `code` 唯一、同一类型内字典项的 `value` 唯一 —— 422（`code` / `value`）；并发写入撞上唯一索引时 Action 同样返回 422。
+- 删除类型时连同其字典项一起删除（不做“有字典项不能删”，理由见 §6.7）。
+
+**系统参数**（§6.7）
+
+- 只能修改已声明的参数；未声明的键或分组 —— 404；分组批量修改中提交了未声明的参数名 —— 422（该键）。接口不能新增、删除参数（Policy 的 `create`、`delete` 一律拒绝）。
+- 值不符合类型或声明的校验规则 —— 422（单个修改挂在 `value`，分组修改挂在参数名）。
+
 **在线会话与 token**（§6.6）
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
@@ -907,7 +1057,8 @@ public function delete(User $actor, User $user): Response
 - 命令：`#[Signature]`、`#[Description]`。队列任务：`#[Tries]`、`#[Backoff]` 等，**队列名不写在任务上**，统一用 `Queue::route()` 集中登记。
 - 统计类数据用 `Cache::flexible()`；请求内缓存用 `Cache::memo()` 或 `#[Scoped]`。
 - 时间：写库前统一转换为应用时区；输出带时区偏移的 ISO 8601。
-- 枚举：实现统一的 `HasLabel`（多语言）/ `HasColor`（语义色，如 success / warning）接口，由后端统一下发选项。
+- 枚举：实现统一的 `HasLabel`（多语言，必须，`tests/Arch` 强制）/ `HasColor`（语义色，可选）接口，由后端统一下发选项（在 `EnumRegistry` 中登记后由 `/options/enums` 下发，§6.7）。
+  - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum` 的模板不带 `color()`，需要时手工加上 `HasColor`。
 - 统计指标、复杂查询做成模块里独立的 Query 类。
 - 软删除是整套功能：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数生成。
 - 导出：`simple-excel` + 队列 + 完成通知，标准异步导出。
@@ -1025,7 +1176,7 @@ Scramble 的兼容性在引入时另行验证。
 
 1. 数据库迁移（迁移必须向下兼容）；
 2. 切换新代码或新镜像；
-3. `php artisan optimize`，然后 `php artisan core:sync-permissions` 同步菜单与权限节点（§8.2），`php artisan schedule-monitor:sync` 把调度定义同步到定时任务监控（§6.6；会删除调度中已不存在的任务）；
+3. `php artisan optimize`，然后 `php artisan core:sync` 依次同步模块声明的菜单与权限节点（§8.2）、字典与系统参数（§6.7），任何一个失败即以非 0 退出、中止发布；再 `php artisan schedule-monitor:sync` 把调度定义同步到定时任务监控（§6.6；会删除调度中已不存在的任务）；
 4. PHP-FPM：平滑重载 FPM（刷新 OPcache）；Octane：`php artisan octane:reload`（**必需**，否则仍运行内存中的旧代码）；
 5. `php artisan queue:restart`，让队列进程加载新代码。
 
@@ -1121,14 +1272,14 @@ Scramble 的兼容性在引入时另行验证。
 | 列表查询 | 时间区间筛选 `DateTimeRangeFilter`（ISO 8601 带时区）；query-builder 的未知筛选 / 排序异常（`InvalidQuery`，默认 400）统一映射为 422（`VbenResponse`） | spatie/laravel-query-builder |
 | 认证补充 | 登录日志（认证事件的监听、限流时派发 `Lockout`）、在线会话与强制下线（会话表的只读模型、token 列表、当前会话与超管保护）、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
 | 操作日志 | 记录写请求的中间件（排除认证请求、脱敏、耗时、请求 ID，响应后写入且失败不影响响应）、日志的只读查询接口（数据范围委托给操作者）、按日志名区分的模型 | spatie/laravel-activitylog（含 `activitylog:clean`）、`Context`、`defer()` |
-| 字典 | 字典类型 / 字典项、缓存、`InDict` 校验规则、选项下发接口 | Cache、Validation |
-| 系统参数 | 后台可管理的键值参数、按类型转换、缓存、公开参数接口 | Cache、Casts |
+| 字典 | 字典类型 / 字典项与管理接口（内置项的保护）、扩展点 `DictRegistry`（`resources/dicts.php` 声明）与同步命令 `core:sync-dicts`、整体缓存的读取服务 `Dictionary`、`InDict` 校验规则、选项下发接口（`/options/dicts`） | Cache（`Cache::memo()`）、Validation、模型事件（提交后清除缓存） |
+| 系统参数 | 后台可修改值的键值参数（只能改已声明的，`null` 表示使用默认值）、扩展点 `SettingRegistry`（`resources/settings.php` 声明分组、类型、默认值或 config 键、是否公开、校验规则、引用的字典）与同步命令 `core:sync-settings`（三个同步由 `core:sync` 依次执行）、按类型校验与转换（`SettingType`）、读取服务 `Settings`（缓存、默认值）、按分组的管理接口、公开参数接口（`/settings/public`，只输出声明为公开的） | Cache（`Cache::memo()`）、Validation、`json` cast |
 | 附件 | 上传记录、归属校验、删除时清理文件 | Storage |
 | 通知中心 | 我的通知、已读、全部已读接口 | Laravel 数据库通知 |
 | 公告 | 公告管理、发布后分批群发 | Notifications、`Bus::batch` |
 | 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
 | 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 待定（§14） |
-| 枚举选项 | 统一枚举接口 + 选项下发接口 | PHP 枚举 |
+| 枚举选项 | `HasLabel` / `HasColor` 接口、显式白名单 `EnumRegistry`（模块在 Provider 中登记对外名称，登记时校验颜色）、选项下发接口（`/options/enums`，按 `Accept-Language` 翻译，有颜色时输出 `color`） | PHP backed enum、翻译 |
 | 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
 | 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
 | 代码生成器 | `core:make-*` 命令集（入口、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |

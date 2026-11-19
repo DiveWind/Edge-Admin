@@ -104,6 +104,7 @@
 ## 依赖 Core 的能力
 
 - System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`。
+- System：枚举选项的白名单 `EnumRegistry`：登记 `login_event`（`Enums/LoginEvent`，实现 `HasColor`）、`login_failure_reason`（`Enums/LoginFailureReason`），由 `/options/enums` 下发（设计文档 §6.7）。
 - 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health；框架的 `failed_jobs`、`queue:retry`。
 
 ## 配置

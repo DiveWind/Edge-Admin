@@ -60,6 +60,30 @@ return [
                     'delete' => 'common.delete',
                 ],
             ],
+            [
+                // 字典管理：类型列表 + 选中类型的字典项；按钮由字典类型与字典项共用（§6.7）
+                'name' => 'system.dict',
+                'type' => 'menu',
+                'path' => '/system/dict',
+                'component' => '/system/dict/list',
+                'meta' => ['title' => 'system.dict.title', 'icon' => 'lucide:book-open-text', 'order' => 40],
+                'buttons' => [
+                    'create' => 'common.create',
+                    'update' => 'common.edit',
+                    'delete' => 'common.delete',
+                ],
+            ],
+            [
+                // 系统参数：按分组的表单；参数只能在模块中声明，接口只能修改值（§6.7）
+                'name' => 'system.setting',
+                'type' => 'menu',
+                'path' => '/system/setting',
+                'component' => '/system/setting/index',
+                'meta' => ['title' => 'system.setting.title', 'icon' => 'lucide:sliders-horizontal', 'order' => 50],
+                'buttons' => [
+                    'update' => 'common.edit',
+                ],
+            ],
         ],
     ],
 ];

@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\System\Actions\UpdateSettings;
 use App\Core\System\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Tests\Http\Admin\VbenClient;
@@ -126,6 +127,23 @@ describe('login', function (): void {
         User::factory()->create(['username' => 'bob']);
 
         $this->client->login('bob')->assertOk();
+    });
+
+    it('reads the login limit from the auth.login_rate_limit setting, overriding the config default', function (): void {
+        $this->freezeTime();
+        config(['core.auth.login_rate_limit' => 5]);
+        resolve(UpdateSettings::class)->handle(['auth.login_rate_limit' => 1]);
+        User::factory()->create(['username' => 'alice']);
+
+        $this->client->login('alice', 'wrong-password')->assertUnprocessable();
+        $this->client->login('alice')->assertTooManyRequests();
+
+        // 恢复默认值后按 config 的次数限流（新的计数周期）
+        $this->travel(61)->seconds();
+        resolve(UpdateSettings::class)->handle(['auth.login_rate_limit' => null]);
+
+        $this->client->login('alice', 'wrong-password')->assertUnprocessable();
+        $this->client->login('alice', 'wrong-password')->assertUnprocessable();
     });
 
     it('answers in the language of the Accept-Language header', function (): void {

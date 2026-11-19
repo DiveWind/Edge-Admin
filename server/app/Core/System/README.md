@@ -14,10 +14,13 @@
 - 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
 - 用户管理（设计文档 §6.5、§8.5、§8.6）：`Policies/UserPolicy` 与用户的 Action（下文“用户管理”）；
 - 菜单管理（设计文档 §6.5、§8.2、§8.6）：`Policies/PermissionPolicy`、节点的 Action 与 `Queries/PermissionTree`（下文“菜单管理”）；
-- 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）。
+- 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）；
+- 字典（设计文档 §6.7）：`Models/DictType`、`Models/DictItem`、扩展点 `DictRegistry` 与同步命令 `core:sync-dicts`、读取服务 `Dictionary`、校验规则 `InDict`（下文“字典”）；
+- 系统参数（设计文档 §6.7）：`Models/Setting`、扩展点 `SettingRegistry` 与同步命令 `core:sync-settings`、读取服务 `Settings`、本模块的参数分组 `resources/settings.php`（下文“系统参数”）；
+- 枚举选项（设计文档 §6.7）：显式白名单 `Services/EnumRegistry`（下文“枚举选项”）。
 
 不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）。
-字典、参数、附件等在后续接入。
+附件等在后续接入。
 
 ## 对外提供
 
@@ -52,6 +55,21 @@
 | `Queries/PermissionTree` | 菜单管理用的整棵节点树（含停用节点与按钮，一次查询组装） |
 | `Policies/PermissionPolicy` | 菜单节点的授权：标准方法，删除内置节点 403 |
 | `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`）；`dataScopeOwnerColumns()` 声明“仅本人”的归属列 |
+| `Contracts/DictRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中声明字典类型与初始字典项（下文“字典”） |
+| `Actions/SyncDicts`、`Commands/SyncDictsCommand` | `php artisan core:sync-dicts`：把声明的字典同步到 `dict_types`、`dict_items` |
+| `Actions/CreateDictType`、`UpdateDictType`、`DeleteDictType`、`CreateDictItem`、`UpdateDictItem`、`DeleteDictItem` | 字典类型与字典项的新增、修改、删除（内置的保护见下文） |
+| `Services/Dictionary` | 字典的读取（启用类型下的启用项，整体缓存）：`options()`、`many()`、`values()`、`has()`、`flush()` |
+| `Rules/InDict` | 校验规则：值必须是某个字典类型下的启用项 |
+| `Policies/DictTypePolicy`、`DictItemPolicy` | 字典的授权：标准方法，删除内置的 403 |
+| `Contracts/SettingRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册系统参数分组（下文“系统参数”） |
+| `Actions/SyncSettings`、`Commands/SyncSettingsCommand` | `php artisan core:sync-settings`：把声明的参数同步到 `settings` |
+| `Actions/UpdateSettings` | 修改参数的值（按类型转换，null 恢复默认值） |
+| `Services/Settings` | 系统参数的读取（给代码用的唯一方式）：`get()`、`string()`、`integer()`、`float()`、`boolean()`、`array()`、`public()` |
+| `Enums/SettingType` | 参数类型 `string`、`text`、`int`、`float`、`bool`、`json`：校验规则、输入转换、类型判断 |
+| `Policies/SettingPolicy` | 系统参数的授权：查看、修改值；新增、删除一律拒绝 |
+| `Services/EnumRegistry` | 可下发给前端的枚举（显式白名单，`/options/enums`） |
+| `Contracts/HasColor` | 枚举的语义色（可选）：`color()` 为 antd 预设色名或 hex，`/options/enums` 据此输出 `color`；`Status` 已实现 |
+| `Commands/SyncCommand` | `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即停止（非 0 退出）；`DatabaseSeeder` 与部署使用 |
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
@@ -79,7 +97,7 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 
 ### 同步：`php artisan core:sync-permissions`
 
-由 `DatabaseSeeder` 调用，部署时在 `optimize` 之后执行（设计文档 §11.4）。幂等，输出新增、修正、收编、转为自定义的节点：
+由 `core:sync` 调用（`DatabaseSeeder` 与部署时在 `optimize` 之后执行，设计文档 §11.4），也可单独执行。幂等，输出新增、修正、收编、转为自定义的节点：
 
 1. 声明中有、数据库中没有的节点：新增并标记 `is_builtin`（上级按 name 查找）；已有同名的自定义节点：收编（标记 `is_builtin` 并按第 2 条修正）；
 2. 已有节点只修正结构性字段 `type`、`path`、`component`、`meta.link`、`meta.iframeSrc`；`title`、`icon`、`sort`、`status`、`parent_id`
@@ -208,6 +226,104 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 
 所有查询入口（列表、详情、下拉选项、导出、统计）都要经过它；使用 `self` 范围的模型需要归属列（默认 `created_by`，由 Action 写入）。
 
+## 字典
+
+接口见设计文档 §6.7（`/system/dict-types`、`/system/dict-items`、`/options/dicts`）。字典给“管理员可以增删改、代码只校验是否合法”的值列表用；
+代码要按值分支的固定集合用枚举。
+
+- 声明（扩展点 `DictRegistry`，单例，只保存启动时注册的静态声明）：模块在 Provider 的 `boot()` 中注册本模块用到的类型，类型编码以模块名开头。
+  本模块目前没有内置的字典类型。
+
+  ```php
+  // ContentServiceProvider
+  public function boot(DictRegistry $dicts): void
+  {
+      $dicts->register(require __DIR__.'/resources/dicts.php');
+  }
+
+  // resources/dicts.php
+  return [
+      [
+          'code' => 'content.article_source',
+          'name' => 'content.dict.articleSource',          // i18n key 或纯文本，后端不翻译
+          'items' => [
+              ['value' => 'original', 'label' => 'content.dict.articleSource.original', 'color' => 'success'],
+              ['value' => 'reprint', 'label' => 'content.dict.articleSource.reprint'],   // sort 默认为声明中的序号
+          ],
+      ],
+  ];
+  ```
+
+  注册时校验：`code` 为小写点分的标识（`DictType::isValidCode()`）且不重复；`value` 为非空字符串（最长 64）且类型内不重复；`label` 必填；
+  `color` 为 antd 预设色名或 `#RGB` / `#RRGGBB`（`DictItem::COLOR_PATTERN`）。
+- 同步 `php artisan core:sync-dicts`（由 `core:sync` 调用）：缺的类型与字典项新增为内置；同 `code` / `value` 的自定义数据收编；
+  **结构性字段只有标识**（类型的 `code`、字典项的 `value`），名称、备注、`label`、`color`、`sort`、`status` 以库为准；
+  从声明中移除的内置类型（连同其内置项）、内置项转为自定义，不删除。幂等，一个事务，结束时清除缓存。
+- 读取：`Services/Dictionary`（整体缓存 `core:dicts`，经 `Cache::memo()`；字典写入后由 `Observers/DictionaryObserver` 在事务提交后清除）。
+- 校验：
+
+  ```php
+  'source' => ['required', 'string', new InDict('content.article_source')],
+  ```
+
+  只接受启用类型下启用项的 `value`（字符串或整数，按字符串比较），否则为 `validation.in`。
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 没有对应的权限码（`system.dict`、`.create`、`.update`、`.delete`，类型与字典项共用） | 403 | `DictTypePolicy`、`DictItemPolicy` |
+| 删除内置类型、内置字典项（超管也一样） | 403 | `DictTypePolicy::delete()`、`DictItemPolicy::delete()` |
+| 内置类型改 `code`、内置字典项改 `value` | 422（`code` / `value`） | `UpdateDictType`、`UpdateDictItem` |
+| `code` 重复、同一类型内 `value` 重复 | 422（`code` / `value`） | 表单校验；并发时 `CreateDictType::save()`、`CreateDictItem::save()` 捕获唯一索引冲突 |
+
+删除类型时连同其字典项一起删除（`DeleteDictType`，外键 `cascadeOnDelete` 兜底）：内置字典项只会出现在内置类型下，不会因此绕过保护。
+
+## 系统参数
+
+接口见设计文档 §6.7（`/system/settings`、`/system/setting-groups/{group}`、`/settings/public`）。只放管理员在运行时调整的业务参数；部署级的配置留在 config 与环境变量。
+
+- 声明（扩展点 `SettingRegistry`，单例）：本模块的分组在 `resources/settings.php`（`site`：站点名称、登录页提示，公开；`auth`：登录限流次数）。
+  业务模块同样注册自己的分组（一个分组只属于一个模块，键为 `<分组>.<参数名>`）：
+
+  ```php
+  public function boot(SettingRegistry $settings): void
+  {
+      $settings->register([
+          'device' => [
+              'title' => 'device.setting.title',
+              'order' => 100,
+              'settings' => [
+                  'heartbeat_interval' => ['type' => 'int', 'name' => 'device.setting.heartbeatInterval', 'default' => 60, 'rules' => ['min:10']],
+                  'paused' => ['type' => 'bool', 'name' => 'device.setting.paused', 'default' => false],
+              ],
+          ],
+      ]);
+  }
+  ```
+
+  `type` 为 `SettingType`；默认值用 `default`（值）或 `config`（config 键，读取时取当前值）二选一；`public` 表示出现在免登录的公开参数接口中；
+  `rules` 追加在类型规则之后；`dict`（只用于 `string`、`int`）引用一个字典类型：校验自动追加 `InDict`，管理接口输出 `dict`，前端据此渲染下拉
+  （引用的字典不存在时任何值都校验失败）。可选值一律用字典表达，没有静态的选项列表。
+- 读取：`resolve(Settings::class)->integer('device.heartbeat_interval')`（或注入 `Settings`）。库中有管理员改过的值（类型一致）就用它，否则用默认值；
+  未声明的键抛出 `InvalidArgumentException`。整体缓存 `core:settings`（经 `Cache::memo()`），写入后由 `Observers/SettingObserver` 在事务提交后清除。
+- `settings.value` 为 null 表示没有改过；修改接口提交 null（或空字符串）即恢复默认值。
+- 同步 `php artisan core:sync-settings`：缺的参数新增（`value` 为 null）；结构性字段 `type`、`group`、`name`、`remark`、`is_public` 以声明为准，`value` 不动
+  （类型改了、旧值不再符合时置为 null）；从声明中移除的参数取消 `is_builtin` 与 `is_public`，保留值，不删除（废弃的参数留在库中无害，不提供清理命令）。
+- 接口只能修改已声明参数的值，不能新增、删除（`SettingPolicy`）；未声明的键或分组 404，值不符合类型或规则 422。
+- 登录与两步验证的限流次数读取 `auth.login_rate_limit`（`SystemServiceProvider::loginRateLimit()`，每次请求时读取），默认值来自 `config('core.auth.login_rate_limit')`。
+
+## 枚举选项
+
+`Services/EnumRegistry`（`#[Singleton]`）是可下发给前端的枚举的**显式白名单**：`/options/enums?names=...` 只下发登记过的名称（未登记 422），
+label 为 `HasLabel::label()`，按 `Accept-Language` 翻译；枚举另外实现了 `Contracts/HasColor` 时每个选项再输出 `color`（登记时校验，规则同字典项的 color）。本模块登记 `status`、`permission_type`、`setting_type`；Monitor 登记 `login_event`、`login_failure_reason`。
+业务模块在 Provider 的 `boot()` 中登记（名称以模块名开头）：
+
+```php
+public function boot(EnumRegistry $enums): void
+{
+    $enums->register(['content.article_status' => ArticleStatus::class]);
+}
+```
+
 ## 依赖 Core 的能力
 
 无。`Contracts/HasLabel` 是本模块提供给 Core 与业务模块的枚举接口。
@@ -216,7 +332,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 
 `config/permission.php`：模型指向本模块的 `Permission`、`Role`；`register_permission_check_method = false`；`register_octane_reset_listener = true`。
 
-`config/core.php` 的 `auth`：`login_rate_limit`（每分钟登录次数）、`frontend_url` 与 `reset_password_path`（重置密码的前端页面）。
+`config/core.php` 的 `auth`：`login_rate_limit`（系统参数 `auth.login_rate_limit` 的默认值）、`frontend_url` 与 `reset_password_path`（重置密码的前端页面）。
 
 ## 生成命令
 

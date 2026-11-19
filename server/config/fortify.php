@@ -119,7 +119,7 @@ return [
     |
     */
 
-    // 限流器在 SystemServiceProvider 中定义，次数见 config('core.auth.login_rate_limit')
+    // 限流器在 SystemServiceProvider 中定义，次数为系统参数 auth.login_rate_limit（默认值 config('core.auth.login_rate_limit')）
     'limiters' => [
         'login' => 'login',
         'two-factor' => 'two-factor',
