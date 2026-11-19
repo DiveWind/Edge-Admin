@@ -8,9 +8,13 @@
 - 操作日志（`operation`）：写入用例 `LogOperation`（含脱敏）；记录写请求的中间件在后台入口（`App\Http\Admin\Middleware\RecordOperationLog`）；
 - 登录日志（`login`）：监听认证事件（`Listeners/RecordLoginActivity`），写入用例 `LogLogin`；
 - 在线会话与强制下线：database 会话驱动的会话表（`Models/Session`）与 Sanctum 的 token（`Queries/ActiveTokens`）；
-- 日志与在线会话的授权与数据范围。
+- 日志与在线会话的授权与数据范围；
+- 定时任务：spatie/laravel-schedule-monitor 同步、记录的任务与执行记录（`Models/ScheduledTask`、`ScheduledTaskLog`），立即执行（`Actions/RunScheduledTask` → `Jobs/ExecuteScheduledTask`）；
+- 失败任务：框架的 `failed_jobs`（`Models/FailedJob`，只读），重试、删除、清空走官方能力；
+- 健康检查（spatie/laravel-health，检查项在本模块 Provider 中注册）与系统信息（`Queries/SystemInfo`）；
+- 脱敏与截断的共用规则（`Services/DataMasker`）：操作日志、失败任务、定时任务的输出。
 
-不负责：接口的路由与输出格式（`app/Http/Admin/Monitor`）；定时任务、系统监控在后续接入。
+不负责：接口的路由与输出格式（`app/Http/Admin/Monitor`）；Pulse 暂未接入（设计文档 §14）。
 
 ## 对外提供
 
@@ -20,13 +24,25 @@
 | `Models/OperationLog`、`Models/LoginLog` | 继承 `Activity`，各带日志名（`LOG_NAME`）的全局作用域；只读 |
 | `Models/Session` | 会话表的一行（表名、连接取自 `config('session.*')`）：`online()`（已登录、未过期；非 database 驱动时为空）、`visibleTo()`、`publicId()`（会话 ID 的前 16 位，路由绑定按它查找）、`isCurrent()` |
 | `Queries/ActiveTokens` | 有效的后台用户 token（与 Sanctum 的过期校验一致，按所属用户的数据范围过滤）；`isCurrent()`：是否为本次请求使用的 token |
-| `Actions/LogOperation` | 写入操作日志；`mask()`：按 `masked_keys` 递归脱敏，并按 `max_value_length` 截断过长的字符串值；`limitSize()`：请求体超过 `max_payload_bytes` 时整体替换为截断标记 |
+| `Actions/LogOperation` | 写入操作日志；`mask()`：按 `masked_keys` 递归脱敏，并按 `max_value_length` 截断过长的字符串值（`DataMasker`）；`limitSize()`：请求体超过 `max_payload_bytes` 时整体替换为截断标记 |
+| `Services/DataMasker` | 脱敏与截断：`maskArray()`（键名规则，递归）、`maskText()`（文本中 `键=值`、`键: 值`、`"键":"值"` 形式）、`truncate()`；键名取自 `core.monitor.masked_keys` |
+| `Models/ScheduledTask`、`Models/ScheduledTaskLog` | 继承 schedule-monitor 的模型（`config/schedule-monitor.php` 的 `models`），包写入、接口只读；`nextRunAt()`、`isRunning()`、`scheduleTimezone()`；`metaValue()` |
+| `Actions/RunScheduledTask`、`Jobs/ExecuteScheduledTask` | 立即执行：只派发任务名；队列任务在 `Schedule::events()` 中按同步规则查找同名事件，与 `schedule:run` 相同地派发 `ScheduledTask*` 事件后执行；找不到即失败。`ShouldBeUnique`（按任务名）、`Tries(1)` |
+| `Models/FailedJob` | 失败任务表的一行（表名、连接取自 `config('queue.failed.*')`，路由键 `uuid`）：`stored()`（驱动不是 `database-uuids` 时为空）、`payloadSummary()`（去掉 `data.command`，脱敏、截断）、`exceptionMessage()`、`exceptionTrace()`（脱敏、去掉项目根目录、限制行数） |
+| `Actions/RetryFailedJob`、`RetryFailedJobs` | 重试：`queue:retry <uuid>`；全部重试：`queue:retry all` 或 `--queue=` |
+| `Actions/ForgetFailedJob`、`FlushFailedJobs` | 删除、清空：`FailedJobProviderInterface::forget()` / `flush()` |
+| `Actions/RunHealthChecks`、`Queries/LatestHealthResults` | 立即检查（`health:check --no-notification`）；最近一次结果（包的结果存储，本项目为缓存） |
+| `Queries/SystemInfo` | 系统信息：版本、运行方式、驱动、磁盘；不输出密钥、密码、主机、路径与环境变量 |
 | `Actions/LogLogin` | 写入登录日志（只接收用户名，不接收密码） |
 | `Actions/LogoutSession`、`Actions/RevokeToken` | 强制下线：删除会话、吊销 token |
 | `Enums/LoginEvent`、`Enums/LoginFailureReason` | 登录日志的事件（login、logout、failed、lockout、password_reset）与失败原因（invalid_credentials、disabled、two_factor） |
 | `Policies/OperationLogPolicy`、`LoginLogPolicy` | 日志的查看（`monitor.operation-log`、`monitor.login-log`，数据范围委托给 causer），写入一律拒绝 |
 | `Policies/SessionPolicy`、`PersonalAccessTokenPolicy` | 查看 `monitor.online`；强制下线 `monitor.online.logout`：不能是自己当前的会话 / 本次请求的 token，超管只有超管能下线，所属用户在数据范围内。后者在 `MonitorServiceProvider` 中用 `Gate::policy()` 绑定 |
 | `Policies/ActivityPolicy` | 模块审计日志：暂无查看接口，一律拒绝 |
+| `Policies/ScheduledTaskPolicy`、`ScheduledTaskLogPolicy` | 查看 `monitor.schedule`；立即执行 `run`：`monitor.schedule.run`；其余拒绝 |
+| `Policies/FailedJobPolicy` | 查看 `monitor.failed-job`；`retry` / `retryAny`：`monitor.failed-job.retry`；`delete` / `deleteAny`（清空）：`monitor.failed-job.delete`；其余拒绝 |
+
+定时任务、失败任务、健康状态与系统信息属于系统本身，**不按数据范围过滤**，只由权限码决定；健康检查与系统信息没有模型，接口直接声明权限码 `monitor.health`、`monitor.health.check`。
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/Monitor`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
@@ -55,20 +71,50 @@
 `Lockout` 由 System 的登录限流器在拒绝时派发（Fortify 使用命名限流器时不派发）；停用账号用正确密码登录时，System 的 `AuthenticateUser` 派发 `Failed`。
 `Failed` 的 `credentials` 只读取用户名，密码不会写入日志。`login` 另记 `via_remember`：按守卫的 `viaRemember()` 区分“记住我”的 Cookie 恢复登录。写入失败只 `report()`，不影响登录。
 
+## 立即执行的执行记录
+
+`ExecuteScheduledTask` 基于 Laravel 13 的 `ScheduleRunCommand::runEvent()` 派发调度事件，schedule-monitor 据此写执行记录。一次手动执行只留下 `starting` 加一条结束记录：
+
+| 结果 | 派发的事件 | 执行记录 |
+|---|---|---|
+| 正常结束，退出码 0 | `ScheduledTaskFinished` | `finished`（`exit_code`、`runtime`、`memory`） |
+| 退出码非 0（命令未抛异常） | `ScheduledTaskFinished`；异常 `report()` | `failed`（`exit_code`、`runtime`；包的 `markAsFinished()` 见到非 0 退出码转为失败） |
+| 抛出异常（回调任务等） | `ScheduledTaskFailed`；异常 `report()` | `failed`（`failure_message`） |
+
+与 `runEvent()` 的不同：框架在退出码非 0 时先派发 `ScheduledTaskFinished`，再抛出异常派发 `ScheduledTaskFailed`，schedule-monitor 两条都记为 `failed`。
+因此由 `schedule:run` 定时执行的这种失败会有两条 `failed`（框架与包的行为，不改）；手动执行不再派发 `ScheduledTaskFailed`，监听它的代码收不到手动执行的非 0 退出码。
+
+## 脱敏的已知限制
+
+`DataMasker` 按键名脱敏，文本中只认 `键=值`、`键: 值`、`键 => 值`、`"键":"值"`（含单引号）四种写法：
+
+- SQL 绑定值、位置参数、序列化字符串等没有键名的数据识别不了，异常消息中仍可能含业务数据：失败任务页只授予可信的运维角色；
+- 精确键名也会命中普通文本，如默认的 `code` 会把 `code: 500` 替换为 `code: ******`；
+- 先脱敏再截断：截断点落在 `******` 中间时星号会变少，但不会露出原值；
+- payload 中序列化的任务对象（`data.command`）不反序列化、不输出，因此看不到任务的属性；
+- 只有通配符的键名规则（`*`）只用于数组，不用于文本。
+
 ## 常驻内存
 
 - activitylog 有状态的服务（`CauserResolver`、`ActivityLogStatus`、`ActivityBuffer`）都是 `scoped`，无需登记 Octane 的 flush；不使用其静态的 `beforeLogging()`；
-- 操作日志在响应发送后写入（`defer()->always()`），数据只在闭包中捕获；`RecordLoginActivity` 每次派发时重新解析，取到的是当前请求。
+- 操作日志在响应发送后写入（`defer()->always()`），数据只在闭包中捕获；`RecordLoginActivity` 每次派发时重新解析，取到的是当前请求；
+- schedule-monitor 的单例 `MonitoredScheduledTasks` 只在定义调度时记录 `monitorName` 等设置；laravel-health 的 `Health` 单例只在启动时登记检查项；
+  `DataMasker` 无状态。`ExecuteScheduledTask` 执行时临时关闭事件的 `runInBackground`，执行后恢复。
 
 ## 依赖 Core 的能力
 
 - System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`。
+- 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health；框架的 `failed_jobs`、`queue:retry`。
 
 ## 配置
 
 - `config/activitylog.php`：`activity_model` 指向 `Models/Activity`；`clean_after_days`（`ACTIVITYLOG_CLEAN_AFTER_DAYS`，默认 365），调度每天执行 `activitylog:clean --force`（`routes/console.php`）。
-- `config/core.php` 的 `monitor.operation_log`：`except_routes`（不记操作日志的路由名）、`masked_keys`（脱敏的键名，支持 `*` 通配）、`max_value_length`（字符串值上限，默认 1000 字符）、`max_payload_bytes`（请求体上限，默认 64KB）。
-- 会话：`config('session.driver')` 为 `database` 时才有在线会话列表。
+- `config/core.php` 的 `monitor.operation_log`：`except_routes`（不记操作日志的路由名）、`max_value_length`（字符串值上限，默认 1000 字符）、`max_payload_bytes`（请求体上限，默认 64KB）。
+- `config/core.php` 的 `monitor.masked_keys`（脱敏的键名，各处共用）、`monitor.failed_job`（`max_value_length`、`max_trace_lines`）、`monitor.health`（检查阈值）；`apps.admin.ops_rate_limit`（立即执行、重试、立即检查的限流）。
+- `config/schedule-monitor.php`：`models` 指向本模块的模型；`delete_log_items_older_than_days`（`SCHEDULE_MONITOR_LOG_DAYS`，默认 30）。调度定义改动后执行 `php artisan schedule-monitor:sync`（部署流程与 `DatabaseSeeder` 已包含）。
+- `config/health.php`：结果存缓存（`HEALTH_CACHE_STORE`），通知关闭；不注册包的 HTTP 端点，存活探针用 `/up`。
+- 调度（`routes/console.php`）：每天 `model:prune --model=ScheduledTaskLog`；每分钟 `health:check --no-notification`、`health:schedule-check-heartbeat`、`health:queue-check-heartbeat`（`doNotMonitor()`）。
+- 会话：`config('session.driver')` 为 `database` 时才有在线会话列表；失败任务：`queue.failed.driver` 为 `database-uuids` 时才有失败任务列表。
 
 ## 生成命令
 

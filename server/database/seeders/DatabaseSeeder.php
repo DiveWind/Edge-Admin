@@ -14,7 +14,8 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * 先同步各模块声明的菜单与权限节点，并确保超管角色存在（core:sync-permissions，各环境都执行，设计文档 §8.2）。
+     * 先同步各模块声明的菜单与权限节点，并确保超管角色存在（core:sync-permissions，各环境都执行，设计文档 §8.2）；
+     * 再把调度定义同步到定时任务监控（schedule-monitor:sync，§6.6），后台的定时任务页才有数据。部署时两者同样执行（§11.4）。
      *
      * 演示账号的密码都是 password，只在本地与测试环境创建（php artisan migrate:fresh --seed）：
      * - admin：启用的管理员，拥有超管角色；
@@ -22,10 +23,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        if ($this->command === null) {
-            Artisan::call('core:sync-permissions');
-        } else {
-            $this->command->call('core:sync-permissions');
+        foreach (['core:sync-permissions', 'schedule-monitor:sync'] as $command) {
+            if ($this->command === null) {
+                Artisan::call($command);
+            } else {
+                $this->command->call($command);
+            }
         }
 
         if (! app()->environment(['local', 'testing'])) {

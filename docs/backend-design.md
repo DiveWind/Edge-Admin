@@ -461,9 +461,22 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `DELETE /monitor/online/sessions/{session}` | 强制下线：删除该会话 | `monitor.online.logout` |
 | `GET /monitor/online/tokens` | 有效的 token 分页 | `monitor.online` |
 | `DELETE /monitor/online/tokens/{token}` | 吊销该 token | `monitor.online.logout` |
+| `GET /monitor/schedules` | 定时任务分页 | `monitor.schedule` |
+| `GET /monitor/schedules/{schedule}/logs` | 该任务的执行记录分页 | `monitor.schedule` |
+| `POST /monitor/schedules/{schedule}/run` | 立即执行：派发到队列，立即返回（限流） | `monitor.schedule.run` |
+| `GET /monitor/failed-jobs` | 失败任务分页 | `monitor.failed-job` |
+| `GET /monitor/failed-jobs/{failed_job}` | 详情，另含 `payload` 摘要与 `trace`（已脱敏、截断） | `monitor.failed-job` |
+| `POST /monitor/failed-jobs/{failed_job}/retry` | 重试（限流） | `monitor.failed-job.retry` |
+| `POST /monitor/failed-jobs/retry` | 全部重试：`{ queue }`（可选，只重试该队列；限流） | `monitor.failed-job.retry` |
+| `DELETE /monitor/failed-jobs/{failed_job}` | 删除 | `monitor.failed-job.delete` |
+| `DELETE /monitor/failed-jobs` | 清空 | `monitor.failed-job.delete` |
+| `GET /monitor/health` | 最近一次健康检查的结果 | `monitor.health` |
+| `POST /monitor/health/check` | 立即检查：同步执行全部检查，返回结果（限流） | `monitor.health.check` |
+| `GET /monitor/system-info` | 系统信息（只读） | `monitor.health` |
 
-- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token。
-- 路由参数加格式约束（§9）：`{operation_log}`、`{login_log}`、`{token}` 只匹配数字，`{session}` 只匹配 16 位字母与数字。
+- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）、`monitor.schedule`（`/monitor/schedule`，组件 `/monitor/schedule/list`，按钮 `monitor.schedule.run`）、`monitor.failed-job`（`/monitor/failed-job`，组件 `/monitor/failed-job/list`，按钮 `monitor.failed-job.retry`、`monitor.failed-job.delete`）、`monitor.health`（`/monitor/health`，组件 `/monitor/health/index`，按钮 `monitor.health.check`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token；健康检查与系统信息合并为一页（`monitor.health`）。
+- 定时任务用 `schedule`（Laravel 的“任务调度”，`schedule:*` 命令）而不是 `job` 命名：`job` 在 Laravel 中指队列任务，与相邻的失败任务（`failed-job`）混淆。
+- 路由参数加格式约束（§9）：`{operation_log}`、`{login_log}`、`{token}`、`{schedule}` 只匹配数字，`{session}` 只匹配 16 位字母与数字，`{failed_job}` 只匹配 UUID。
 
 **日志的存储**
 
@@ -483,7 +496,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 记录内容：`causer`（操作者）、`description`（路由名，如 `admin.system.users.store`、`user-password.update`；路由没有名称时为 `<方法> /<路由 URI>`）与 `properties`：`username`、`method`、`path`（实际请求路径，以 `/` 开头）、`route_parameters`（路由参数，取原始值）、`payload`（请求体，脱敏）、`status`、`duration_ms`（从进入本中间件到得到响应的毫秒数）、`ip_address`、`user_agent`（最长 500 字符）、`request_id`。
 - `payload` 只取请求体（JSON 或表单字段，不含查询字符串；上传的文件不记录），在进入后续中间件之前读取，即提交的原始内容。
 - **截断**（与脱敏一起在 Action 中完成）：字符串值超过 `config('core.monitor.operation_log.max_value_length')`（默认 1000）个字符的，保留前面部分并加上 `…(truncated)`，递归处理，`route_parameters` 同样适用；脱敏、截断后的 `payload` 编码为 JSON 仍超过 `max_payload_bytes`（默认 65536 字节）时，整体替换为 `{ "_truncated": true, "_bytes": 原始请求体的 JSON 字节数 }`。
-- **脱敏**：键名（不区分大小写，支持 `*` 通配）与 `config('core.monitor.operation_log.masked_keys')` 匹配的值整体替换为 `******`，递归处理嵌套对象与数组；默认 `*password*`（含 `password_confirmation`、`current_password`）、`*token*`、`*secret*`、`code`、`recovery_code`。`route_parameters` 同样脱敏。脱敏在 Action 中完成，任何调用方写入的操作日志都经过它。
+- **脱敏**：键名（不区分大小写，支持 `*` 通配）与 `config('core.monitor.masked_keys')` 匹配的值整体替换为 `******`，递归处理嵌套对象与数组；默认 `*password*`（含 `password_confirmation`、`current_password`）、`*token*`、`*secret*`、`code`、`recovery_code`。`route_parameters` 同样脱敏。脱敏在 Action 中完成，任何调用方写入的操作日志都经过它。脱敏与截断的规则由 Monitor 的 `DataMasker` 实现，失败任务、定时任务的输出共用同一份规则与键名（下文“失败任务”）。
 - **写入失败不影响响应**：在响应发送之后写入（`defer(...)->always()`，4xx / 5xx 也写），异常只 `report()`，不抛出。PHP-FPM 下在 `fastcgi_finish_request()` 之后执行；Octane 下由 worker 在发送响应后执行（框架的 `InvokeDeferredCallbacks`），不延迟响应，但该 worker 要等写完才接下一个请求。数据只在闭包中捕获，不放静态属性或单例。
 - 文案：`description` 是路由名，由前端翻译（前端 locales 中以路由名为 key，找不到时直接显示路由名）；后端不翻译（§5.5）。
 - 输出字段：`id`、`user_id`（`causer_id`，用户被删除后保留原值）、`username`、`description`、`method`、`path`、`status`、`duration_ms`、`ip_address`、`user_agent`、`request_id`、`created_at`；详情另含 `route_parameters` 与 `payload`（已脱敏）：通常是对象，为空时为 `[]`（响应包装按数组解码，无法区分空对象与空数组）。
@@ -518,6 +531,82 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 日志的数据范围**委托给 causer 用户**：可见 causer 是自己可见的用户（`User::visibleTo()`）的日志；不受数据范围限制的操作者（超管，或任一启用角色的范围是 `all`，`DataScopeRegistry::isUnrestrictedFor()`）可见全部日志，包括没有 causer 的（用户名不存在的登录失败）与操作者已被删除的。这样按部门等维度新增的数据范围（§8.4）只要能约束用户，就自动适用于日志。
 - 会话与 token 按所属用户同样过滤（`whereHas` 到 `User::visibleTo()`）。列表经过数据范围；详情、下线超出范围 → 403。
 - Policy：`OperationLogPolicy`、`LoginLogPolicy`（`viewAny` / `view`，其余方法拒绝）；`SessionPolicy`（`viewAny`、`delete`，`view` 同 `viewAny` 加数据范围，其余拒绝）；Sanctum 的 `PersonalAccessToken` 不在 `app/` 中，由 `MonitorServiceProvider` 用 `Gate::policy()` 绑定 `PersonalAccessTokenPolicy`（规则同 `SessionPolicy`）。基类 `Activity` 的 `ActivityPolicy` 全部拒绝：模块审计日志的查看接口以后由各模块按需提供。
+
+**定时任务**（spatie/laravel-schedule-monitor）
+
+- 调度只在 `routes/console.php` 中定义（§4.2）。schedule-monitor 把其中每个有名称的任务同步到 `monitored_scheduled_tasks` 表（`schedule-monitor:sync`：部署时执行，§11.4；`DatabaseSeeder` 也执行），并在 `schedule:run` 执行时监听框架的 `ScheduledTask*` 事件，更新上次开始、结束、失败、跳过的时间，写入执行记录 `monitored_scheduled_task_log_items`。
+- 接口只读这两张表：HTTP 请求不加载 `routes/console.php`，**任务列表以最近一次同步为准**；修改调度后要重新同步（部署流程已包含）。同步时删除调度中已不存在的任务及其执行记录。
+- 任务名（包的规则）：命令任务为去掉 `php artisan` 后的命令及参数（如 `activitylog:clean --force`），任务类为类名，闭包任务没有名称、不被监控（需要时用 `->monitorName('...')` 命名）。每分钟执行的健康检查与心跳（下文“健康检查”）用 `->doNotMonitor()` 排除：它们每天会产生数千条执行记录，运行状况由健康检查反映。
+- 模型：`ScheduledTask`、`ScheduledTaskLog` 继承包的模型（`config/schedule-monitor.php` 的 `models` 指向它们，包写入时也使用它们），多态别名 `scheduled_task`、`scheduled_task_log`。写入全部由包完成，接口只读。
+- 输出字段：`id`、`name`、`type`（`command` / `job` / `shell`）、`cron_expression`、`timezone`（调度的时区；未单独设置时为 null，按应用时区执行）、`last_started_at`、`last_finished_at`、`last_failed_at`、`last_skipped_at`（都可为 null）、`next_run_at`（按 cron 表达式与时区计算）、`is_running`（`last_started_at` 晚于上次结束与上次失败；进程被强制终止时会一直显示为运行中，直到下一次运行）。
+- 列表：筛选 `name`（模糊）、`type`（精确）；排序 `id`、`name`、`last_started_at`，默认 `name`。
+- 执行记录：输出 `id`、`type`（`starting` / `finished` / `failed` / `skipped`：每次运行一条开始，再加一条结束或失败）、`runtime`（秒）、`exit_code`、`memory`（字节）、`failure_message`、`output`（只有任务调用 `->storeOutputInDb()` 时才有，按失败任务的规则脱敏、截断）、`created_at`；不适用的字段为 null。筛选 `type`（精确，可用逗号传多个）、`created_at`（区间）；排序 `id`，默认 `-id`。
+- 清理：调度每天执行 `model:prune --model=ScheduledTaskLog`（包的执行记录模型使用框架的 `MassPrunable`），删除早于 `schedule-monitor.delete_log_items_older_than_days`（`SCHEDULE_MONITOR_LOG_DAYS`，默认 30）天的执行记录。
+- **立即执行**（`POST /monitor/schedules/{schedule}/run`）：
+  - **不接受任何命令字符串**：路由只绑定库中已同步的任务；Action `RunScheduledTask` 派发队列任务 `ExecuteScheduledTask`（只带任务名）。队列 worker 是加载了调度定义的命令行进程，按与同步相同的规则（在当前环境运行、被监控、名称相同）在 `Schedule::events()` 中查找，**执行的永远是代码中定义的调度事件**，任务名只用作查找的键；找不到（同步后调度被删改）→ 该队列任务失败，出现在失败任务中。
+  - 执行过程基于 `schedule:run`：派发 `ScheduledTaskStarting` → `$event->run()`（遵守 `withoutOverlapping()` 的互斥锁）→ 正常返回时 `ScheduledTaskFinished`（退出码非 0 时 schedule-monitor 记为 `failed`，带 `exit_code`、`runtime`），抛出异常时 `ScheduledTaskFailed`（带 `failure_message`）；异常只 `report()`。因此 schedule-monitor 照常记录：手动执行与定时执行在同一份执行记录中，手动执行一次只有“`starting` + 一条 `finished` 或 `failed`”。
+  - 与 Laravel 13 的 `ScheduleRunCommand::runEvent()` 有一处不同：它在退出码非 0 时先派发 `ScheduledTaskFinished` 再派发 `ScheduledTaskFailed`，schedule-monitor 把两者都记为 `failed`，定时执行的这种失败会留下两条 `failed`（框架与包的行为，不改）。手动执行在退出码非 0 时不再派发 `ScheduledTaskFailed`，避免重复；代价是监听 `ScheduledTaskFailed` 的代码收不到这种手动执行的失败。谁点的执行见操作日志（`admin.monitor.schedules.run`）。与 `schedule:test` 相同，在前台执行（忽略 `runInBackground()`），不检查 `when()` / `skip()`、`onOneServer()` 与调度的暂停状态：手动执行就是明确要执行一次。
+  - 只执行一次（`#[Tries(1)]`，失败不自动重试）；同一任务在排队或执行期间再次点击不会重复入队（`ShouldBeUnique`，按任务名加锁，最长 1 小时）。接口立即返回 `data: null`，执行结果在执行记录中查看。
+  - 在 worker 中执行，受 worker 的 `--timeout`（默认 60 秒）限制；耗时长的任务（备份等）需调大 worker 的 timeout 与队列连接的 `retry_after`，或等待调度执行。队列驱动为 `sync` 时在请求中同步执行（只用于开发、测试）。
+
+**失败任务**（框架的 `failed_jobs`）
+
+- 读取失败任务表（`config('queue.failed.table')`，连接 `queue.failed.database`），模型 `FailedJob` 只读（多态别名 `failed_job`，接口中的 `id` 与路由参数是 `uuid`）。写入全部使用官方能力：重试执行 `queue:retry`（由它刷新 `retryUntil`、推回原连接与队列、删除记录并派发 `JobRetryRequested`；全部重试为 `queue:retry all`，指定队列时为 `--queue`）；删除、清空调用 `FailedJobProviderInterface` 的 `forget()`、`flush()`（即 `queue:forget`、`queue:flush` 的实现）。
+- 失败任务驱动（`queue.failed.driver`）不是默认的 `database-uuids` 时（`file`、`dynamodb`、`null` 等）视同没有失败任务：列表为空，详情、单条重试与删除 404；全部重试、清空照常调用官方能力。
+- 输出字段：`id`（UUID）、`connection`、`queue`、`name`（payload 的 `displayName`，通常是任务类名）、`exception`（异常的第一行：类名与消息）、`failed_at`；详情另含 `payload`（摘要）与 `trace`（异常第一行之后的调用栈，最多 `config('core.monitor.failed_job.max_trace_lines')` 行，默认 30，超出时末行为 `…(truncated)`）。
+- **payload 摘要**：payload 按 JSON 解码，去掉 `data.command`（序列化的任务对象，可能已加密）后，其余键按操作日志的规则脱敏（`masked_keys`）、截断（`failed_job.max_value_length`，默认 1000 字符）。`data.command` 不反序列化（反序列化不可信数据有对象注入风险），序列化字符串也无法按键脱敏，因此不输出；`data.commandName` 保留。无法解码时为 `[]`。
+- **异常的脱敏**：`exception` 与 `trace` 中 `键=值`、`键: 值`、`"键":"值"` 形式、键名与 `masked_keys` 匹配的值替换为 `******`；项目根目录的绝对路径去掉，只输出相对路径；`exception` 最长 `max_value_length` 个字符。SQL 绑定值等其他形式无法识别，异常中仍可能含业务数据：失败任务页只授予可信的运维角色。
+- 列表：筛选 `queue`、`connection`（精确）、`exception`（模糊，在完整的异常文本中查找关键字）、`failed_at`（区间）；排序 `failed_at`，默认 `-failed_at`。
+- 重试、全部重试、删除、清空成功都返回 `data: null`。全部重试在请求中逐条推回队列，积压很多时建议在命令行执行 `php artisan queue:retry all`。
+
+**健康检查**（spatie/laravel-health）
+
+- 检查项在 `MonitorServiceProvider` 中注册，阈值在 `config('core.monitor.health')`：
+
+  | 检查（`name`） | 规则 |
+  |---|---|
+  | `Database` | 默认数据库连接可用 |
+  | `DatabaseConnectionCount` | 只在默认连接为 MySQL / MariaDB / PostgreSQL 时注册：连接数超过 50 警告，超过 100 失败 |
+  | `Cache` | 默认缓存可读写 |
+  | `UsedDiskSpace` | 磁盘使用率超过 70% 警告，超过 90% 失败；依赖 `df` 命令，Windows 下默认不注册（§11.5，`CORE_HEALTH_DISK_SPACE`） |
+  | `Queue` | 默认队列：心跳任务每分钟派发一次，最近 5 分钟内被 worker 执行过 |
+  | `Schedule` | 调度心跳在 2 分钟内（`schedule:run` 每分钟执行） |
+  | `DebugMode` | `APP_DEBUG` 为 false |
+  | `Environment` | 环境为 `production` |
+  | `OptimizedApp` | 配置、路由、事件已缓存（`php artisan optimize`） |
+
+  开发环境中后三项失败是预期的。Redis、Horizon、备份等检查在引入对应组件时再加。
+- 结果存储：包自带的 `CacheHealthResultStore`，只保留最近一次结果，不建表、不需要清理（缓存 `HEALTH_CACHE_STORE`，默认为默认缓存）。队列与调度的心跳同样存在缓存中，因此缓存必须是 Web、worker、调度进程共享的驱动（database、Redis、file），不能是 `array`。
+- 调度（`routes/console.php`，都 `->doNotMonitor()`）：每分钟 `health:check --no-notification`（执行检查并保存结果）、`health:schedule-check-heartbeat`、`health:queue-check-heartbeat`。包的通知关闭（`HEALTH_NOTIFICATIONS_ENABLED`，默认 false）。
+- **不开放包自带的 HTTP 端点**：不注册 `HealthCheckResultsController` / `HealthCheckJsonResultsController` 的路由，`health.oh_dear_endpoint.enabled` 为 false。给负载均衡用的存活探针使用 Laravel 自带的 `/up`（`bootstrap/app.php` 的 `health`）：只表示应用能启动并处理请求，不检查数据库等依赖，避免依赖抖动时整组实例被摘除。
+- 输出：`{ finished_at, checks: [{ name, label, status, short_summary, notification_message, meta }] }`；尚无结果时 `finished_at` 为 null、`checks` 为 `[]`。`status`：`ok`、`warning`、`failed`、`crashed`（检查本身抛出异常）、`skipped`。`label`、`notification_message`、`short_summary` 是包的英文文案：前端按 `name` 翻译标签，消息原样显示。
+- **立即检查**：Action `RunHealthChecks` 同步执行 `health:check --no-notification`（同一套检查，同时更新保存的结果），返回最新结果。耗时取决于检查项，通常不到 1 秒（数据库、缓存的连接超时除外），因此限流。
+
+**系统信息**（`GET /monitor/system-info`，Query `SystemInfo`，每次请求实时读取，开销很小，不缓存）
+
+```json
+{
+  "app": { "name", "environment", "debug", "maintenance", "timezone", "locale", "fallback_locale" },
+  "runtime": { "php_version", "laravel_version", "server", "sapi", "os", "opcache", "memory_limit", "max_execution_time", "upload_max_filesize", "post_max_size" },
+  "drivers": {
+    "database": { "connection", "driver", "version" }, "cache": { "store", "driver" }, "queue": { "connection", "driver" },
+    "session": { "driver" }, "filesystem": { "disk", "driver" }
+  },
+  "disk": { "total_bytes", "free_bytes", "used_bytes" },
+  "server_time"
+}
+```
+
+- `runtime.server`：`octane`（Octane worker，`$_SERVER['LARAVEL_OCTANE']`）、`fpm`（`fpm-fcgi`）、`cli`，其他为 PHP_SAPI 原值；`opcache` 是本进程是否启用了 OPcache（命令行下通常为 false）；`os` 只输出系统类型（`PHP_OS_FAMILY`），不输出主机名与内核版本。
+- `disk` 是 `storage/` 所在磁盘，无法获取时（函数被禁用）为 null；`database.version` 取不到时为 null。
+- **不输出**：密钥、密码、用户名、主机名与端口、`APP_URL`、任何路径、环境变量与 `.env` 的内容；只输出驱动与连接、存储的名称。
+
+**授权、数据范围与限流**
+
+- Policy：`ScheduledTaskPolicy`（`viewAny` / `view`：`monitor.schedule`；`run`：`monitor.schedule.run`）、`ScheduledTaskLogPolicy`（`viewAny` / `view`：`monitor.schedule`）、`FailedJobPolicy`（`viewAny` / `view`：`monitor.failed-job`；`retry`、`retryAny`：`monitor.failed-job.retry`；`delete`、`deleteAny`（清空）：`monitor.failed-job.delete`），其余方法拒绝。执行记录接口检查的是所属任务的 `view`。
+- 健康检查与系统信息没有模型：控制器直接声明权限码（`#[Authorize('monitor.health')]`、`#[Authorize('monitor.health.check')]`），由 `Gate::before` 判定（§8.1）。
+- **不按数据范围过滤**：定时任务、失败任务、健康状态与系统信息属于系统本身，不属于、也不“关于”某个用户（没有 `created_by`、causer 或所属用户可以委托，§8.4），能否访问只由权限码决定。失败任务的 payload 与异常可能含任意用户的数据，只授予可信的运维角色。
+- **限流**：立即执行、重试（单条与全部）、立即检查在 admin 入口的总限流之外，另经过 `admin-ops` 限流器：每个用户每分钟 `config('core.apps.admin.ops_rate_limit')`（`CORE_ADMIN_OPS_RATE_LIMIT`，默认 10）次，超过返回 429。
 
 ## 7. 认证
 
@@ -928,15 +1017,15 @@ Scramble 的兼容性在引入时另行验证。
 | 进程 | 说明 |
 |---|---|
 | Web | PHP-FPM，或 Octane（FrankenPHP） |
-| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理 |
-| 调度 | cron 调用 `schedule:run`，或 `schedule:work` |
+| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理；须处理默认队列（健康检查的队列心跳、定时任务的“立即执行”，§6.6） |
+| 调度 | cron 每分钟调用 `schedule:run`，或 `schedule:work`；健康检查的调度心跳依赖它（§6.6） |
 | Reverb | 启用实时推送时 |
 
 ### 11.4 发布流程
 
 1. 数据库迁移（迁移必须向下兼容）；
 2. 切换新代码或新镜像；
-3. `php artisan optimize`，然后 `php artisan core:sync-permissions` 同步菜单与权限节点（§8.2）；
+3. `php artisan optimize`，然后 `php artisan core:sync-permissions` 同步菜单与权限节点（§8.2），`php artisan schedule-monitor:sync` 把调度定义同步到定时任务监控（§6.6；会删除调度中已不存在的任务）；
 4. PHP-FPM：平滑重载 FPM（刷新 OPcache）；Octane：`php artisan octane:reload`（**必需**，否则仍运行内存中的旧代码）；
 5. `php artisan queue:restart`，让队列进程加载新代码。
 
@@ -962,7 +1051,7 @@ Scramble 的兼容性在引入时另行验证。
 | laravel/framework 13 | 框架 |
 | laravel/fortify 1.43 | **完整使用**：登录、两步验证、找回密码、邮箱验证、确认密码、个人资料（连带安装 laravel/passkeys 0.3，功能关闭） |
 | laravel/sanctum 4.5 | SPA 会话认证 + token |
-| laravel/pulse 1.11 | 生产性能监控 |
+| laravel/pulse 1.11 | 生产性能监控（接入方式待定，暂不安装，§14） |
 | laravel/octane 2.25 | 可选：常驻内存运行（FrankenPHP） |
 | laravel/horizon 5.52 | 可选：Redis 队列管理（需 pcntl，Linux） |
 | laravel/reverb 1.14 | 可选：实时推送 |
@@ -976,8 +1065,8 @@ Scramble 的兼容性在引入时另行验证。
 | laravel-query-builder 7.3 | 列表筛选、排序、关联加载 |
 | laravel-activitylog 5.1 | 数据变更审计、操作日志、登录日志（统一存储，按日志名区分，§6.6）。已核实 5.1.5：有状态的服务（`CauserResolver`、`ActivityLogStatus`、`ActivityBuffer`）都以 `scoped` 注册，Octane 下无需登记 flush；不使用其静态的 `beforeLogging()` 回调 |
 | laravel-backup 10.4 | 数据库与文件备份 |
-| laravel-health 1.42 | 健康检查 |
-| laravel-schedule-monitor 4.3 | 定时任务执行监控 |
+| laravel-health 1.42 | 健康检查（§6.6）。已核实 1.42.0：`illuminate/*` ^13.0；结果存缓存（`CacheHealthResultStore`）；`Health` 单例只在启动时登记检查，不保存请求数据；不注册其 HTTP 端点 |
+| laravel-schedule-monitor 4.3 | 定时任务执行监控（§6.6）。已核实 4.3.3：`illuminate/bus` ^13.0；单例 `MonitoredScheduledTasks` 只在定义调度时按事件对象记录 `monitorName` 等设置，不保存请求数据；不使用 Oh Dear（未配置 `monitor_id` 时同步只写本地表） |
 | simple-excel 3.11 | 流式导入导出 |
 
 **其他**
@@ -1037,8 +1126,8 @@ Scramble 的兼容性在引入时另行验证。
 | 附件 | 上传记录、归属校验、删除时清理文件 | Storage |
 | 通知中心 | 我的通知、已读、全部已读接口 | Laravel 数据库通知 |
 | 公告 | 公告管理、发布后分批群发 | Notifications、`Bus::batch` |
-| 定时任务 / 失败任务 | 列表、立即执行、重试、删除接口 | spatie/laravel-schedule-monitor、`failed_jobs` |
-| 系统监控 | 健康状态与系统信息接口 | spatie/laravel-health、Pulse |
+| 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
+| 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 待定（§14） |
 | 枚举选项 | 统一枚举接口 + 选项下发接口 | PHP 枚举 |
 | 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
 | 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
@@ -1054,4 +1143,5 @@ Scramble 的兼容性在引入时另行验证。
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
 | 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）与在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
+| Pulse | 设计原定“系统监控依托 Pulse”，但 Pulse 的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突。暂不安装；接入时只用它的记录器写入 `pulse_*` 表，由后台接口读取聚合数据给前端图表，`/pulse` 页面最多作为只对超管开放的运维入口 |
 | `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |

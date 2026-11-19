@@ -49,7 +49,7 @@ it('does not mask keys that only contain the word code', function (): void {
 });
 
 it('masks the keys added in the configuration', function (): void {
-    config(['core.monitor.operation_log.masked_keys' => [...config()->array('core.monitor.operation_log.masked_keys'), 'id_card*']]);
+    config(['core.monitor.masked_keys' => [...config()->array('core.monitor.masked_keys'), 'id_card*']]);
 
     expect(maskPayload(['id_card_number' => '110101', 'password' => 'secret', 'name' => 'Alice']))
         ->toBe(['id_card_number' => '******', 'password' => '******', 'name' => 'Alice']);

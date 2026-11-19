@@ -33,6 +33,11 @@ class AdminServiceProvider extends ServiceProvider
     public const string NAME = 'admin';
 
     /**
+     * 运维动作的限流器名（定时任务的立即执行、失败任务的重试、立即健康检查，设计文档 §6.6）：路由上用 `throttle:admin-ops`。
+     */
+    public const string OPS_LIMITER = self::NAME.'-ops';
+
+    /**
      * Register any application services.
      *
      * Fortify 的路由挂在本入口下（admin 中间件组），本入口不加载时不注册；每次启动时按配置重新设置（静态开关，测试中会重建应用）。
@@ -84,16 +89,25 @@ class AdminServiceProvider extends ServiceProvider
     }
 
     /**
-     * 每分钟请求上限：已登录按用户计数，未登录按 IP 计数。
+     * 每分钟请求上限：已登录按用户计数，未登录按 IP 计数。运维动作另有 OPS_LIMITER（ops_rate_limit），同样按用户计数。
      */
     protected function configureRateLimiting(): void
     {
-        RateLimiter::for(self::NAME, function (Request $request): Limit {
-            $user = $request->user()?->getAuthIdentifier();
+        RateLimiter::for(self::NAME, fn (Request $request): Limit => Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.rate_limit'))
+            ->by(self::rateLimitKey($request)));
 
-            return Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.rate_limit'))
-                ->by(is_scalar($user) ? 'user:'.$user : 'ip:'.$request->ip());
-        });
+        RateLimiter::for(self::OPS_LIMITER, fn (Request $request): Limit => Limit::perMinute(config()->integer('core.apps.'.self::NAME.'.ops_rate_limit'))
+            ->by(self::rateLimitKey($request)));
+    }
+
+    /**
+     * 限流的计数键：已登录按用户，未登录按 IP。
+     */
+    protected static function rateLimitKey(Request $request): string
+    {
+        $user = $request->user()?->getAuthIdentifier();
+
+        return is_scalar($user) ? 'user:'.$user : 'ip:'.$request->ip();
     }
 
     /**

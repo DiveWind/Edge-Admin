@@ -3,13 +3,16 @@
 namespace App\Core\Monitor;
 
 use App\Core\Monitor\Listeners\RecordLoginActivity;
-use App\Core\Monitor\Models\{Activity, LoginLog, OperationLog, Session};
+use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
 use App\Core\Monitor\Policies\PersonalAccessTokenPolicy;
 use App\Core\System\Contracts\MenuRegistry;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\{Event, Gate};
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\PersonalAccessToken;
+use Spatie\Health\Checks\Check;
+use Spatie\Health\Checks\Checks\{CacheCheck, DatabaseCheck, DatabaseConnectionCountCheck, DebugModeCheck, EnvironmentCheck, OptimizedAppCheck, QueueCheck, ScheduleCheck, UsedDiskSpaceCheck};
+use Spatie\Health\Facades\Health;
 
 /**
  * Monitor（内核模块）：职责与对外提供的能力见同目录的 README.md。
@@ -19,9 +22,11 @@ use Laravel\Sanctum\PersonalAccessToken;
  *
  * - 菜单与权限节点（resources/menus.php）注册到 System 的 MenuRegistry；
  * - 登录日志：RecordLoginActivity 订阅认证事件（设计文档 §7.3）；
- * - Sanctum 的 PersonalAccessToken 不在 app/ 中，Policy 无法按命名推断，这里显式绑定 PersonalAccessTokenPolicy。
+ * - Sanctum 的 PersonalAccessToken 不在 app/ 中，Policy 无法按命名推断，这里显式绑定 PersonalAccessTokenPolicy；
+ * - 健康检查的检查项（spatie/laravel-health，阈值见 config('core.monitor.health')，设计文档 §6.6）：只在启动时登记到 Health 单例，
+ *   不保存请求数据。
  *
- * 操作日志的中间件在后台入口（App\Http\Admin\Middleware\RecordOperationLog），过期日志的清理在 routes/console.php 中调度。
+ * 操作日志的中间件在后台入口（App\Http\Admin\Middleware\RecordOperationLog）；过期日志、执行记录的清理与健康检查、心跳在 routes/console.php 中调度。
  */
 class MonitorServiceProvider extends ServiceProvider
 {
@@ -43,6 +48,9 @@ class MonitorServiceProvider extends ServiceProvider
             'operation_log' => OperationLog::class,
             'login_log' => LoginLog::class,
             'session' => Session::class,
+            'scheduled_task' => ScheduledTask::class,
+            'scheduled_task_log' => ScheduledTaskLog::class,
+            'failed_job' => FailedJob::class,
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
@@ -50,5 +58,38 @@ class MonitorServiceProvider extends ServiceProvider
         Gate::policy(PersonalAccessToken::class, PersonalAccessTokenPolicy::class);
 
         Event::subscribe(RecordLoginActivity::class);
+
+        Health::checks($this->healthChecks());
+    }
+
+    /**
+     * 健康检查项（设计文档 §6.6）：数据库连接数只在 MySQL / MariaDB / PostgreSQL 下注册，磁盘使用率依赖 `df`（Windows 下默认关闭）。
+     *
+     * @return list<Check>
+     */
+    protected function healthChecks(): array
+    {
+        $health = 'core.monitor.health.';
+        $connection = config()->string('database.default');
+
+        return array_values(array_filter([
+            DatabaseCheck::new(),
+            in_array(config("database.connections.{$connection}.driver"), ['mysql', 'mariadb', 'pgsql'], true)
+                ? DatabaseConnectionCountCheck::new()
+                    ->warnWhenMoreConnectionsThan(config()->integer($health.'database_connections.warning'))
+                    ->failWhenMoreConnectionsThan(config()->integer($health.'database_connections.failure'))
+                : null,
+            CacheCheck::new(),
+            config()->boolean($health.'disk_space.enabled')
+                ? UsedDiskSpaceCheck::new()
+                    ->warnWhenUsedSpaceIsAbovePercentage(config()->integer($health.'disk_space.warning_percentage'))
+                    ->failWhenUsedSpaceIsAbovePercentage(config()->integer($health.'disk_space.failure_percentage'))
+                : null,
+            QueueCheck::new()->failWhenHealthJobTakesLongerThanMinutes(config()->integer($health.'queue_heartbeat_minutes')),
+            ScheduleCheck::new()->heartbeatMaxAgeInMinutes(config()->integer($health.'schedule_heartbeat_minutes')),
+            DebugModeCheck::new(),
+            EnvironmentCheck::new()->expectEnvironment(config()->string($health.'environment')),
+            OptimizedAppCheck::new(),
+        ]));
     }
 }

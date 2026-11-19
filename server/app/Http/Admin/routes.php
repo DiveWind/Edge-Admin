@@ -1,6 +1,7 @@
 <?php
 
-use App\Http\Admin\Monitor\Controllers\{LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController};
+use App\Http\Admin\AdminServiceProvider;
+use App\Http\Admin\Monitor\Controllers\{FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
 use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, MenuController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
@@ -43,8 +44,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::apiResource('menus', MenuController::class)->whereNumber('menu');
     });
 
-    // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位
+    // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位，失败任务的 {failed_job} 是 UUID；
+    // 立即执行、重试、立即检查另经过运维动作的限流（admin-ops）
     Route::prefix('monitor')->name('monitor.')->group(function (): void {
+        $ops = 'throttle:'.AdminServiceProvider::OPS_LIMITER;
+
         Route::apiResource('operation-logs', OperationLogController::class)->only(['index', 'show'])->whereNumber('operation_log');
         Route::apiResource('login-logs', LoginLogController::class)->only(['index', 'show'])->whereNumber('login_log');
 
@@ -52,5 +56,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::apiResource('sessions', OnlineSessionController::class)->only(['index', 'destroy'])->where(['session' => '[A-Za-z0-9]{16}']);
             Route::apiResource('tokens', OnlineTokenController::class)->only(['index', 'destroy'])->whereNumber('token');
         });
+
+        Route::get('schedules/{schedule}/logs', ScheduledTaskLogController::class)->whereNumber('schedule')->name('schedules.logs');
+        Route::post('schedules/{schedule}/run', RunScheduledTaskController::class)->whereNumber('schedule')->middleware($ops)->name('schedules.run');
+        Route::apiResource('schedules', ScheduledTaskController::class)->only(['index']);
+
+        Route::post('failed-jobs/retry', RetryFailedJobsController::class)->middleware($ops)->name('failed-jobs.retry-all');
+        Route::post('failed-jobs/{failed_job}/retry', RetryFailedJobController::class)->whereUuid('failed_job')->middleware($ops)->name('failed-jobs.retry');
+        Route::delete('failed-jobs', FlushFailedJobsController::class)->name('failed-jobs.flush');
+        Route::apiResource('failed-jobs', FailedJobController::class)->only(['index', 'show', 'destroy'])->whereUuid('failed_job');
+
+        Route::get('health', HealthResultController::class)->name('health');
+        Route::post('health/check', RunHealthChecksController::class)->middleware($ops)->name('health.check');
+        Route::get('system-info', SystemInfoController::class)->name('system-info');
     });
 });

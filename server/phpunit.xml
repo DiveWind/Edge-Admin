@@ -48,6 +48,7 @@
         <env name="CORE_APPS" value="admin"/>
         <env name="CORE_ADMIN_PREFIX" value="api/admin"/>
         <env name="CORE_ADMIN_RATE_LIMIT" value="120"/>
+        <env name="CORE_ADMIN_OPS_RATE_LIMIT" value="10"/>
         <env name="CORE_ADMIN_PAGE_SIZE" value="20"/>
         <env name="CORE_ADMIN_MAX_PAGE_SIZE" value="100"/>
         <env name="CORE_ADMIN_HOME_PATH" value="/analytics"/>

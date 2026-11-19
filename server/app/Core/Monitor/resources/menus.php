@@ -10,6 +10,8 @@
 |
 | 菜单节点自身的权限码就是“查看 / 列表”权限。日志只读，没有按钮（不提供删除、清空，过期日志由调度清理）；
 | 在线会话的强制下线（会话与 token）是按钮 monitor.online.logout。
+| 定时任务（schedule，避免与队列任务 job 混淆）：立即执行 monitor.schedule.run；失败任务：重试、删除（含清空）；
+| 健康检查与系统信息合并为一页（monitor.health），立即检查是按钮 monitor.health.check。
 |
 */
 
@@ -43,6 +45,37 @@ return [
                 'path' => '/monitor/login-log',
                 'component' => '/monitor/login-log/list',
                 'meta' => ['title' => 'monitor.loginLog.title', 'icon' => 'lucide:log-in', 'order' => 30],
+            ],
+            [
+                'name' => 'monitor.schedule',
+                'type' => 'menu',
+                'path' => '/monitor/schedule',
+                'component' => '/monitor/schedule/list',
+                'meta' => ['title' => 'monitor.schedule.title', 'icon' => 'lucide:calendar-clock', 'order' => 40],
+                'buttons' => [
+                    'run' => 'monitor.schedule.run',
+                ],
+            ],
+            [
+                'name' => 'monitor.failed-job',
+                'type' => 'menu',
+                'path' => '/monitor/failed-job',
+                'component' => '/monitor/failed-job/list',
+                'meta' => ['title' => 'monitor.failedJob.title', 'icon' => 'lucide:circle-x', 'order' => 50],
+                'buttons' => [
+                    'retry' => 'monitor.failedJob.retry',
+                    'delete' => 'common.delete',
+                ],
+            ],
+            [
+                'name' => 'monitor.health',
+                'type' => 'menu',
+                'path' => '/monitor/health',
+                'component' => '/monitor/health/index',
+                'meta' => ['title' => 'monitor.health.title', 'icon' => 'lucide:heart-pulse', 'order' => 60],
+                'buttons' => [
+                    'check' => 'monitor.health.check',
+                ],
             ],
         ],
     ],
