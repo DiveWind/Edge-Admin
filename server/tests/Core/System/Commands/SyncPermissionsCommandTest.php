@@ -205,7 +205,7 @@ it('does not recreate an existing super-admin role', function (): void {
         ->title->toBe('Root');
 });
 
-it('syncs the nodes declared by the System module', function (): void {
+it('syncs the nodes declared by the Core modules', function (): void {
     $this->artisan('core:sync-permissions')->assertSuccessful();
 
     expect(Permission::query()->orderBy('id')->pluck('name')->all())->toBe([
@@ -213,6 +213,7 @@ it('syncs the nodes declared by the System module', function (): void {
         'system.user', 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password',
         'system.role', 'system.role.create', 'system.role.update', 'system.role.delete', 'system.role.status',
         'system.menu', 'system.menu.create', 'system.menu.update', 'system.menu.delete',
+        'monitor', 'monitor.online', 'monitor.online.logout', 'monitor.operation-log', 'monitor.login-log',
     ])->and(node('system.menu')->component)->toBe('/system/menu/list');
 });
 

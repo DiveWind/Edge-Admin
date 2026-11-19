@@ -2,7 +2,7 @@
 
 namespace App\Http\Admin;
 
-use App\Http\Admin\Middleware\{ForceJson, FormatResponse};
+use App\Http\Admin\Middleware\{ForceJson, FormatResponse, RecordOperationLog};
 use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenResponse};
 use App\Http\Middleware\EnsureUserIsEnabled;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -61,11 +61,12 @@ class AdminServiceProvider extends ServiceProvider
      * admin 中间件组（按顺序）：
      *
      * 1. FormatResponse：最外层，组内其他中间件的响应与异常（含 CSRF 的 419、限流的 429、未登录的 401）也被包装为 Vben 格式；
-     * 2. ForceJson：请求一律按 JSON 处理，Fortify 等不会返回重定向；
-     * 3. EnsureFrontendRequestsAreStateful：来自 SANCTUM_STATEFUL_DOMAINS 的请求（按 Referer / Origin）启动会话、
+     * 2. RecordOperationLog：已登录用户的写请求记入操作日志（排除登录、登出等认证请求，响应发送后写入，设计文档 §6.6）；
+     * 3. ForceJson：请求一律按 JSON 处理，Fortify 等不会返回重定向；
+     * 4. EnsureFrontendRequestsAreStateful：来自 SANCTUM_STATEFUL_DOMAINS 的请求（按 Referer / Origin）启动会话、
      *    校验 CSRF（X-XSRF-TOKEN）、修改密码后让其他会话失效（Sanctum 的 AuthenticateSession）；其他请求只能用 Bearer token；
-     * 4. EnsureUserIsEnabled：停用的账号立即失效（401）；
-     * 5. 限流（已登录按用户、未登录按 IP）与路由模型绑定。
+     * 5. EnsureUserIsEnabled：停用的账号立即失效（401）；
+     * 6. 限流（已登录按用户、未登录按 IP）与路由模型绑定。
      *
      * 需要登录的路由加 `auth:sanctum`（会话与 token 都能识别）；它按框架的中间件优先级排在限流之前。
      */
@@ -73,6 +74,7 @@ class AdminServiceProvider extends ServiceProvider
     {
         Route::middlewareGroup(self::NAME, [
             FormatResponse::class,
+            RecordOperationLog::class,
             ForceJson::class,
             EnsureFrontendRequestsAreStateful::class,
             EnsureUserIsEnabled::class,

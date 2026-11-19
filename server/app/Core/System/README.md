@@ -5,7 +5,7 @@
 ## 职责
 
 - 后台用户（`Models/User`，多态别名 `user`）与账号状态（`Enums/Status`：启用 / 停用，用户、角色、菜单节点共用）；
-- 认证（设计文档 §7）：Fortify 的登录校验、修改资料、修改密码、重置密码使用本模块的 Action；登录与两步验证的限流器；
+- 认证（设计文档 §7）：Fortify 的登录校验、修改资料、修改密码、重置密码使用本模块的 Action；登录与两步验证的限流器（登录被限流时派发 `Lockout`）；
   找回密码邮件中的前端链接（均在 `SystemServiceProvider` 中配置）；
 - 停用账号、修改密码时让已登录的会话与 token 失效；
 - 角色与菜单权限（设计文档 §8.1、§8.2）：`Models/Role`、`Models/Permission`（继承 spatie 的模型，菜单树建在 `permissions` 表上，
@@ -23,7 +23,7 @@
 
 | 类 | 用途 |
 |---|---|
-| `Actions/AuthenticateUser` | 用户名 + 密码校验；停用账号抛出 422（`username`）。由 `Fortify::authenticateUsing()` 调用 |
+| `Actions/AuthenticateUser` | 用户名 + 密码校验；停用账号抛出 422（`username`），抛出前派发 `Failed`（只带用户名，供 Monitor 的登录日志）。由 `Fortify::authenticateUsing()` 调用 |
 | `Actions/UpdateUserProfileInformation` | 修改姓名、邮箱、头像（Fortify：`PUT /user/profile-information`） |
 | `Actions/UpdateUserPassword` | 修改密码，其他会话与全部 token 失效（Fortify：`PUT /user/password`） |
 | `Actions/ResetUserPassword` | 重置密码，全部会话与 token 失效（Fortify：`POST /reset-password`） |
@@ -193,6 +193,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
   ```
 
 - `Services/DataScopeRegistry`：单例（`#[Singleton]`），只保存注册的提供者；key 重复或不合法时抛出 `InvalidArgumentException`。
+  `isUnrestrictedFor($user)`：超管或任一启用角色为 `all`（不受数据范围限制，`HasDataScope` 与 Monitor 的日志共用）；
   `grantableKeysFor($user)` / `canGrant($user, $key)` 是数据范围的防提权（§8.5）：超管或任一启用角色为 `all` → 全部已登记范围，
   否则为各启用角色的范围；角色管理、分配角色、`/system/roles/data-scopes` 的选项共用。
   本模块注册 `all`（`AllDataScope`，不限制）与 `self`（`SelfDataScope`，按模型声明的归属列，见下）；

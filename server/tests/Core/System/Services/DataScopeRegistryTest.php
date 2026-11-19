@@ -61,3 +61,15 @@ it('grants only the registered scopes of the enabled roles otherwise', function 
 it('grants nothing to users without enabled roles', function (): void {
     expect(resolve(DataScopeRegistry::class)->grantableKeysFor(User::factory()->create()))->toBe([]);
 });
+
+it('is unrestricted only for super admins and enabled roles with the all scope', function (array $roles, bool $unrestricted): void {
+    $user = User::factory()->create()->assignRole(...$roles);
+
+    expect(resolve(DataScopeRegistry::class)->isUnrestrictedFor($user))->toBe($unrestricted);
+})->with([
+    'super admin' => fn (): array => [[Role::factory()->superAdmin()->create(['data_scope' => 'self'])], true],
+    'enabled all scope' => fn (): array => [[Role::factory()->create(['data_scope' => 'self']), Role::factory()->create(['data_scope' => 'all'])], true],
+    'disabled all scope' => fn (): array => [[Role::factory()->disabled()->create(['data_scope' => 'all'])], false],
+    'self scope' => fn (): array => [[Role::factory()->create(['data_scope' => 'self'])], false],
+    'no roles' => fn (): array => [[], false],
+]);

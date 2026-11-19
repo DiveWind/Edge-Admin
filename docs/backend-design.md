@@ -241,7 +241,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | 数据权限范围提供者 | 实现 `App\Core\System\Contracts\DataScopeProvider` 并注册到 `DataScopeRegistry`（如按部门、区域），角色表单中自动出现（§8.4） |
 | 系统参数分组 | 注册本模块的参数分组与默认值 |
 | 字典类型 | 声明本模块用到的字典类型与初始字典项 |
-| 日志 | 写入 activitylog 时使用本模块的日志名；操作日志文案放在模块语言包中 |
+| 日志 | 数据变更审计写入 activitylog 时使用本模块的日志名（模块名小写，如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
 | 通知 | 定义本模块的通知类，统一出现在通知中心 |
 | 异步导出 | 实现导出接口，即接入统一的异步导出、完成通知与下载 |
 | 枚举选项 | 枚举实现统一接口，即可由选项接口下发给前端 |
@@ -303,7 +303,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码）、非超管操作超管用户、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色。
   - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
@@ -447,6 +447,78 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 路由参数加格式约束（§9）：`{user}`、`{role}`、`{menu}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
 - 业务保护规则（不能删除自己、内置节点不能删等）见 §8.6。
 
+### 6.6 监控接口
+
+前缀与 §6.5 相同；内核模块 `app/Core/Monitor`，接口在 `app/Http/Admin/Monitor`。日志只读：**不提供新增、修改、删除、清空接口**，过期日志由调度清理（下文“日志的存储”）。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `GET /monitor/operation-logs` | 操作日志分页；不含 `route_parameters`、`payload` | `monitor.operation-log` |
+| `GET /monitor/operation-logs/{operation_log}` | 详情，含 `route_parameters`、`payload` | `monitor.operation-log` |
+| `GET /monitor/login-logs` | 登录日志分页 | `monitor.login-log` |
+| `GET /monitor/login-logs/{login_log}` | 详情（字段同列表） | `monitor.login-log` |
+| `GET /monitor/online/sessions` | 在线会话分页 | `monitor.online` |
+| `DELETE /monitor/online/sessions/{session}` | 强制下线：删除该会话 | `monitor.online.logout` |
+| `GET /monitor/online/tokens` | 有效的 token 分页 | `monitor.online` |
+| `DELETE /monitor/online/tokens/{token}` | 吊销该 token | `monitor.online.logout` |
+
+- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token。
+- 路由参数加格式约束（§9）：`{operation_log}`、`{login_log}`、`{token}` 只匹配数字，`{session}` 只匹配 16 位字母与数字。
+
+**日志的存储**
+
+- 操作日志、登录日志与各模块的数据变更审计统一存在 spatie/laravel-activitylog 的 `activity_log` 表中，按日志名（`log_name`）区分：`operation`（操作日志）、`login`（登录日志）为 Monitor 保留，模块的审计使用模块自己的日志名（§5.5）。
+- 模型：`App\Core\Monitor\Models\Activity` 继承 spatie 的模型（`config('activitylog.activity_model')` 指向它，多态别名 `activity`），写入时自动在 `properties.request_id` 中记下当前请求 ID（`Context` 的 `request_id`，§9；随队列任务传递），模块的审计日志同样带上，可与同一请求的操作日志关联。`OperationLog`、`LoginLog` 继承它，各带日志名的全局作用域：路由模型绑定、列表都只能取到本类日志（用操作日志的 id 请求登录日志详情为 404）。
+- `causer` 是关联的后台用户（多态别名 `user`）；日志另存 `properties.username` 作为写入时的快照，用户改名、被删除后仍能看到是谁。
+- 筛选的 `properties.*` 字段用 JSON 路径查询（查询构造器的 `properties->username`，三种数据库通用），没有索引；日志量很大时再按需加生成列与索引。
+- 清理：调度每天执行 `activitylog:clean --force`（`routes/console.php`），删除早于 `activitylog.clean_after_days`（环境变量 `ACTIVITYLOG_CLEAN_AFTER_DAYS`，默认 365）天的全部日志（含模块的审计）。
+
+**操作日志**（`log_name = operation`）
+
+- 记录方式：后台入口的中间件 `App\Http\Admin\Middleware\RecordOperationLog`（admin 中间件组的第二个，紧随 `FormatResponse`），调用 Monitor 的 Action `LogOperation` 写入。规则：
+  - 只记写请求：`POST`、`PUT`、`PATCH`、`DELETE`；
+  - 只记已登录用户（请求结束时 `$request->user()` 是后台用户）的请求：未登录的写请求（登录失败、找回密码等）不记；
+  - 认证请求只记登录日志，不记操作日志：路由名在 `config('core.monitor.operation_log.except_routes')` 中的不记，默认是登录（`login.store`）、登出（`logout`）、两步验证登录（`two-factor.login.store`）；个人设置中的修改资料、修改密码、开启 / 关闭两步验证等照常记录；
+  - 无论成功失败都记，`status` 为最终的 HTTP 状态码（含 403、422、500）。
+- 记录内容：`causer`（操作者）、`description`（路由名，如 `admin.system.users.store`、`user-password.update`；路由没有名称时为 `<方法> /<路由 URI>`）与 `properties`：`username`、`method`、`path`（实际请求路径，以 `/` 开头）、`route_parameters`（路由参数，取原始值）、`payload`（请求体，脱敏）、`status`、`duration_ms`（从进入本中间件到得到响应的毫秒数）、`ip_address`、`user_agent`（最长 500 字符）、`request_id`。
+- `payload` 只取请求体（JSON 或表单字段，不含查询字符串；上传的文件不记录），在进入后续中间件之前读取，即提交的原始内容。
+- **截断**（与脱敏一起在 Action 中完成）：字符串值超过 `config('core.monitor.operation_log.max_value_length')`（默认 1000）个字符的，保留前面部分并加上 `…(truncated)`，递归处理，`route_parameters` 同样适用；脱敏、截断后的 `payload` 编码为 JSON 仍超过 `max_payload_bytes`（默认 65536 字节）时，整体替换为 `{ "_truncated": true, "_bytes": 原始请求体的 JSON 字节数 }`。
+- **脱敏**：键名（不区分大小写，支持 `*` 通配）与 `config('core.monitor.operation_log.masked_keys')` 匹配的值整体替换为 `******`，递归处理嵌套对象与数组；默认 `*password*`（含 `password_confirmation`、`current_password`）、`*token*`、`*secret*`、`code`、`recovery_code`。`route_parameters` 同样脱敏。脱敏在 Action 中完成，任何调用方写入的操作日志都经过它。
+- **写入失败不影响响应**：在响应发送之后写入（`defer(...)->always()`，4xx / 5xx 也写），异常只 `report()`，不抛出。PHP-FPM 下在 `fastcgi_finish_request()` 之后执行；Octane 下由 worker 在发送响应后执行（框架的 `InvokeDeferredCallbacks`），不延迟响应，但该 worker 要等写完才接下一个请求。数据只在闭包中捕获，不放静态属性或单例。
+- 文案：`description` 是路由名，由前端翻译（前端 locales 中以路由名为 key，找不到时直接显示路由名）；后端不翻译（§5.5）。
+- 输出字段：`id`、`user_id`（`causer_id`，用户被删除后保留原值）、`username`、`description`、`method`、`path`、`status`、`duration_ms`、`ip_address`、`user_agent`、`request_id`、`created_at`；详情另含 `route_parameters` 与 `payload`（已脱敏）：通常是对象，为空时为 `[]`（响应包装按数组解码，无法区分空对象与空数组）。
+- 列表：筛选 `user_id`、`method`（大写）、`status`、`request_id`（精确），`username`、`description`、`ip_address`（模糊），`created_at`（区间，§6.3）；排序 `id`、`created_at`，默认 `-id`。
+
+**登录日志**（`log_name = login`，记录规则见 §7.3）
+
+- 输出字段：`id`、`event`、`reason`、`via_remember`、`user_id`（事件涉及的账号；用户名不存在时为 null）、`username`、`ip_address`、`user_agent`、`request_id`、`created_at`。
+  - `event`：`login`（登录成功）、`logout`（登出）、`failed`（登录失败）、`lockout`（登录过于频繁，被限流拒绝）、`password_reset`（通过找回密码重置了密码）。“结果”即 `event`：成功为 `login`，失败为 `failed`、`lockout`。
+  - `via_remember`：只有 `login` 有——`true` 表示由“记住我”的 Cookie 自动恢复登录（会话已过期），`false` 表示提交用户名密码（或两步验证）登录；其余事件为 null。
+  - `reason`：只有 `failed` 有值——`invalid_credentials`（用户名或密码错误）、`disabled`（账号已停用）、`two_factor`（动态码或恢复码错误）；其余为 null。
+  - `username`：成功、登出、重置密码时为账号的用户名；失败、限流时为提交的用户名（转为小写，最长 255 字符）。**密码与重置密码的 token 在任何情况下都不记录。**
+- 列表：筛选 `user_id`、`event`、`reason`、`request_id`（精确；`event`、`reason` 可用逗号传多个，如失败的登录 `filter[event]=failed,lockout`），`username`、`ip_address`（模糊），`created_at`（区间）；排序 `id`、`created_at`，默认 `-id`。
+
+**在线会话与 token**（§7.3）
+
+- **会话**：读取 database 会话驱动的会话表（`config('session.table')`，`config('session.connection')`），模型 `App\Core\Monitor\Models\Session`（只读，删除走 Action）。“在线”是 `user_id` 非空、`last_activity` 在 `session.lifetime` 分钟之内的会话。
+  - 输出字段：`id`（**会话 ID 的前 16 位**：完整的会话 ID 就是登录凭据，不对外输出；前 16 位足以唯一定位，剩余部分仍无法猜测）、`user`（`{ id, username, name }`）、`ip_address`、`user_agent`、`last_activity`、`is_current`（是否为发起本次请求的会话）。不输出会话内容（`payload`）。
+  - 列表：筛选 `user_id`（精确）、`username`、`ip_address`（模糊）；排序 `last_activity`，默认 `-last_activity`。
+  - 会话驱动不是 `database` 时：会话表不是会话的来源，视同没有在线会话——列表为空（`{ items: [], total: 0 }`），下线返回 404；token 不受影响。生产使用 Redis 会话时，在线会话需另行记录（§7.3）。
+- **token**：Sanctum 的 `personal_access_tokens` 中属于后台用户、仍然有效的 token：`expires_at` 为空或晚于现在，且配置了 `sanctum.expiration` 时创建于该分钟数之内（与 Sanctum 的校验一致）。
+  - 输出字段：`id`、`name`、`abilities`、`user`（`{ id, username, name }`）、`last_used_at`、`expires_at`、`created_at`、`is_current`（是否为本次请求使用的 token）。不输出 token 本身（库中只有哈希）。
+  - 列表：筛选 `user_id`（精确）、`username`、`name`（模糊）；排序 `id`、`last_used_at`、`created_at`，默认 `-id`。
+- **强制下线**：删除会话记录或 token，成功返回 `data: null`，对方的下一次请求即为 401。会话与 token 规则相同，Policy 返回 403：
+  - 没有 `monitor.online.logout`；
+  - 自己**当前**的会话、本次请求使用的 token（应使用退出登录）；自己的其他会话与 token 可以下线；
+  - 非超管下线超管用户的会话与 token（沿用用户管理的超管保护，§8.6）；
+  - 所属用户超出数据范围。
+
+**数据范围与授权**（§8.3、§8.4）
+
+- 日志的数据范围**委托给 causer 用户**：可见 causer 是自己可见的用户（`User::visibleTo()`）的日志；不受数据范围限制的操作者（超管，或任一启用角色的范围是 `all`，`DataScopeRegistry::isUnrestrictedFor()`）可见全部日志，包括没有 causer 的（用户名不存在的登录失败）与操作者已被删除的。这样按部门等维度新增的数据范围（§8.4）只要能约束用户，就自动适用于日志。
+- 会话与 token 按所属用户同样过滤（`whereHas` 到 `User::visibleTo()`）。列表经过数据范围；详情、下线超出范围 → 403。
+- Policy：`OperationLogPolicy`、`LoginLogPolicy`（`viewAny` / `view`，其余方法拒绝）；`SessionPolicy`（`viewAny`、`delete`，`view` 同 `viewAny` 加数据范围，其余拒绝）；Sanctum 的 `PersonalAccessToken` 不在 `app/` 中，由 `MonitorServiceProvider` 用 `Gate::policy()` 绑定 `PersonalAccessTokenPolicy`（规则同 `SessionPolicy`）。基类 `Activity` 的 `ActivityPolicy` 全部拒绝：模块审计日志的查看接口以后由各模块按需提供。
+
 ## 7. 认证
 
 ### 7.1 方案
@@ -478,8 +550,26 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 ### 7.3 认证相关的自建部分
 
-- **登录日志**：监听 Laravel 标准认证事件（登录成功、失败、锁定）写入。
-- **在线会话与强制下线**：会话使用 `database` 驱动（生产可用 Redis 并另行记录），列表读取会话记录；强制下线即删除会话；设备 / App 的 token 一并展示与吊销。
+- **登录日志**：监听 Laravel 与 Fortify 的标准认证事件，由 Monitor 的 Action `LogLogin` 写入 activitylog 的 `login` 日志（接口与字段见 §6.6）：
+
+  | 事件 | `event` | `reason` | 账号（`causer`） |
+  |---|---|---|---|
+  | `Illuminate\Auth\Events\Login`（含“记住我”自动登录；开启两步验证时在验证通过后才触发） | `login` | — | 登录的用户 |
+  | `Illuminate\Auth\Events\Logout` | `logout` | — | 登出的用户 |
+  | `Illuminate\Auth\Events\Failed` | `failed` | 账号已停用为 `disabled`，其余为 `invalid_credentials` | 事件带的用户，没有时按提交的用户名查找 |
+  | `Laravel\Fortify\Events\TwoFactorAuthenticationFailed` | `failed` | `two_factor` | 待验证的用户 |
+  | `Illuminate\Auth\Events\Lockout` | `lockout` | — | 按提交的用户名查找 |
+  | `Illuminate\Auth\Events\PasswordReset`（Fortify 的 `POST /reset-password`） | `password_reset` | — | 被重置密码的用户 |
+
+  - 只记录后台用户（`User`）的事件；同时记下 IP、User-Agent、请求 ID。
+  - “记住我”：`Login` 事件的 `remember` 在勾选“记住我”登录与用 recaller Cookie 恢复登录时都为 true，无法区分；监听按事件中的守卫名取守卫，用 `SessionGuard::viaRemember()`（恢复登录时先置位再派发 `Login`）写入 `properties.via_remember`；没有 `viaRemember()` 的守卫（token）为 false。
+  - `PasswordReset` 只带用户：不记录新密码与重置 token。管理员在用户管理中重置密码不派发它（记在操作日志中）。
+  - **不记录密码**：`Failed` 事件的 `credentials` 中含提交的密码，只取其中的用户名；不记录 `credentials` 本身与请求体。
+  - Fortify 在使用命名限流器（`fortify.limiters.login`）时不派发 `Lockout`，由登录限流器的拒绝响应（`SystemServiceProvider`）派发框架标准的 `Lockout` 事件。
+  - 停用账号用正确的密码登录时，`AuthenticateUser` 在返回 422 前派发 `Failed`（带该用户，`credentials` 只有用户名），否则这次尝试不会触发任何事件。
+  - 不记录：两步验证的质询（通过后有 `login`，失败有 `failed`）、确认密码、发送找回密码邮件。
+  - 写入失败只 `report()`，不影响登录本身。
+- **在线会话与强制下线**：会话使用 `database` 驱动（生产可用 Redis 并另行记录），列表读取会话表（`Session` 模型，只对外输出会话 ID 的前 16 位）；强制下线即删除会话；设备 / App 的 token 一并展示与吊销。非 database 驱动时会话列表为空。接口与规则见 §6.6。
 - **禁用账号立即生效**：中间件检查账号状态，并删除该用户全部会话与 token。
 - **设备 / App 的 token 签发接口**（Fortify 不发 token）。
 - **指定角色必须开启两步验证**：登录后的中间件检查，未开启则只允许访问两步验证设置。
@@ -631,6 +721,8 @@ public function delete(User $actor, User $user): Response
   2. 否则各启用角色的范围做 OR 并集；
   3. 没有启用角色，或范围 key 未登记 → 默认拒绝（查询加 `1=0`，单条判定为否）。范围 key 未登记的角色不贡献任何范围，用户其他角色的范围照常生效。
 - 停用的角色，其权限与数据范围都不生效。
+- `DataScopeRegistry::isUnrestrictedFor($user)`：超管，或任一启用角色的范围是 `all` → 不受数据范围限制（`HasDataScope` 的第 1 条规则，二者共用）。
+- 不属于某个用户、而是“关于”某个用户的记录（日志、会话、token），数据范围委托给关联的用户：`whereHas` 到 `User::visibleTo()`；不受限制的操作者另可看到没有关联用户的记录（§6.6）。
 - 职责划分：**角色决定能做什么（功能权限），范围提供者决定能看哪些数据（数据权限）**。多角色取并集只会让可见范围变大，不会变得更细；更细的范围需要新增一个数据维度（即新增提供者）。
 - **不内置部门等组织维度**。业务需要按部门、区域、门店等维度控制时，新增一个 `DataScopeProvider` 并在角色上选用即可，不改动脚手架代码。
 - **所有查询入口**都必须经过数据权限：列表、详情、**下拉选项接口**、导出、统计、全局搜索。
@@ -698,6 +790,12 @@ public function delete(User $actor, User $user): Response
 - 权限码全局唯一 —— 422（`name`）；非按钮节点的 `path` 唯一，且以 `/` 开头 —— 422（`path`）。并发写入撞上唯一索引时 Action 同样返回 422。
 - 停用向子孙级联生效。
 
+**在线会话与 token**（§6.6）
+
+- 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
+- 超管用户的会话与 token 只有超管能下线 —— 403。
+- 所属用户超出数据范围 —— 403（列表中本来就看不到）。
+
 ## 9. 安全规范
 
 | 类别 | 规范 |
@@ -709,7 +807,7 @@ public function delete(User $actor, User $user): Response
 | 路由参数 | 统一格式约束（数字 ID、ULID、UUID），非法参数直接 404 |
 | XSS 纵深防御 | Web 服务器下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
 | 依赖 | CI 执行 `composer audit`、`npm audit` |
-| 日志 | 操作日志对密码、token 等字段脱敏；每个响应带 `X-Request-Id` |
+| 日志 | 操作日志对密码、token 等字段脱敏（可配置，§6.6）；登录日志不记录密码；每个响应带 `X-Request-Id`，日志带同一请求 ID |
 
 ## 10. 编码规范
 
@@ -774,7 +872,7 @@ Scramble 的兼容性在引入时另行验证。
 - 模板覆盖：项目中的 `stubs/core.<名称>.stub` 优先于命令自带模板，可用 `php artisan vendor:publish --tag=core-stubs` 发布后修改。
 - 生成的入口默认要求登录：受信任入口使用会话（同 Admin），受限入口使用 token（无会话）。
 - 路由不自动登记：生成控制器后命令会打印需要添加的路由；生成器本身是内核模块 `app/Core/Generator`，只在命令行下注册。
-- 完整增删改查还会生成：权限节点（写入模块的 `resources/menus.php`，§8.2）、路由、操作日志文案、**授权测试**、模块 README。
+- 完整增删改查还会生成：权限节点（写入模块的 `resources/menus.php`，§8.2）、路由、**授权测试**、模块 README（操作日志的文案由前端按路由名翻译，§6.6）。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
 
 ### 10.5 测试
@@ -876,7 +974,7 @@ Scramble 的兼容性在引入时另行验证。
 |---|---|
 | laravel-permission 8.5 | 角色与权限存储 |
 | laravel-query-builder 7.3 | 列表筛选、排序、关联加载 |
-| laravel-activitylog 5.1 | 数据变更审计、操作日志、登录日志（统一存储，按日志名区分） |
+| laravel-activitylog 5.1 | 数据变更审计、操作日志、登录日志（统一存储，按日志名区分，§6.6）。已核实 5.1.5：有状态的服务（`CauserResolver`、`ActivityLogStatus`、`ActivityBuffer`）都以 `scoped` 注册，Octane 下无需登记 flush；不使用其静态的 `beforeLogging()` 回调 |
 | laravel-backup 10.4 | 数据库与文件备份 |
 | laravel-health 1.42 | 健康检查 |
 | laravel-schedule-monitor 4.3 | 定时任务执行监控 |
@@ -932,8 +1030,8 @@ Scramble 的兼容性在引入时另行验证。
 | 角色与用户的防提权 | 授予权限码、数据范围、分配角色时的“只能给自己有的”、保留操作者管不到的授权、最后一个超管（加锁） | spatie/laravel-permission、数据库行锁 |
 | 数据权限 | `DataScopeProvider` 接口与 `DataScopeRegistry`（含可授予范围的防提权）、默认“全部 / 仅本人”、模型 trait `HasDataScope`（`visibleTo()` / `isVisibleTo()`，归属列可声明） | Eloquent 查询范围、Policy |
 | 列表查询 | 时间区间筛选 `DateTimeRangeFilter`（ISO 8601 带时区）；query-builder 的未知筛选 / 排序异常（`InvalidQuery`，默认 400）统一映射为 422（`VbenResponse`） | spatie/laravel-query-builder |
-| 认证补充 | 登录日志、在线会话与强制下线、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
-| 操作日志 | 记录写请求的中间件（脱敏、请求 ID），写入 activitylog | spatie/laravel-activitylog、`Context` |
+| 认证补充 | 登录日志（认证事件的监听、限流时派发 `Lockout`）、在线会话与强制下线（会话表的只读模型、token 列表、当前会话与超管保护）、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
+| 操作日志 | 记录写请求的中间件（排除认证请求、脱敏、耗时、请求 ID，响应后写入且失败不影响响应）、日志的只读查询接口（数据范围委托给操作者）、按日志名区分的模型 | spatie/laravel-activitylog（含 `activitylog:clean`）、`Context`、`defer()` |
 | 字典 | 字典类型 / 字典项、缓存、`InDict` 校验规则、选项下发接口 | Cache、Validation |
 | 系统参数 | 后台可管理的键值参数、按类型转换、缓存、公开参数接口 | Cache、Casts |
 | 附件 | 上传记录、归属校验、删除时清理文件 | Storage |
@@ -955,4 +1053,5 @@ Scramble 的兼容性在引入时另行验证。
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
+| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）与在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
 | `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |

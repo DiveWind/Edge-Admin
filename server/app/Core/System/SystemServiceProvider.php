@@ -7,6 +7,7 @@ use App\Core\System\Commands\SyncPermissionsCommand;
 use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Models\{Permission, Role, User};
 use App\Core\System\Services\{AllDataScope, DataScopeRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope};
+use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\CanResetPassword;
@@ -113,7 +114,8 @@ class SystemServiceProvider extends ServiceProvider
 
     /**
      * 限流器（config/fortify.php 的 limiters），每分钟次数见 config('core.auth.login_rate_limit')：
-     * - login：按“用户名 + IP”计数，超出时返回 429，提示还需等待的秒数（同时挂在 username 上）；
+     * - login：按“用户名 + IP”计数，超出时返回 429，提示还需等待的秒数（同时挂在 username 上），并派发框架标准的 Lockout 事件
+     *   （Fortify 使用命名限流器时不派发它；Monitor 的登录日志据此记录，设计文档 §7.3）；
      * - two-factor：按待验证的用户（登录后会话中的 login.id）计数。
      */
     protected function configureRateLimiting(): void
@@ -121,6 +123,8 @@ class SystemServiceProvider extends ServiceProvider
         RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(config()->integer('core.auth.login_rate_limit'))
             ->by(Str::transliterate(Str::lower($request->string(Fortify::username())->toString()).'|'.$request->ip()))
             ->response(function (Request $request, array $headers): JsonResponse {
+                event(new Lockout($request));
+
                 $retryAfter = $headers['Retry-After'] ?? null;
                 $message = __('auth.throttle', ['seconds' => is_int($retryAfter) ? $retryAfter : 60]);
 

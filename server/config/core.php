@@ -95,4 +95,29 @@ return [
         'reset_password_path' => env('CORE_RESET_PASSWORD_PATH', '/#/auth/reset-password'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | 监控：操作日志（设计文档 §6.6）
+    |--------------------------------------------------------------------------
+    |
+    | 后台入口的 RecordOperationLog 中间件记录已登录用户的写请求（POST、PUT、PATCH、DELETE），写入 activitylog 的 `operation` 日志。
+    | 日志的保留天数见 config/activitylog.php 的 clean_after_days。
+    |
+    | - except_routes：不记录操作日志的路由名（支持 * 通配）。认证请求只记登录日志：登录、登出、两步验证登录；
+    | - masked_keys：请求体与路由参数中需要脱敏的键名（不区分大小写，支持 * 通配，递归匹配嵌套的键），值替换为 `******`。
+    |   项目可追加（如身份证号、银行卡号的字段名），不要删减默认项。
+    | - max_value_length：请求体与路由参数中字符串值的最大长度（字符），超出部分截掉并加上 `…(truncated)`；
+    | - max_payload_bytes：脱敏、截断后的请求体编码为 JSON 的最大字节数，超过时整体替换为 `{"_truncated": true, "_bytes": 原始字节数}`。
+    |
+    */
+
+    'monitor' => [
+        'operation_log' => [
+            'except_routes' => ['login.store', 'logout', 'two-factor.login.store'],
+            'masked_keys' => ['*password*', '*token*', '*secret*', 'code', 'recovery_code'],
+            'max_value_length' => (int) env('CORE_OPERATION_LOG_MAX_VALUE_LENGTH', 1000),
+            'max_payload_bytes' => (int) env('CORE_OPERATION_LOG_MAX_PAYLOAD_BYTES', 65536),
+        ],
+    ],
+
 ];

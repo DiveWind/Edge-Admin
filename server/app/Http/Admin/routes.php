@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Admin\Monitor\Controllers\{LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController};
 use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, MenuController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
@@ -40,5 +41,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::apiResource('roles', RoleController::class)->whereNumber('role');
 
         Route::apiResource('menus', MenuController::class)->whereNumber('menu');
+    });
+
+    // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位
+    Route::prefix('monitor')->name('monitor.')->group(function (): void {
+        Route::apiResource('operation-logs', OperationLogController::class)->only(['index', 'show'])->whereNumber('operation_log');
+        Route::apiResource('login-logs', LoginLogController::class)->only(['index', 'show'])->whereNumber('login_log');
+
+        Route::prefix('online')->name('online.')->group(function (): void {
+            Route::apiResource('sessions', OnlineSessionController::class)->only(['index', 'destroy'])->where(['session' => '[A-Za-z0-9]{16}']);
+            Route::apiResource('tokens', OnlineTokenController::class)->only(['index', 'destroy'])->whereNumber('token');
+        });
     });
 });

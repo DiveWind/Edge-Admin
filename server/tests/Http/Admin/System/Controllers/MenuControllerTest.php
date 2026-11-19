@@ -84,7 +84,7 @@ describe('index', function (): void {
         $this->actingAs(userWithPermissions('system.menu'))
             ->getJson('/api/admin/system/menus')
             ->assertOk()
-            ->assertJsonPath('data.*.name', ['demo', 'other', 'system'])
+            ->assertJsonPath('data.*.name', ['demo', 'other', 'system', 'monitor'])
             ->assertJsonPath('data.2.children.*.name', ['system.user', 'system.role', 'system.menu'])
             ->assertJsonPath('data.2.children.0.status', 'disabled')
             ->assertJsonPath('data.2.children.0.children.*.name', [

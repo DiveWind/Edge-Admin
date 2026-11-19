@@ -101,5 +101,15 @@
     "The menu management nodes and their ancestors cannot be disabled.": "菜单管理节点及其上级不能停用。",
     "The menu management nodes cannot be moved under a disabled node.": "菜单管理节点不能移到停用的节点下。",
     "Built-in menu nodes cannot be deleted.": "内置节点不能删除。",
-    "The node has child nodes and cannot be deleted.": "该节点有子节点，不能删除。"
+    "The node has child nodes and cannot be deleted.": "该节点有子节点，不能删除。",
+    "Signed in": "登录成功",
+    "Signed out": "退出登录",
+    "Sign-in failed": "登录失败",
+    "Too many sign-in attempts": "登录过于频繁",
+    "Invalid username or password": "用户名或密码错误",
+    "Account disabled": "账号已停用",
+    "Invalid two-factor code": "动态码或恢复码错误",
+    "You cannot log out your current session. Sign out instead.": "不能强制下线自己当前的会话，请使用退出登录。",
+    "You cannot revoke the token used by this request. Sign out instead.": "不能吊销本次请求使用的 token，请使用退出登录。",
+    "Password reset": "重置密码"
 }

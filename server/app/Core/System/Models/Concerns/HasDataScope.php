@@ -12,7 +12,7 @@ use NoDiscard;
 /**
  * 数据权限（设计文档 §8.4）：查询范围 `visibleTo($user)` 与单条判定 `isVisibleTo($user)`，两者规则相同，Policy 复用后者。
  *
- * 1. 超管，或任一启用角色的范围是 `all` → 不限制；
+ * 1. 超管，或任一启用角色的范围是 `all` → 不限制（DataScopeRegistry::isUnrestrictedFor()）；
  * 2. 否则按各启用角色选用的范围（DataScopeRegistry 中的提供者）做 OR 并集，每个提供者收到选用它的启用角色；
  * 3. 没有启用角色，或角色的范围 key 未登记（该角色不贡献任何范围）→ 默认拒绝：查询加 `1 = 0`，单条判定为 false。
  *
@@ -84,18 +84,15 @@ trait HasDataScope
      */
     private static function dataScopesFor(User $user): ?array
     {
-        if ($user->isSuperAdmin()) {
+        $registry = resolve(DataScopeRegistry::class);
+
+        if ($registry->isUnrestrictedFor($user)) {
             return null;
         }
 
-        $registry = resolve(DataScopeRegistry::class);
         $scopes = [];
 
         foreach ($user->enabledRoles()->toBase()->groupBy(fn (Role $role): string => $role->data_scope) as $key => $roles) {
-            if ($key === DataScopeRegistry::ALL) {
-                return null;
-            }
-
             $provider = $registry->get((string) $key);
 
             if ($provider !== null) {

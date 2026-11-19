@@ -3,6 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\User;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Timebox;
 use Illuminate\Validation\ValidationException;
@@ -13,7 +14,8 @@ use SensitiveParameter;
  * 登录时校验用户名与密码（Fortify::authenticateUsing()，见 SystemServiceProvider；设计文档 §7.2）。
  *
  * - 用户名或密码错误：返回 null，由 Fortify 返回 422（`auth.failed`，挂在 username 上）并触发 Failed 事件；
- * - 账号已停用：密码正确时才提示，抛出 422（挂在 username 上），不会登录；
+ * - 账号已停用：密码正确时才提示，抛出 422（挂在 username 上），不会登录；抛出前派发 Failed 事件（带该用户，credentials 只有用户名，
+ *   不含密码），否则这次尝试不会触发任何认证事件（登录日志据此记录为 `disabled`，设计文档 §7.3）；
  * - 与框架的 SessionGuard 一致：用 Timebox 抹平“用户不存在”与“密码错误”的耗时差异；登录成功时按需重新哈希密码。
  *
  * 用户名由 Fortify 先转为小写（config('fortify.lowercase_usernames')），保存时也应为小写。
@@ -42,6 +44,8 @@ class AuthenticateUser
             $timebox->returnEarly();
 
             if (! $user->isEnabled()) {
+                event(new Failed(config()->string('fortify.guard'), $user, [Fortify::username() => $username]));
+
                 throw ValidationException::withMessages([
                     Fortify::username() => [__('This account has been disabled.')],
                 ]);

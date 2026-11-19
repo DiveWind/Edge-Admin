@@ -96,6 +96,17 @@ class DataScopeRegistry
     }
 
     /**
+     * $user 是否不受数据范围限制（§8.4）：超管，或任一启用角色的范围是 `all`。
+     * HasDataScope 的第 1 条规则；不属于用户、而是关联到用户的记录（日志、会话等）也用它判断能否看到没有关联用户的记录。
+     */
+    #[NoDiscard]
+    public function isUnrestrictedFor(User $user): bool
+    {
+        return $user->isSuperAdmin()
+            || $user->enabledRoles()->contains(fn (Role $role): bool => $role->data_scope === self::ALL);
+    }
+
+    /**
      * $user 可授予的数据范围（§8.5），按登记顺序：
      *
      * - 超管，或任一启用角色的范围是 `all` → 全部已登记的范围；
@@ -108,15 +119,11 @@ class DataScopeRegistry
     #[NoDiscard]
     public function grantableKeysFor(User $user): array
     {
-        if ($user->isSuperAdmin()) {
+        if ($this->isUnrestrictedFor($user)) {
             return $this->keys();
         }
 
         $keys = $user->enabledRoles()->map(fn (Role $role): string => $role->data_scope)->all();
-
-        if (in_array(self::ALL, $keys, true)) {
-            return $this->keys();
-        }
 
         return array_values(array_intersect($this->keys(), $keys));
     }
