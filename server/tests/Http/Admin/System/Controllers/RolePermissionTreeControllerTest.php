@@ -44,7 +44,7 @@ it('outputs the enabled nodes with the compact fields, ordered by sort and id', 
     $this->actingAs(superAdminActor())
         ->getJson('/api/admin/system/roles/permission-tree')
         ->assertOk()
-        ->assertJsonPath('data.*.name', ['demo', 'empty', 'system', 'monitor'])
+        ->assertJsonPath('data.*.name', ['demo', 'empty', 'system', 'monitor', 'message'])
         ->assertJsonPath('data.0', ['name' => 'demo', 'type' => 'catalog', 'meta' => ['title' => 'demo.title', 'icon' => 'lucide:box'], 'children' => [
             ['name' => 'demo.first', 'type' => 'link', 'meta' => ['title' => 'demo.first.title', 'icon' => null], 'children' => []],
             ['name' => 'demo.second', 'type' => 'menu', 'meta' => ['title' => 'demo.second.title', 'icon' => null], 'children' => [

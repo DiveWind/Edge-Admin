@@ -219,6 +219,8 @@ it('syncs the nodes declared by the Core modules', function (): void {
         'monitor', 'monitor.online', 'monitor.online.logout', 'monitor.operation-log', 'monitor.login-log',
         'monitor.schedule', 'monitor.schedule.run', 'monitor.failed-job', 'monitor.failed-job.retry', 'monitor.failed-job.delete',
         'monitor.health', 'monitor.health.check',
+        'message', 'message.announcement', 'message.announcement.create', 'message.announcement.update', 'message.announcement.delete',
+        'message.announcement.publish', 'message.announcement.revoke',
     ])->and(node('system.menu')->component)->toBe('/system/menu/list');
 });
 

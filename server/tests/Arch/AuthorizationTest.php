@@ -31,6 +31,8 @@ const LOGIN_ONLY_ROUTES = [
     'admin.user.info', 'admin.auth.codes', 'admin.menu.all',
     // 后台入口：表单下拉的字典与枚举选项（§6.7）
     'admin.options.dicts', 'admin.options.enums',
+    // 后台入口：我的通知（列表、未读数、全部已读，只作用于本人的）与我收到的公告列表（只查发给本人的，§6.9）
+    'admin.notifications.index', 'admin.notifications.unread-count', 'admin.notifications.read-all', 'admin.announcements.index',
     // Fortify：登出、确认密码、修改自己的资料与密码、两步验证（§7.2）
     'logout', 'password.confirmation', 'password.confirm.store',
     'user-profile-information.update', 'user-password.update', 'two-factor.*',

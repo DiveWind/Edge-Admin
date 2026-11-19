@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Admin\AdminServiceProvider;
+use App\Http\Admin\Message\Controllers\{AnnouncementController, AnnouncementRoleOptionsController, NotificationController, PublishAnnouncementController, ReadAllNotificationsController, ReadNotificationController, ReceivedAnnouncementController, RevokeAnnouncementController, UnreadNotificationCountController};
 use App\Http\Admin\Monitor\Controllers\{FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
 use App\Http\Admin\System\Controllers\{AttachmentController, AttachmentDownloadController, AttachmentPreviewController, AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserInfoController, UserPasswordController, UserStatusController};
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:'.AdminServiceProvider::UPLOAD_LIMITER)->name('attachments.store');
     Route::get('attachments/{attachment}', [AttachmentController::class, 'show'])->whereNumber('attachment')->name('attachments.show');
 
+    // 我的通知与我收到的公告（设计文档 §6.9）：个人功能，只能访问本人的通知、发给本人的公告
+    Route::get('notifications/unread-count', UnreadNotificationCountController::class)->name('notifications.unread-count');
+    Route::put('notifications/read-all', ReadAllNotificationsController::class)->name('notifications.read-all');
+    Route::put('notifications/{notification}/read', ReadNotificationController::class)->whereUuid('notification')->name('notifications.read');
+    Route::apiResource('notifications', NotificationController::class)->only(['index', 'destroy'])->whereUuid('notification');
+    Route::apiResource('announcements', ReceivedAnnouncementController::class)->only(['index', 'show'])->whereNumber('announcement');
+
     // 系统管理（设计文档 §6.5）
     Route::prefix('system')->name('system.')->group(function (): void {
         Route::put('users/{user}/status', UserStatusController::class)->whereNumber('user')->name('users.status');
@@ -74,6 +82,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // 附件管理（§6.8）：列表与删除；上传与详情在上面的 /attachments
         Route::apiResource('attachments', AttachmentController::class)->only(['index', 'destroy'])->whereNumber('attachment');
+    });
+
+    // 消息（设计文档 §6.9）：公告管理；发布后由队列分批发送站内通知，撤回时删除已发出的通知
+    Route::prefix('message')->name('message.')->group(function (): void {
+        Route::get('announcements/role-options', AnnouncementRoleOptionsController::class)->name('announcements.role-options');
+        Route::post('announcements/{announcement}/publish', PublishAnnouncementController::class)->whereNumber('announcement')->name('announcements.publish');
+        Route::post('announcements/{announcement}/revoke', RevokeAnnouncementController::class)->whereNumber('announcement')->name('announcements.revoke');
+        Route::apiResource('announcements', AnnouncementController::class)->whereNumber('announcement');
     });
 
     // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位，失败任务的 {failed_job} 是 UUID；

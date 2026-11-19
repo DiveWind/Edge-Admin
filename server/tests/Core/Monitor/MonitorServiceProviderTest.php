@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Message\Models\Notification;
 use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
 use App\Core\Monitor\MonitorServiceProvider;
 use App\Core\Monitor\Policies\PersonalAccessTokenPolicy;
@@ -90,7 +91,12 @@ it('monitors the other scheduled tasks and syncs them', function (): void {
     $this->artisan('schedule-monitor:sync')->assertSuccessful();
 
     expect(ScheduledTask::query()->orderBy('name')->pluck('name')->all())
-        ->toBe(['activitylog:clean --force', "model:prune --model='".ScheduledTaskLog::class."'", "model:prune --model='".Attachment::class."'"]);
+        ->toBe([
+            'activitylog:clean --force',
+            "model:prune --model='".Notification::class."'",
+            "model:prune --model='".ScheduledTaskLog::class."'",
+            "model:prune --model='".Attachment::class."'",
+        ]);
 });
 
 /**

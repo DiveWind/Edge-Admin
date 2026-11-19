@@ -244,7 +244,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`（如 `device.heartbeat_interval`） |
 | 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
 | 日志 | 数据变更审计写入 activitylog 时使用本模块的日志名（模块名小写，如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
-| 通知 | 定义本模块的通知类，统一出现在通知中心 |
+| 通知 | 定义本模块的通知类：继承 `App\Core\Message\Notifications\InboxNotification`，实现 `type()`（对外的类型名，以模块名开头，如 `content.article_approved`）与 `toInbox()`（返回 `NotificationContentData`：`title`、`content`、`level`、`link`、`params`），用 `$user->notify()` 发送，即统一出现在通知中心；停用的用户不接收，项目装了 Reverb 后在 `via()` 中加上 `broadcast` 即可实时推送（§6.9）。`tests/Arch` 强制 `app/` 中的通知类都继承它、`type()` 格式合法且唯一 |
 | 异步导出 | 实现导出接口，即接入统一的异步导出、完成通知与下载 |
 | 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在 Provider 的 `boot()` 中向 `App\Core\System\Services\EnumRegistry` 登记对外名称（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
 | Core 事件 | 监听 Core 发出的事件（如用户被删除），清理本模块的数据 |
@@ -305,9 +305,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、唯一性冲突。
-  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）没有对应的表单字段，用 `message` 说明即可。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、唯一性冲突。
+  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）与并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9）没有对应的表单字段，用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
 ### 6.2 认证与菜单相关接口
@@ -360,7 +360,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 **Vben 侧的权限与菜单约定**：
 
-- 路由模式（`accessMode`）用 `mixed`：前端静态路由只放所有登录用户都有的页面（工作台、个人中心），其余全部由 `/menu/all` 下发，按 `name` 合并。
+- 路由模式（`accessMode`）用 `mixed`：前端静态路由只放所有登录用户都有的页面（工作台、个人中心、通知中心、我收到的公告，§6.9），其余全部由 `/menu/all` 下发，按 `name` 合并。
 - 按钮权限直接使用节点的权限码（`v-access:code`、`hasAccessByCodes`），前端不再有独立的 `authCode` 字段。
 - `/auth/codes` 在登录时和启动时（拿到 `/user/info` 之后）都重新拉取：`accessCodes` 会持久化到 localStorage，不重新拉取就会沿用旧权限。
 - 菜单管理的图标选择器（IconPicker）依赖在线的 Iconify API，内网部署时无法使用；本脚手架接受这一限制。
@@ -705,13 +705,13 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - System 声明的公开参数：`site.name`（站点名称，默认 `config('app.name')`）、`site.login_notice`（登录页提示文案，`text`，默认空字符串）。
 - System 声明的其他分组：`auth`（`auth.login_rate_limit`，§7.2）、`attachment`（上传的类型白名单 `attachment.allowed_extensions` 与大小上限 `attachment.max_size`，§6.8）。
 
-**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8）同样是部署级配置。
+**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8），已读通知的保留天数、公告每批发送的人数与通知链接（§6.9）同样是部署级配置。
 
 **枚举选项**（`GET /options/enums?names=a,b`）
 
 - `names` 必填，逗号分隔的对外名称；响应是以名称为键的对象，按请求顺序，每个枚举的值是 `[{ value, label, color? }]`（按 `cases()` 顺序），`label` 是 `HasLabel::label()`，**按 `Accept-Language` 翻译**（与提示文案相同，§6.1）；枚举另外实现了 `HasColor` 时每个选项有 `color`（规则同字典项的 `color`），没有实现时不输出该键。
 - **显式白名单**：只下发在 `EnumRegistry` 中登记过对外名称的枚举，名称不在登记中 → 422（`names`），不按类名反射。登记时校验：名称为小写点分标识、不重复，类是实现 `HasLabel` 的 backed enum；实现了 `HasColor` 的，每个 case 的颜色都合法。模块在 Provider 的 `boot()` 中登记：`$enums->register(['content.article_status' => ArticleStatus::class])`。
-- 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）。
+- 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）；Message 登记了 `notification_level`（`NotificationLevel`，有颜色）、`announcement_status`（`AnnouncementStatus`，有颜色）、`announcement_target`（`AnnouncementTarget`，§6.9）。
 - **登录即可访问**：枚举是代码中的固定集合，不是业务数据；不开放给未登录请求（登录页不需要），默认拒绝。不缓存（直接由代码计算）。
 
 **声明与同步**
@@ -842,6 +842,120 @@ return [
 - 设置：个人资料（Fortify 的 `PUT /user/profile-information`，§7.2）提交 `avatar_id`：自己上传的、未绑定的图片附件（`OwnedAttachment`，`mimeTypes` 为预览白名单），或当前的头像；`null` 表示去掉头像。替换或去掉后，原头像附件连同文件删除。未提交 `avatar_id` 表示不变。
 - 输出：`/user/info` 的 `avatar` 为头像的**预览地址**（签名 URL，窗口为 `avatar_url_ttl`，同一窗口内不变），没有头像时为 null（§6.2）。
 - 用户管理**不能**设置他人头像：头像是个人资料，由本人维护；用户管理的接口与输出不变。
+
+### 6.9 消息接口
+
+前缀与 §6.5 相同；内核模块 `app/Core/Message`，接口在 `app/Http/Admin/Message`。**通知中心**是每个用户自己的站内通知（Laravel 数据库通知），各模块的通知统一出现在这里（扩展点，§5.5）；**公告**是管理员发给全部用户或指定角色的消息，发布后分批写入接收人的通知中心。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `GET /notifications` | 我的通知分页；筛选 `is_read`、`type`、`created_at` | 登录即可（只查本人的） |
+| `GET /notifications/unread-count` | 我的未读数 `{ count }` | 登录即可 |
+| `PUT /notifications/{notification}/read` | 标记单条已读，返回该通知 | 本人（`NotificationPolicy::update`） |
+| `PUT /notifications/read-all` | 本人的未读全部标为已读 | 登录即可 |
+| `DELETE /notifications/{notification}` | 删除单条 | 本人（`NotificationPolicy::delete`） |
+| `GET /announcements` | 我收到的公告分页；筛选 `title`、`level`、`published_at` | 登录即可（只查发给本人的） |
+| `GET /announcements/{announcement}` | 我收到的公告详情，含 `content`、`attachments` | `AnnouncementPolicy::read` |
+| `GET /message/announcements` | 公告管理分页，经过数据范围 | `message.announcement` |
+| `GET /message/announcements/{announcement}` | 详情，含 `content`、`attachments` | `message.announcement` |
+| `GET /message/announcements/role-options` | 目标角色下拉 `[{ value: 标识, label: 显示名 }]`，只含启用角色 | `message.announcement.create` 或 `.update` |
+| `POST /message/announcements` | 新增草稿：`title`、`content`、`level`、`target`、`roles`、`attachment_ids` | `message.announcement.create` |
+| `PUT /message/announcements/{announcement}` | 修改草稿：字段同新增 | `message.announcement.update` |
+| `DELETE /message/announcements/{announcement}` | 删除草稿或已撤回的公告 | `message.announcement.delete` |
+| `POST /message/announcements/{announcement}/publish` | 发布：分批发送站内通知（队列），立即返回 | `message.announcement.publish` |
+| `POST /message/announcements/{announcement}/revoke` | 撤回：删除已发出的通知 | `message.announcement.revoke` |
+
+**菜单节点**（`app/Core/Message/resources/menus.php`）：目录 `message`（`/message`，`lucide:message-square`，`order` 9200，排在 `system`（9000）、`monitor`（9100）之后；管理员可在菜单管理中调整）下有菜单 `message.announcement`（`/message/announcement`，组件 `/message/announcement/list`，`lucide:megaphone`；按钮 `create`、`update`、`delete`、`publish`、`revoke`）。
+
+**通知中心与“我收到的公告”不是菜单节点**：它们是每个登录用户都有的个人功能，只需登录（`LOGIN_ONLY_ROUTES`，或只检查“是不是本人”的 Policy）。前端用静态路由（与个人中心相同，§6.2 的 `mixed` 模式），如 `/notifications`（通知中心）、`/announcements`（我收到的公告）、`/announcements/:id`（公告详情，公告通知的 `link` 指向它）；顶栏的通知铃铛调用 `/notifications` 与 `/notifications/unread-count`。
+
+路由参数：`{notification}` 只匹配 UUID，`{announcement}` 只匹配数字（§9）。
+
+**通知的存储**
+
+- 表：官方的 `notifications`（`php artisan make:notifications-table`）：`id`（UUID）、`type`、`notifiable_type` / `notifiable_id`（多态，存别名 `user`，§4.5）、`data`、`read_at`、时间戳。唯一的改动：`data` 由 `text` 改为 `json`——撤回公告时按 `data->subject` 查找已发出的通知，PostgreSQL 的 JSON 路径查询要求列是 json 类型；MySQL、SQLite 不受影响，框架的 `array` 转换照常工作。
+- 写入用框架的 database 通道（`$user->notify()`、`Notification::send()`，写入 `User::notifications()`，模型是框架的 `DatabaseNotification`）；读取、授权与清理用 Message 的模型 `App\Core\Message\Models\Notification`（继承 `DatabaseNotification`，同一张表，多态别名 `notification`）。System 不依赖 Message，`User` 保持框架的 `Notifiable`。
+- 用户被删除时，他的通知一并删除（Message 监听 `User` 的 `deleted` 事件）。
+
+**通知类的约定**（扩展点 §5.5，模块接入通知中心的唯一方式）
+
+所有出现在通知中心的通知都继承 `App\Core\Message\Notifications\InboxNotification`（`tests/Arch` 强制：`app/` 中 `Illuminate\Notifications\Notification` 的子类都必须继承它）。基类固定了存储与输出的结构，模块只实现两个方法：
+
+```php
+class ArticleApproved extends InboxNotification
+{
+    public function __construct(private readonly Article $article) {}
+
+    public static function type(): string
+    {
+        return 'content.article_approved';          // 对外的类型名：小写点分、以模块名开头、全局唯一
+    }
+
+    public function toInbox(object $notifiable): NotificationContentData
+    {
+        return new NotificationContentData(
+            title: 'content.notification.articleApproved',   // i18n key 或纯文本
+            params: ['title' => $this->article->title],      // 翻译参数
+            level: NotificationLevel::Success,
+            link: "/content/article/{$this->article->id}",   // 前端路由，或 http(s) 网址
+            subject: $this->article,                         // 可选：按记录清理通知时使用
+        );
+    }
+}
+
+$user->notify(new ArticleApproved($article));       // 发送；大量接收人时实现 ShouldQueue 或分批（如公告）
+```
+
+- `type()`：对外的类型名（格式 `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`，以模块名开头，全局唯一，`tests/Arch` 检查）。基类的 `databaseType()`、`broadcastType()`（`final`）返回它：库中的 `type` 列、接口与推送中的 `type` 都是这个名称，**不出现 PHP 类名**，移动、重命名类不用迁移数据（与多态别名同理，§4.5）。前端按 `type` 区分图标、筛选，类型的显示名由前端翻译。
+- `toInbox()`：返回只读数据对象 `App\Core\Message\Data\NotificationContentData`，基类的 `toDatabase()`、`toArray()`（`final`）由它生成。构造时校验，不符合时抛出 `InvalidArgumentException`（开发期的错误，发送即失败）：
+
+  | 字段 | 规则 |
+  |---|---|
+  | `title` | 必填，最长 255：前端的 i18n key 或纯文本，**后端不翻译**（与菜单的 `meta.title` 相同，§6.2） |
+  | `content` | 可空，最长 1000：i18n key 或纯文本（**不是 HTML**，前端按文本显示） |
+  | `level` | `NotificationLevel`：`info`（默认）、`success`、`warning`、`error`；有颜色（`/options/enums` 的 `notification_level`） |
+  | `link` | 可空：前端路由（以 `/` 开头，不能是 `//`）或 `http` / `https` 网址，最长 2048 |
+  | `params` | `title`、`content` 的翻译参数 `{ 名称: 标量或 null }`，默认空 |
+  | `subject` | 可空：通知所关于的记录（模型），存为 `{ type: 多态别名, id }`；只供后端按记录查找、清理通知（`Notification::about($record)`，如撤回公告），**不输出** |
+
+- `via()`：默认 `['database']`，模块可以追加 `mail` 等通道。
+- **停用的用户不接收**：基类的 `shouldSend()`（`final`）对停用的 `User` 返回 false，所有通道都不发送。
+- **实时推送**（Reverb 是可选包，§12，默认不安装）：安装后在 `via()` 中加上 `'broadcast'` 即可，推送的载荷就是 `toArray()`（与接口输出的字段相同，外加 `id`、`type`）；频道由 `User::receivesBroadcastNotificationsOn()` 决定（框架默认用类名，启用时改为 `user.{id}` 并在 `routes/channels.php` 中授权本人）。未安装时前端轮询未读数。
+
+**我的通知**
+
+- 输出字段：`id`（UUID）、`type`、`title`、`content`、`level`、`link`、`params`（为空时为 `[]`，见 §6.6 的数组解码说明）、`is_read`、`read_at`、`created_at`。
+- 列表：只有本人的（`notifiable` 是当前用户）；筛选 `is_read`（`true` / `false`，`1` / `0`）、`type`（精确，可用逗号传多个）、`created_at`（区间，§6.3）；排序 `created_at`、`read_at`，默认 `-created_at`。
+- 未读数：`{ count }`。
+- 标记已读：已读的保持原 `read_at`（幂等），返回该通知；全部已读：本人全部未读的一次更新，返回 `data: null`。删除：返回 `data: null`。不提供“标为未读”与“清空”，需要时再加。
+- Policy（`NotificationPolicy`）：`viewAny`（任何登录用户，列表只查本人的）；`view`、`update`（标记已读）、`delete`：通知属于操作者本人，否则 403；`create` 等一律拒绝（通知只由代码发送）。**不按数据范围、不按权限码**：通知只属于接收人本人，管理员也不能查看他人的通知。
+- **清理**：模型使用框架的 `MassPrunable`，`model:prune` 删除**已读**且创建于 `config('core.message.notifications.read_ttl')` 天（`CORE_NOTIFICATION_READ_DAYS`，默认 90）之前的通知，未读的不清理；调度每天执行（`routes/console.php`）。保留天数与日志、附件孤儿的保留时间一样是部署级配置（§6.7）。
+
+**公告**
+
+- 表 `announcements`：`title`（最长 255）、`content`（净化后的 HTML）、`level`（`NotificationLevel`，默认 `info`）、`status`（`AnnouncementStatus`：`draft` 草稿、`published` 已发布、`revoked` 已撤回）、`target`（`AnnouncementTarget`：`all` 全部用户、`roles` 指定角色）、`published_at`、`published_by`（发布人）、`revoked_at`、`created_by`（`published_by`、`created_by` 为外键，用户删除后置空）、时间戳；目标角色在 `announcement_role`（外键级联：删除公告或角色时一并删除）。模型 `Announcement`（多态别名 `announcement`），`HasDataScope`（归属列 `created_by`）、`HasAttachments`（用途 `attachments`）。三个枚举登记为 `notification_level`、`announcement_status`、`announcement_target`（§6.7）。
+- 不支持“指定用户”：需要一个按数据范围过滤的用户选择接口，而按角色已覆盖多数场景；以后需要时加一种 `target` 与关联表。不支持定时发布。
+- **富文本**（§9）：`content` 是 HTML，**保存时净化**：模型的类型转换 `App\Support\Eloquent\Casts\SanitizedHtml` 在写入属性时调用 `symfony/html-sanitizer`，任何写入路径（Action、工厂、填充）存进库的都是净化后的内容，接口输出的也就是它。规则（`AppServiceProvider` 中绑定的 `HtmlSanitizerInterface` 单例，无状态）：`allowSafeElements()`（W3C 的安全元素与属性：去掉 `script`、`style`、`iframe`、`form`、`on*` 事件属性等）；链接只允许 `http`、`https`、`mailto`，图片等媒体只允许 `http`、`https`（不允许 `javascript:`、`data:`）；`a` 一律加 `rel="noopener noreferrer"`；输入最长 1,000,000 字节（包的默认 20000 字节，超出部分会被静默截掉）。第 9 步把它扩展为通用的净化入口（§13）。
+  - 不只存纯文本或 Markdown 的原因：后台的公告编辑器产出 HTML；Markdown 渲染成 HTML 同样要净化，只是把净化挪到了前端；§9 已选定“保存时在后端净化”，现在就按它存，以后不用迁移数据。
+  - 内容中的图片只能引用外部 `http(s)` 地址：附件的签名地址会过期，不要嵌进正文；文件作为公告的附件（`attachment_ids`）。
+- 输出字段：`id`、`title`、`level`、`status`、`target`、`roles`（`[{ name, title }]`，目标为全部用户时为 `[]`）、`published_at`、`publisher`（`{ id, username, name }`，未发布或发布人已删除时为 null）、`revoked_at`、`created_by`、`created_at`、`updated_at`；详情与新增、修改、发布、撤回的响应另含 `content` 与 `attachments`（附件数组，格式同 §6.8，签名地址由本接口签发）。列表不含 `content`、`attachments`。
+- 列表：经过数据范围（`visibleTo`）；筛选 `title`（模糊）、`status`、`level`、`target`（精确）、`created_at`、`published_at`（区间）；排序 `id`、`created_at`、`published_at`，默认 `-id`。
+- 新增、修改：`title`、`content`（最长 65535 字符，按净化前计）、`target` 必填；`level` 可选（新增默认 `info`，修改时未提交表示不变）；`roles`（角色标识 `string[]`，已存在的角色）在 `target` 为 `roles` 时必填且不能为空，为 `all` 时不能提交非空值（422，`roles`），保存时按 `target` 整体替换目标角色；`attachment_ids`（附件 id 数组，`OwnedAttachment`：自己上传的未绑定附件，或本公告已有的附件，§6.8）在修改时未提交表示不变，提交 `[]` 去掉全部附件。新增的公告是草稿，`created_by` 写入操作者，成功返回 201。
+- **状态流转**：`draft` →（发布）→ `published` →（撤回）→ `revoked`。**撤回是终态**：不能再发布、不能修改，只能删除，需要重新发出时新建一条（这样一条公告只会被发送一次，不用区分“哪一次发布”的通知）。
+  - 只有草稿能修改、发布，只有已发布的能撤回，已发布的不能删除（先撤回）：只看公告本身，按 §6.1 由 Policy 返回 403。两人同时操作时，Action 在事务中锁行复核，状态已变时 422（`message`）。
+- **发布**：Action `PublishAnnouncement` 锁行复核仍是草稿 → `published`、`published_at`、`published_by` → 派发队列任务 `SendAnnouncement`（`ShouldQueueAfterCommit`，事务提交后才入队），接口立即返回公告。
+  - **接收人**：启用的用户；目标为 `roles` 时，另须拥有任一目标角色且该角色启用（停用的角色不生效，与 §8.4 一致）。
+  - `SendAnnouncement`（worker 中执行）：公告仍是已发布时，按 `chunkById` 取接收人的 id，每 `config('core.message.announcements.batch_size')`（`CORE_ANNOUNCEMENT_BATCH_SIZE`，默认 500）个一批，派发一个 `Bus::batch`（名称 `announcement:<id>`，`allowFailures()`：一批失败不影响其他批，失败的批在失败任务中重试），每批一个 `SendAnnouncementChunk`。没有接收人时不派发。
+  - `SendAnnouncementChunk`：批次已取消时跳过；在事务中锁住公告行、复核仍是已发布，按上面的条件重新查询这一批的用户（入队后被停用、删除、移出目标角色的不再收到），`Notification::sendNow()` 写入通知 `AnnouncementPublished`：`type` 为 `message.announcement`，`title` 为公告标题（纯文本），`content` 为正文的纯文本摘要（前 100 个字符），`level` 同公告，`link` 为 `config('core.message.announcements.link')`（`CORE_ANNOUNCEMENT_LINK`，默认 `/announcements/{id}`，前端路由，与 §6.2 的 `home_path` 同属部署级配置），`subject` 为公告。一批在一个事务中：失败时整批回滚，重试不会重复发送（`#[Tries(3)]`）；与撤回用同一行锁互斥，撤回之后不会再写入。
+  - 任务在默认队列（worker 须处理，§11.3）；队列驱动为 `sync` 时在请求中执行（只用于开发、测试）。批处理需要框架的 `job_batches` 表（`0001_01_01_000002_create_jobs_table` 已创建）。
+- **撤回**：Action `RevokeAnnouncement` 锁行复核仍是已发布 → `revoked`、`revoked_at`，并在同一事务中**删除已经发出的通知**（`Notification::about($announcement)`，按 `data->subject` 查找，没有索引；撤回是低频操作）：接收人的通知中心里不再出现它，也不会点进一个看不了的公告。尚未执行的批在锁住公告行后看到已撤回，直接跳过。不采用“标记失效”：失效的通知仍要显示标题，等于撤回后内容仍在传播。
+- 删除：草稿与已撤回的公告可以删除，附件一并删除（`HasAttachments`）；已撤回的通知在撤回时已删除。
+- **我收到的公告**（`/announcements`）：已发布、且目标包含当前用户（全部用户，或当前拥有任一启用的目标角色）的公告。按**当前**的角色计算，而不是发布时的接收人名单：发布后才创建、才分配到角色的用户也能在列表中看到（不补发通知），被移出目标角色后看不到。
+  - 输出 `id`、`title`、`level`、`published_at`、`publisher`；详情另含 `content`、`attachments`。不输出状态、目标与创建人等管理字段。
+  - 列表：筛选 `title`（模糊）、`level`（精确）、`published_at`（区间）；排序 `published_at`，默认 `-published_at`。
+  - 详情：`AnnouncementPolicy::read`——已发布且目标包含操作者，否则 403（草稿、已撤回、不是发给自己的）。附件的签名地址由详情接口签发；`/attachments/{id}` 的访问权委托给公告的 `view`（§6.8），只对公告管理员开放。
+- **授权**（`AnnouncementPolicy`）：`viewAny` / `view`（`message.announcement`）、`create`、`update`（草稿）、`delete`（不是已发布）、`publish`（草稿）、`revoke`（已发布）、`viewFormOptions`（目标角色下拉：`create` 或 `update`）；记录级方法都检查数据范围（`isVisibleTo`，按 `created_by`：公告是管理员创建的业务记录，§8.4）；`read`（我收到的公告）不需要权限码、不按数据范围，只看是否发给了操作者。
+- **目标角色下拉**：与 `/system/roles/options` 相同（启用角色，按 `sort`、`id`），但按公告的权限码授权：能写公告的人不一定能管理用户。
 
 ## 7. 认证
 
@@ -1132,6 +1246,14 @@ public function delete(User $actor, User $user): Response
 - 无权访问附件（未绑定的不是自己上传的；已绑定的看不了所属记录；附件管理之外，或超出数据范围）—— 403。
 - 上传的文件类型不在白名单、超过大小上限 —— 422（`file`）；引用不是自己上传的未绑定附件、也不是这条记录已有的附件，或 MIME 不符合用途 —— 422（对应字段，不区分原因）。
 
+**通知与公告**（§6.9）
+
+- 通知只能由本人查看、标记已读、删除：操作他人的通知 —— 403（超管也一样）。
+- 只有草稿能修改、发布 —— 403；只有已发布的能撤回 —— 403；已发布的不能删除（先撤回）—— 403；撤回是终态，不能再发布。并发时状态已变 —— 422（`message`）。
+- 公告管理的记录级操作检查数据范围（按 `created_by`）—— 403。
+- 我收到的公告：草稿、已撤回、不是发给自己的 —— 403。
+- `target` 为 `roles` 时 `roles` 必填且不能为空，为 `all` 时不能提交 —— 422（`roles`）；引用不能使用的附件 —— 422（`attachment_ids.*`）。
+
 **在线会话与 token**（§6.6）
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
@@ -1144,7 +1266,7 @@ public function delete(User $actor, User $user): Response
 |---|---|
 | 输出 | API Resource 逐个列出字段，禁止整模型 `toArray()` 输出；敏感字段加 `#[Hidden]` |
 | 输入 | 写接口拒绝未声明字段（`failOnUnknownFields`）；网址类字段只允许 `http` / `https` |
-| 富文本 | **保存时在后端净化**（`symfony/html-sanitizer`，落地前核实版本），去除脚本与危险属性 |
+| 富文本 | **保存时在后端净化**（`symfony/html-sanitizer` 8.1）：模型的类型转换 `SanitizedHtml` 在写入属性时净化，去除脚本、样式与事件属性，链接与媒体只允许安全的协议（§6.9）；存的、输出的都是净化后的 HTML |
 | 上传 | 随机文件名（按日期分目录，扩展名由服务端探测的 MIME 推断）；**按文件内容**校验类型（探测的 MIME 与客户端扩展名都在白名单中，不信任客户端的 `Content-Type`）与大小（白名单与上限是系统参数；PHP 的 `upload_max_filesize`、`post_max_size` 与 Web 服务器的请求体上限须不小于它）；默认私有盘，下载只经过签名的临时 URL，一律 `attachment` 并带 `nosniff`、CSP `sandbox`，只有图片白名单可内联预览（SVG 不内联）；**引用附件时校验归属**（`OwnedAttachment`：只能使用自己上传的未绑定附件，或这条记录已有的附件）；绑定后访问权跟随所属记录（§6.8） |
 | 路由参数 | 统一格式约束（数字 ID、ULID、UUID），非法参数直接 404 |
 | XSS 纵深防御 | Web 服务器下发 CSP 响应头；前端不直接渲染用户输入的 HTML |
@@ -1271,9 +1393,9 @@ Scramble 的兼容性在引入时另行验证。
 | 进程 | 说明 |
 |---|---|
 | Web | PHP-FPM，或 Octane（FrankenPHP） |
-| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理；须处理默认队列（健康检查的队列心跳、定时任务的“立即执行”，§6.6） |
+| 队列 | `queue:work` 或 Horizon（Redis + Linux），由 Supervisor / systemd 管理；须处理默认队列（健康检查的队列心跳、定时任务的“立即执行”，§6.6；公告的分批发送，§6.9） |
 | 调度 | cron 每分钟调用 `schedule:run`，或 `schedule:work`；健康检查的调度心跳依赖它（§6.6） |
-| Reverb | 启用实时推送时 |
+| Reverb | 启用实时推送时（可选，通知的 `broadcast` 通道，§6.9） |
 
 ### 11.4 发布流程
 
@@ -1328,7 +1450,7 @@ Scramble 的兼容性在引入时另行验证。
 | 包 | 用途 |
 |---|---|
 | dedoc/scramble 0.13 | OpenAPI 文档（仅本地环境开放） |
-| symfony/html-sanitizer | 富文本净化（落地前核实版本） |
+| symfony/html-sanitizer 8.1 | 富文本净化（§9）。已核实 8.1：`HtmlSanitizer` 构造后只读（配置不可变），作为单例注册，不保存请求数据 |
 
 ### 12.2 开发与 CI
 
@@ -1378,13 +1500,13 @@ Scramble 的兼容性在引入时另行验证。
 | 字典 | 字典类型 / 字典项与管理接口（内置项的保护）、扩展点 `DictRegistry`（`resources/dicts.php` 声明）与同步命令 `core:sync-dicts`、整体缓存的读取服务 `Dictionary`、`InDict` 校验规则、选项下发接口（`/options/dicts`） | Cache（`Cache::memo()`）、Validation、模型事件（提交后清除缓存） |
 | 系统参数 | 后台可修改值的键值参数（只能改已声明的，`null` 表示使用默认值）、扩展点 `SettingRegistry`（`resources/settings.php` 声明分组、类型、默认值或 config 键、是否公开、校验规则、引用的字典）与同步命令 `core:sync-settings`（三个同步由 `core:sync` 依次执行）、按类型校验与转换（`SettingType`）、读取服务 `Settings`（缓存、默认值）、按分组的管理接口、公开参数接口（`/settings/public`，只输出声明为公开的） | Cache（`Cache::memo()`）、Validation、`json` cast |
 | 附件 | 附件表与上传（`AllowedUpload`：内容 MIME + 扩展名白名单、大小上限，取自系统参数）、签名的下载 / 预览路由（统一响应头）、归属校验 `OwnedAttachment`、绑定 Action `SyncAttachments` 与模型 trait `HasAttachments`（记录删除时级联）、访问权委托给绑定对象的 `AttachmentPolicy`、事务提交后删除文件、孤儿清理（`Prunable`）、附件管理接口、头像（§6.8） | Storage、`File` 校验规则、`URL::temporarySignedRoute()`、`Prunable`、`DB::afterCommit()` |
-| 通知中心 | 我的通知、已读、全部已读接口 | Laravel 数据库通知 |
-| 公告 | 公告管理、发布后分批群发 | Notifications、`Bus::batch` |
+| 通知中心 | 我的通知（列表、未读数、已读、全部已读、删除）的接口与本人校验；通知类的基类 `InboxNotification`（固定的输出结构 `NotificationContentData`、对外的类型名、停用用户不接收；`tests/Arch` 强制模块的通知继承它）；按记录查找通知（`subject`）；已读通知的定期清理 | Laravel 数据库通知（官方 `notifications` 表、`databaseType()`、`shouldSend()`）、`MassPrunable` |
+| 公告 | 公告管理（草稿 → 已发布 → 已撤回，目标为全部用户或指定角色，附件，数据范围）、发布后分批群发（锁行复核、入队后重新筛选接收人）、撤回时删除已发出的通知、我收到的公告 | Notifications、`Bus::batch`、`ShouldQueueAfterCommit`、数据库行锁 |
 | 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
 | 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 待定（§14） |
 | 枚举选项 | `HasLabel` / `HasColor` 接口、显式白名单 `EnumRegistry`（模块在 Provider 中登记对外名称，登记时校验颜色）、选项下发接口（`/options/enums`，按 `Accept-Language` 翻译，有颜色时输出 `color`） | PHP backed enum、翻译 |
 | 异步导出 | 导出任务、完成通知、下载 | simple-excel、队列、通知 |
-| 富文本净化 | 保存时净化的统一入口 | symfony/html-sanitizer |
+| 富文本净化 | 保存时净化的统一入口：已有最小入口（类型转换 `SanitizedHtml` + 单例的默认规则，公告使用，§6.9）；第 9 步扩展为按用途的规则 | symfony/html-sanitizer |
 | 代码生成器 | `core:make-*` 命令集（入口、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
 | 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
 
@@ -1396,6 +1518,6 @@ Scramble 的兼容性在引入时另行验证。
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
-| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）与在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
+| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）、在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）与撤回公告时按 `notifications.data->subject` 查找通知（§6.9）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
 | Pulse | 设计原定“系统监控依托 Pulse”，但 Pulse 的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突。暂不安装；接入时只用它的记录器写入 `pulse_*` 表，由后台接口读取聚合数据给前端图表，`/pulse` 页面最多作为只对超管开放的运维入口 |
 | `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |

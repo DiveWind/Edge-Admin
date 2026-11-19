@@ -184,4 +184,28 @@ return [
         'orphan_ttl' => (int) env('CORE_ATTACHMENT_ORPHAN_HOURS', 24),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | 消息：通知中心与公告（设计文档 §6.9）
+    |--------------------------------------------------------------------------
+    |
+    | 部署级配置（改动需重新部署，不做成系统参数）。
+    |
+    | - notifications.read_ttl：已读的通知保留多少天（按创建时间），之后由 model:prune 删除；未读的不清理；
+    | - announcements.batch_size：发布公告后每批给多少个用户发送站内通知（Bus::batch 中的一个任务）；
+    | - announcements.link：公告通知的链接（前端的公告详情路由，`{id}` 替换为公告 id），与 auth.reset_password_path 一样依赖前端路由。
+    |
+    */
+
+    'message' => [
+        'notifications' => [
+            'read_ttl' => (int) env('CORE_NOTIFICATION_READ_DAYS', 90),
+        ],
+
+        'announcements' => [
+            'batch_size' => (int) env('CORE_ANNOUNCEMENT_BATCH_SIZE', 500),
+            'link' => env('CORE_ANNOUNCEMENT_LINK', '/announcements/{id}'),
+        ],
+    ],
+
 ];

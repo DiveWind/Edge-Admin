@@ -1,11 +1,13 @@
 <?php
 
+use App\Core\Message\Notifications\InboxNotification;
 use App\Core\System\Contracts\HasLabel;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\ServiceProvider;
 
 require_once __DIR__.'/helpers.php';
@@ -156,6 +158,29 @@ if (($contracts = archNamespaces('Core/*/Contracts', 'Modules/*/Contracts')) !==
         ->expect($contracts)
         ->toBeInterfaces();
 }
+
+test('通知类都继承 InboxNotification，type() 格式合法且全局唯一（通知中心的统一结构，设计文档 §5.5、§6.9）', function (): void {
+    $types = [];
+
+    foreach (archClasses() as $class) {
+        if (! is_subclass_of($class, Notification::class) || new ReflectionClass($class)->isAbstract()) {
+            continue;
+        }
+
+        expect(is_subclass_of($class, InboxNotification::class))
+            ->toBeTrue("{$class}：通知类须继承 ".InboxNotification::class.'（固定的输出结构与对外的类型名）');
+
+        /** @var class-string<InboxNotification> $class */
+        $type = $class::type();
+
+        expect(preg_match(InboxNotification::TYPE_PATTERN, $type))->toBe(1, "{$class}::type() 的 [{$type}] 应为小写点分、以模块名开头")
+            ->and($types)->not->toHaveKey($type, "{$class}::type() 的 [{$type}] 与 ".($types[$type] ?? '').' 重复');
+
+        $types[$type] = $class;
+    }
+
+    expect($types)->not->toBeEmpty();
+});
 
 /*
 |--------------------------------------------------------------------------
