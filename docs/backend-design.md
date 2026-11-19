@@ -140,6 +140,7 @@ app/Modules/Content/
 ├── Policies/          授权规则（每个模型一个，标准方法齐全，§8.3）
 ├── Queries/           复杂查询、统计指标（只读）
 ├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
+├── Exporters/         导出类（实现 Core/System 的 Exporter，调用列表的 Query 类，§6.10）
 ├── Commands/          Artisan 命令（在模块 Provider 中 $this->commands([...]) 登记，§4.5）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
 ├── Rules/  Casts/
@@ -251,7 +252,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
 ### 5.6 强制手段
 
-- **Pest 架构测试**：§5.1、§5.3 的依赖规则；入口不得依赖 `DB` 门面；入口内不得出现模型；受限入口不得依赖任何 `Models` 命名空间；Core 不得依赖 `App\Modules`。
+- **Pest 架构测试**：§5.1、§5.3 的依赖规则；入口不得依赖 `DB` 门面；入口内不得出现模型；受限入口不得依赖任何 `Models` 命名空间；Core 不得依赖 `App\Modules`；业务模块的测试只在 `tests/Modules/<模块>` 与 `tests/Http/<入口>/<模块>` 中（Core 与其他模块的测试不引用它，删除业务模块后其余测试不受影响；Core 的菜单树测试按 name 定位节点、只比较 Core 的目录）。
 - **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Http` 中调用模型写方法（落地前核实版本）。
 - **授权只走 Gate**：同样用 `spaze/phpstan-disallowed-calls` 加架构测试，禁止直接调用 spatie 的判定 API（§8.1）。
 - **代码审查清单**写入 `CONTRIBUTING.md`。
@@ -658,6 +659,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - **登录即可访问**（`LOGIN_ONLY_ROUTES`），不需要权限码：字典是各模块表单共用的参考数据（不是业务数据），按权限码控制就要给每个用到下拉的角色都授权字典，授权会失控。默认拒绝仍然成立：未登录 401（停用账号 401）；只输出启用项的 `value`、`label`、`color`，不输出 `remark`、`is_builtin`、停用项等管理字段；**敏感的值列表不要做成字典**——放在模块自己的表中，由模块的接口按权限码与数据范围下发（§8.4）。
 - 缓存：Service `Dictionary` 把全部启用类型的启用项整体缓存（`Cache::rememberForever('core:dicts')`，经 `Cache::memo()` 读取，同一请求内只访问一次缓存存储）；字典类型、字典项的任何写入（模型的 saved / deleted，**事务提交后**）与同步命令都清除缓存，下一次读取重新加载。`Dictionary` 不保存任何状态（每次调用 `Cache::memo()`，它是 scoped 绑定），常驻内存安全。
 - 校验：`App\Core\System\Rules\InDict`——`'source' => ['required', new InDict('content.article_source')]`：值必须是该类型（启用）下启用项的 `value`（接受字符串或整数，按字符串比较），否则为 `validation.in` 的错误；类型不存在或已停用时一律不通过。读的是同一份缓存。
+  - **修改记录时保持原值不拦**：`new InDict('<类型>')->allowing($record?->source)` 另外放行给出的值（null 忽略，返回新的规则）。记录当前保存的值即使已停用（字典项或类型停用、被删除）也可以原样提交，改成其他值、新增记录时仍只接受启用项——与角色修改时 `data_scope` 保持原值不拦（§8.5）同一思路：停用一个字典项只影响以后的选择，不应让已经用了它的记录再也保存不了。
 
 **系统参数**
 
@@ -1056,6 +1058,63 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - **健康检查**：备份调度开启时，在 §6.6 的默认检查中加入 `Backups`（`App\Core\Monitor\Checks\BackupsCheck`）：与 `backup:monitor`、健康状态接口同一套规则（包的 `BackupDestinationStatusFactory`，读取 `monitor_backups`），任一盘不健康即失败，`short_summary` 为不健康的盘，`meta` 为各盘的状态。不用 laravel-health 自带的 `BackupsCheck`：它的阈值是注册时（启动时）计算的时间点，常驻内存下会停在 worker 启动的时刻，且与 `monitor_backups` 重复定义一套标准。开发环境没有备份时它失败是预期的（与 `OptimizedApp` 等相同）。
 - **授权**：没有模型，控制器直接声明权限码（`#[Authorize('monitor.backup')]`、`#[Authorize('monitor.backup.run')]`）；不按数据范围（备份属于系统本身，§6.6）。
 
+### 6.11 业务模块示范：Content（文章）
+
+前缀与 §6.5 相同；**业务模块** `app/Modules/Content`，接口在 `app/Http/Admin/Content`。它是脚手架的“业务对接示范”（§4.2，**可整块删除**，步骤见模块的 `README.md`），用来证明：业务模块**不改 Core 的任何文件**，只通过扩展点（§5.5）就能用上菜单权限、数据权限、字典、枚举选项、附件、富文本净化、异步导出与审计日志；它也是 `core:make-module --crud`（§10.4）生成结果的样板。契约写在本节（前后端协作以 `docs/` 为准），模块内部的说明写在模块 README；删除模块时连同本节一起删除。
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `GET /content/articles` | 分页；筛选 `title`、`category`、`status`、`published_at`、`created_at`、`trashed` | `content.article`（`trashed` 另需 `viewTrashed`，下文） |
+| `GET /content/articles/{article}` | 详情，含 `content` | `content.article` |
+| `POST /content/articles/export` | 异步导出：`{ format, filter, sort }`，筛选与排序同列表（§6.10） | `content.article.export` |
+| `POST /content/articles` | 新增草稿：`title`、`summary`、`content`、`category`、`cover_id` | `content.article.create` |
+| `PUT /content/articles/{article}` | 修改：字段同新增 | `content.article.update` |
+| `DELETE /content/articles/{article}` | 删除（软删除，可恢复） | `content.article.delete` |
+| `POST /content/articles/{article}/publish` | 发布 | `content.article.publish` |
+| `POST /content/articles/{article}/unpublish` | 取消发布（回到草稿） | `content.article.publish` |
+| `POST /content/articles/{article}/restore` | 恢复已删除的文章 | `content.article.restore` |
+| `DELETE /content/articles/{article}/force-delete` | 彻底删除已删除的文章（连同封面文件） | `content.article.force-delete` |
+
+**菜单节点**（`app/Modules/Content/resources/menus.php`）：目录 `content`（`/content`，`lucide:newspaper`，`order` 100：业务目录排在内核的 `system`（9000）等之前）下有菜单 `content.article`（`/content/article`，组件 `/content/article/list`，`lucide:file-text`，`order` 10；按钮 `create`、`update`、`delete`、`publish`（发布与取消发布共用）、`restore`、`force-delete`、`export`）。
+
+路由参数：`{article}` 只匹配数字（§9）。默认的路由模型绑定**不含已删除的文章**（详情、修改、删除、发布、取消发布 → 404）；只有恢复、彻底删除的路由带 `withTrashed()`。
+
+**表与模型**
+
+- 表 `articles`：`title`（最长 255）、`summary`（摘要，纯文本，可空，最长 500）、`content`（净化后的 HTML，§9）、`category`（字典 `content.article_category` 的 `value`，最长 64）、`status`（`ArticleStatus`：`draft` 草稿、`published` 已发布）、`published_at`（可空）、`created_by`（外键，用户删除后置空）、时间戳、`deleted_at`（软删除）。模型 `App\Modules\Content\Models\Article`（多态别名 `content.article`，§4.5），`HasDataScope`（归属列 `created_by`）、`HasAttachments`（封面在 `cover` 用途上）、`SoftDeletes`。
+- **分类用字典**（§6.7 的分工：管理员可增删改、代码只校验是否合法）：模块在 `resources/dicts.php` 声明类型 `content.article_category`（`content.dict.articleCategory`）与初始项 `news`、`tutorial`、`case`（`label` 为前端 i18n key `content.dict.articleCategory.<value>`），由 `core:sync-dicts` 写入。
+- **状态用枚举**（代码按值分支）：`ArticleStatus` 实现 `HasLabel` 与 `HasColor`（`draft` 为 `default`、`published` 为 `success`），登记为 `content.article_status`（`/options/enums`，§6.7）。
+- **富文本**：`content` 在模型的 `casts()` 中用 `SanitizedHtml`（默认档位 `rich`，§9），任何写入路径存的都是净化后的内容；`title`、`summary` 是纯文本，不存 HTML。正文中的图片只引用外部 `http(s)` 地址（§9），封面是附件。
+- **封面**：附件（§6.8），只接受图片：`cover_id` 用 `OwnedAttachment`（`collection: 'cover'`、`mimeTypes: Attachment::PREVIEWABLE_MIME_TYPES`），绑定用 `SyncAttachments`；访问权委托给文章的 `view`（`AttachmentPolicy` 第 2 条，模块不写附件授权代码）。软删除时封面保留（恢复后仍在），**彻底删除时连同文件删除**（`HasAttachments`，事务提交后）。
+
+**输出字段**：`id`、`title`、`summary`、`category`（字典的 `value`，前端用 `/options/dicts?types=content.article_category` 显示名称）、`status`、`published_at`、`cover`（附件，格式同 §6.8，签名地址由本接口签发；没有封面时为 null）、`created_by`、`creator`（`{ id, username, name }`，创建人已删除时为 null）、`deleted_at`（未删除时为 null）、`created_at`、`updated_at`；详情与新增、修改、发布、取消发布、恢复的响应另含 `content`，列表不含。
+
+**列表**（Query 类 `ArticleList`，列表与导出共用，§6.10）
+
+- 经过数据范围（`visibleTo`，按 `created_by`）；预加载 `creator`、`cover`。
+- 筛选：`title`（模糊）、`category`、`status`（精确）、`published_at`、`created_at`（区间，§6.3）、`trashed`（`with` 含已删除、`only` 只看已删除；不传为不含已删除；其他值 422，`filter.trashed`）。排序 `id`、`published_at`、`created_at`，默认 `-id`。
+- **查看已删除的文章**（`filter[trashed]` 为 `with` / `only`）需要 `ArticlePolicy::viewTrashed`（`content.article.restore` 或 `content.article.force-delete`：能处理已删除记录的人才看得到它们），否则 403；在 Query 类中检查，导出（含队列中执行时）同样适用。
+
+**写入**
+
+- 新增：`title`（必填）、`summary`（可空）、`content`（必填，最长 65535 字符，按净化前计）、`category`（必填，`new InDict('content.article_category')`：**只接受启用类型下的启用项**，停用的分类 → 422（`category`））、`cover_id`（可空：自己上传的、未绑定的图片附件）。新增的文章是草稿，`created_by` 写入操作者，成功返回 201。
+- 修改：字段同新增；`cover_id` 未提交表示不变，提交 null 去掉封面（原附件连同文件删除），提交另一个附件即替换（原附件删除），原样提交当前封面的 id 保持不变；`category` **保持原值不拦**：文章当前的分类即使已停用也可以原样提交（`InDict::allowing()`，§6.7），改成其他分类时仍只接受启用项（422，`category`）。任何状态都可以修改，已发布的文章修改后仍是已发布。
+- 发布：只有草稿能发布（403）→ `published`，`published_at` 为当前时间；取消发布：只有已发布的能取消（403）→ `draft`，`published_at` 置空。两人同时操作时 Action 在事务中锁行复核，状态已变 → 422（`message`）。
+- 删除（软删除）：任何状态都可以删除，返回 `data: null`；已删除的文章不出现在默认列表中，也不能再访问详情、修改、发布（404）。
+- 恢复：只有已删除的能恢复（未删除的 403）；恢复后状态与封面不变。彻底删除：只有已删除的能彻底删除（未删除的 403：先删除，两步操作避免误删）；记录与封面文件一起删除，返回 `data: null`。并发时（另一人已恢复或已彻底删除）锁行复核 → 422（`message`）或 404。
+
+**授权**（`ArticlePolicy`，§8.3 标准方法齐全）：`viewAny` / `view`（`content.article`）、`create`、`update`、`delete`、`publish`、`unpublish`（`content.article.publish`）、`restore`、`forceDelete`、`viewTrashed`（上文）；批量的 `deleteAny`、`restoreAny`、`forceDeleteAny` 检查对应的权限码（目前没有批量接口）。记录级方法都检查数据范围（`isVisibleTo`，按 `created_by`）：“仅本人”的操作者只能看到、修改、删除、恢复、彻底删除、导出自己创建的文章，范围外 → 403（列表中本来就看不到）。
+
+**导出**（`ArticleExporter`，对外名称 `content.article`，权限码 `content.article.export`）：查询就是 `ArticleList`（同一份筛选、排序白名单与数据范围，含 `trashed` 的授权）。列：`id`、`title`、`category`（字典的 `value`：字典的显示名是前端 i18n key 或管理员录入的文本，后端不翻译，§6.7）、`status`（显示名）、`published_at`、`creator`（创建人的用户名）、`created_at`、`deleted_at`。
+
+**审计日志**（§5.5、§6.6 的“模块的审计使用模块自己的日志名”）
+
+- 写入 activitylog，日志名 `content`；由 Action 在**同一个事务**中调用 `LogArticleActivity` 写入（不用 activitylog 的 `LogsActivity` trait：它只有模型事件 `created` / `updated` / `deleted` / `restored`，分不出发布、取消发布与彻底删除，也无法改写大字段）。写入失败与业务写入一起回滚：审计与数据一致。这与操作日志（§6.6）不同：操作日志在响应发送后写入、失败只 `report()` 不影响响应（它记录的是请求，丢一条不影响数据）；审计记录的是数据变更本身，必须与数据一起提交或回滚。
+- `subject` 为文章（`content.article`），`causer` 为操作者；`event` 与 `description` 为稳定的标识（前端翻译）：`event` 为 `created`、`updated`、`published`、`unpublished`、`deleted`、`restored`、`force_deleted`，`description` 为 `content.article.<event>`；`properties` 另有 `username`（操作者的快照）与 `request_id`（Monitor 的 `Activity` 自动写入，与同一请求的操作日志关联）。
+- 字段变化（spatie 的 `attributes` / `old` 结构）：记录 `title`、`summary`、`category`、`status`、`published_at`、`cover_id`、`content`。新增记 `attributes`（全部字段）；修改、发布、取消发布只记变化了的字段（`old` 与 `attributes`），没有变化时不写日志；彻底删除记 `old`（记录删除前的全部字段）；删除、恢复只记事件。
+- **大字段不存原文**：`content` 记为摘要 `{ sha256, length }`（净化后 HTML 的 SHA-256 与字符数），能看出是否变化、长度变化多少，并可与某个版本核对；原文可达 64 KB，逐次存入日志会让日志表膨胀，而且正文本身不需要审计到逐字。
+- **查看**：本步不提供审计日志的查看接口。Monitor 只开放 `operation`、`login`，基类 `Activity` 的 `ActivityPolicy` 全部拒绝（§6.6）。建议需要时由模块按记录提供 `GET /content/articles/{article}/activities`（访问权委托给文章的 `view`，与附件同一思路），而不是在 Monitor 中开放按任意日志名查询：模块日志的可见性取决于记录本身的数据范围，Monitor 不知道。
+
 ## 7. 认证
 
 ### 7.1 方案
@@ -1360,6 +1419,13 @@ public function delete(User $actor, User $user): Response
 - 筛选、排序不在列表的白名单或格式不对 —— 422（与列表相同）；同一用户排队与进行中的导出超过上限 —— 422（`message`）；超过发起导出的限流 —— 429。
 - 立即备份只能执行调度中已定义的 `backup:run`；它未同步时 —— 422（`message`）。不提供下载备份。
 
+**文章**（业务模块示范，§6.11）
+
+- 只有草稿能发布、只有已发布的能取消发布 —— 403；并发时状态已变 —— 422（`message`）。
+- 只有已删除的能恢复、能彻底删除（先删除再彻底删除）—— 403；查看已删除的文章（`filter[trashed]`）需要恢复或彻底删除的权限码 —— 403。
+- 记录级操作检查数据范围（按 `created_by`）—— 403。
+- 分类不是启用的字典项（修改时原样提交文章当前的分类除外）—— 422（`category`）；封面不是自己上传的未绑定图片、也不是这篇文章当前的封面 —— 422（`cover_id`）。
+
 **在线会话与 token**（§6.6）
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
@@ -1405,7 +1471,15 @@ public function delete(User $actor, User $user): Response
 - 枚举：实现统一的 `HasLabel`（多语言，必须，`tests/Arch` 强制）/ `HasColor`（语义色，可选）接口，由后端统一下发选项（在 `EnumRegistry` 中登记后由 `/options/enums` 下发，§6.7）。
   - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum` 的模板不带 `color()`，需要时手工加上 `HasColor`。
 - 统计指标、复杂查询做成模块里独立的 Query 类。
-- 软删除是整套功能：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数生成。
+- **软删除是整套功能**：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数（`--soft-deletes`）生成；只加 `SoftDeletes` 不算完成。规范如下（样板是 Content 的文章，§6.11）：
+  - 表加 `deleted_at`（`$table->softDeletes()->index()`），模型 `use SoftDeletes`；输出字段带 `deleted_at`（未删除为 null）。
+  - 接口与权限码（菜单 `<菜单>` 下的按钮）：删除 `DELETE /<路径>/{id}` 为软删除（`<菜单>.delete`）；恢复 `POST /<路径>/{id}/restore`（`<菜单>.restore`）；彻底删除 `DELETE /<路径>/{id}/force-delete`（`<菜单>.force-delete`）。按钮键、路径末段、路由名后缀一致（`restore`、`force-delete`）。
+  - 路由模型绑定默认不含已删除的记录（详情、修改等 → 404）；只有恢复、彻底删除的路由加 `->withTrashed()`。
+  - 列表的“已删除”筛选：`AllowedFilter::trashed()`，即 `filter[trashed]=with`（含已删除）/ `only`（只看已删除），列表请求校验取值（其他值 422）；带这个筛选时还要 Policy 的 `viewTrashed`（有 `<菜单>.restore` 或 `<菜单>.force-delete`：能处理已删除记录的人才看得到它们），否则 403。检查放在列表的 Query 类中，导出复用同一个 Query 类，因此同样受限。
+  - Policy（§8.3）：`delete` 只对未删除的记录（已删除的在路由绑定时就是 404）；`restore` 只对已删除的（未删除 → 403）；`forceDelete` 只对已删除的（未删除 → 403：先删除再彻底删除，两步操作避免误删）；三者都检查数据范围；`restoreAny`、`forceDeleteAny`、`deleteAny` 检查对应的权限码。
+  - Action：`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>`，各自在事务中锁行（`withTrashed()->lockForUpdate()`）复核状态，并发时状态已变 → 422（`message`）；记录已不存在 → 404。模块的审计日志分别记 `deleted`、`restored`、`force_deleted`。
+  - 关联数据：附件（`HasAttachments`）在软删除时保留、彻底删除时连同文件删除；其他关联在彻底删除时用外键 `cascadeOnDelete` 或在 `ForceDelete<模型>` 中清理。
+  - 唯一字段：有唯一索引的表，唯一性校验要**包含已删除的记录**（`Rule::unique()` 不加 `withoutTrashed()`），否则恢复时撞上唯一索引；确需“删除后可重名”时改用包含 `deleted_at` 的复合唯一索引，并在恢复时检查冲突（422）。
 - 导出：`simple-excel` + 队列 + 完成通知，标准异步导出（§6.10）：模块实现 `Exporter` 并登记，列表的查询放在 Query 类中供列表与导出共用；读取用 `lazy()` 分块，不一次读入全部数据。导入以后同样用 simple-excel 的流式读取，逐行调用模块的 Action（§6.10 的“导入”）。
 - 对接第三方 API 时统一使用 Saloon（不作为默认依赖）。
 
@@ -1650,4 +1724,4 @@ Scramble 的兼容性在引入时另行验证。
 | 通用导入 | 暂不做（§6.10 的“导入”）：有第一个使用方时，按“附件上传 → 队列逐行校验并调用模块的 Action → 错误报告附件 → 完成通知”实现 |
 | 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `http(s)` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
 | 下载备份 | 不提供（§6.10）；确有需要时须同时满足：只限超管、确认密码（`password.confirm`）、单独的权限码、操作日志 |
-| `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php` |
+| `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php`。生成结果以业务模块示范 Content（§6.11，`app/Modules/Content`）为样板，软删除按 §10.1 |

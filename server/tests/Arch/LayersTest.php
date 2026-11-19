@@ -56,6 +56,35 @@ foreach ($modules as $module) {
     }
 }
 
+test('业务模块的测试只在它自己的测试目录中（删除业务模块后其余测试不受影响，设计文档 §4.2、§4.4）', function (): void {
+    $violations = [];
+
+    foreach (archNamespaces('Modules/*') as $module) {
+        $name = substr($module, strlen('App\\Modules\\'));
+        $own = ["Modules/{$name}/", ...array_map(fn (string $entry): string => "Http/{$entry}/{$name}/", archEntries())];
+
+        foreach (archPhpFiles(['tests']) as $file) {
+            $path = $file->getRelativePathname();
+
+            if (array_any($own, fn (string $prefix): bool => str_starts_with($path, $prefix))) {
+                continue;
+            }
+
+            // 只看代码中的类名（use 与限定名），不看字符串：生成器的测试以 Content 为示例名，在临时项目中生成代码
+            $references = array_filter(
+                PhpToken::tokenize($file->getContents()),
+                fn (PhpToken $token): bool => $token->is([T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED]) && str_starts_with(ltrim($token->text, '\\').'\\', $module.'\\'),
+            );
+
+            if ($references !== []) {
+                $violations[] = "tests/{$path} 引用了 {$module}";
+            }
+        }
+    }
+
+    expect($violations)->toBe([], '业务模块的测试放在 tests/Modules/<模块> 与 tests/Http/<入口>/<模块>；Core 与其他模块的测试不能依赖业务模块');
+});
+
 arch('入口不直接访问数据库')
     ->expect('App\Http')
     ->not->toUse([

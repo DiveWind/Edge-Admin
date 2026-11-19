@@ -83,6 +83,46 @@ function superAdminActor(): User
 
 /*
 |--------------------------------------------------------------------------
+| 菜单树（设计文档 §6.2、§8.2）
+|--------------------------------------------------------------------------
+|
+| 业务模块（app/Modules）同样在 MenuRegistry 中注册节点：Core 的测试按 name 定位节点、只比较 Core 的目录，
+| 不依赖项目中有哪些业务模块（删除业务模块后其余测试不受影响）。
+|
+*/
+
+/**
+ * Core 模块的顶级目录（System、Monitor、Message 的 resources/menus.php），按声明的 order。
+ */
+const CORE_CATALOGS = ['system', 'monitor', 'message'];
+
+/**
+ * 节点数组（接口输出的一层树）中 name 为 $name 的节点的下标。
+ *
+ * @param  mixed  $nodes  `[{ name, ... }]`
+ */
+function treeIndex(mixed $nodes, string $name): int
+{
+    $index = array_search($name, array_column(is_array($nodes) ? $nodes : [], 'name'), true);
+
+    expect($index)->toBeInt("树中没有节点 {$name}");
+
+    return (int) $index;
+}
+
+/**
+ * 一层树的节点名中，只保留 $own（测试自己创建的）与 Core 的目录（保持原顺序）。
+ *
+ * @param  list<string>  $own
+ * @return list<string>
+ */
+function coreTreeNames(mixed $names, array $own = []): array
+{
+    return array_values(array_filter(is_array($names) ? $names : [], fn (mixed $name): bool => in_array($name, [...$own, ...CORE_CATALOGS], true)));
+}
+
+/*
+|--------------------------------------------------------------------------
 | 系统参数（设计文档 §6.7）
 |--------------------------------------------------------------------------
 */

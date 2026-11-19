@@ -81,16 +81,21 @@ describe('index', function (): void {
         $demo = Permission::factory()->create(['name' => 'demo', 'path' => '/demo', 'title' => 'demo.title', 'sort' => 1]);
         Permission::factory()->create(['name' => 'other', 'sort' => 1]);
 
-        $this->actingAs(userWithPermissions('system.menu'))
+        $response = $this->actingAs(userWithPermissions('system.menu'))
             ->getJson('/api/admin/system/menus')
-            ->assertOk()
-            ->assertJsonPath('data.*.name', ['demo', 'other', 'system', 'monitor', 'message'])
-            ->assertJsonPath('data.2.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
-            ->assertJsonPath('data.2.children.0.status', 'disabled')
-            ->assertJsonPath('data.2.children.0.children.*.name', [
+            ->assertOk();
+
+        // 业务模块（app/Modules）的目录也在树中：只检查这里创建的与 Core 的目录的相对顺序，测试不依赖有哪些业务模块
+        $system = treeIndex($response->json('data'), 'system');
+
+        expect(coreTreeNames($response->json('data.*.name'), ['demo', 'other']))->toBe(['demo', 'other', 'system', 'monitor', 'message']);
+
+        $response->assertJsonPath("data.{$system}.children.*.name", ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
+            ->assertJsonPath("data.{$system}.children.0.status", 'disabled')
+            ->assertJsonPath("data.{$system}.children.0.children.*.name", [
                 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password', 'system.user.export',
             ])
-            ->assertJsonPath('data.2.children.0.children.0.children', [])
+            ->assertJsonPath("data.{$system}.children.0.children.0.children", [])
             ->assertJsonPath('data.0.id', $demo->id);
     });
 
@@ -339,7 +344,8 @@ describe('store', function (): void {
             ->assertCreated();
 
         $this->actingAs($actor)->getJson('/api/admin/auth/codes')->assertJsonFragment(['demo']);
-        $this->actingAs($actor)->getJson('/api/admin/menu/all')->assertJsonPath('data.0.children.*.name', ['demo', 'system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment']);
+        $menus = $this->actingAs($actor)->getJson('/api/admin/menu/all');
+        $menus->assertJsonPath('data.'.treeIndex($menus->json('data'), 'system').'.children.*.name', ['demo', 'system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment']);
     });
 });
 

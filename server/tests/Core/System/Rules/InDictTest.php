@@ -48,3 +48,31 @@ it('reports the standard in message', function (): void {
 
     expect($validator->errors()->first('source'))->toBe('The selected source is invalid.');
 });
+
+it('also accepts the values given to allowing(), such as the current value of the record, even if they are no longer enabled', function (mixed $value, bool $passes): void {
+    $rule = new InDict('content.article_source')->allowing('reprint', null);
+
+    expect(Validator::make(['source' => $value], ['source' => ['required', $rule]])->passes())->toBe($passes);
+})->with([
+    'allowed disabled item' => ['reprint', true],
+    'other enabled item' => ['original', true],
+    'other value' => ['translated', false],
+    'array' => [['reprint'], false],
+]);
+
+it('compares the allowed values as strings and applies them to disabled and unknown types too', function (): void {
+    $passes = fn (InDict $rule, mixed $value): bool => Validator::make(['source' => $value], ['source' => ['required', $rule]])->passes();
+
+    expect($passes(new InDict('customer_level')->allowing('vip'), 'vip'))->toBeTrue()
+        ->and($passes(new InDict('missing')->allowing(7), '7'))->toBeTrue()
+        ->and($passes(new InDict('missing')->allowing(7), 'vip'))->toBeFalse();
+});
+
+it('returns a new rule from allowing() and keeps the original unchanged', function (): void {
+    $rule = new InDict('content.article_source');
+    $allowing = $rule->allowing('reprint');
+
+    expect($allowing)->not->toBe($rule)
+        ->and(passesInDict('content.article_source', 'reprint'))->toBeFalse()
+        ->and(Validator::make(['source' => 'reprint'], ['source' => [$rule]])->passes())->toBeFalse();
+});

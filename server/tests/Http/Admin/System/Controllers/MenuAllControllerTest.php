@@ -24,15 +24,18 @@ it('returns 401 for guests', function (): void {
 it('returns the System menus to the seeded admin', function (): void {
     $this->seed(DatabaseSeeder::class);
 
-    $this->actingAs(User::query()->where('username', 'admin')->sole())
+    $response = $this->actingAs(User::query()->where('username', 'admin')->sole())
         ->getJson('/api/admin/menu/all')
-        ->assertOk()
-        ->assertJsonPath('data.0.name', 'system')
-        ->assertJsonPath('data.0.meta', ['title' => 'system.title', 'icon' => 'lucide:settings', 'order' => 9000])
-        ->assertJsonPath('data.0.children.*.name', ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
-        ->assertJsonPath('data.0.children.0.component', '/system/user/list')
-        ->assertJsonMissingPath('data.0.component')
-        ->assertJsonMissingPath('data.0.children.0.children');
+        ->assertOk();
+
+    // 按 name 定位：业务模块（app/Modules）的目录也在树中，测试不依赖有哪些业务模块
+    $system = treeIndex($response->json('data'), 'system');
+
+    $response->assertJsonPath("data.{$system}.meta", ['title' => 'system.title', 'icon' => 'lucide:settings', 'order' => 9000])
+        ->assertJsonPath("data.{$system}.children.*.name", ['system.user', 'system.role', 'system.menu', 'system.dict', 'system.setting', 'system.attachment'])
+        ->assertJsonPath("data.{$system}.children.0.component", '/system/user/list')
+        ->assertJsonMissingPath("data.{$system}.component")
+        ->assertJsonMissingPath("data.{$system}.children.0.children");
 });
 
 it('outputs the Vben route structure of each node type', function (): void {

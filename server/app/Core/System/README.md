@@ -63,7 +63,7 @@
 | `Actions/SyncDicts`、`Commands/SyncDictsCommand` | `php artisan core:sync-dicts`：把声明的字典同步到 `dict_types`、`dict_items` |
 | `Actions/CreateDictType`、`UpdateDictType`、`DeleteDictType`、`CreateDictItem`、`UpdateDictItem`、`DeleteDictItem` | 字典类型与字典项的新增、修改、删除（内置的保护见下文） |
 | `Services/Dictionary` | 字典的读取（启用类型下的启用项，整体缓存）：`options()`、`many()`、`values()`、`has()`、`flush()` |
-| `Rules/InDict` | 校验规则：值必须是某个字典类型下的启用项 |
+| `Rules/InDict` | 校验规则：值必须是某个字典类型下的启用项；修改记录时用 `new InDict('<类型>')->allowing($record?->field)` 放行当前值（即使已停用，保持原值不拦），改成其他值仍只接受启用项 |
 | `Policies/DictTypePolicy`、`DictItemPolicy` | 字典的授权：标准方法，删除内置的 403 |
 | `Contracts/SettingRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册系统参数分组（下文“系统参数”） |
 | `Actions/SyncSettings`、`Commands/SyncSettingsCommand` | `php artisan core:sync-settings`：把声明的参数同步到 `settings` |

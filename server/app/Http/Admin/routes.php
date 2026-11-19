@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Admin\AdminServiceProvider;
+use App\Http\Admin\Content\Controllers\{ArticleController, ArticleExportController, ForceDeleteArticleController, PublishArticleController, RestoreArticleController, UnpublishArticleController};
 use App\Http\Admin\Message\Controllers\{AnnouncementController, AnnouncementRoleOptionsController, NotificationController, PublishAnnouncementController, ReadAllNotificationsController, ReadNotificationController, ReceivedAnnouncementController, RevokeAnnouncementController, UnreadNotificationCountController};
 use App\Http\Admin\Monitor\Controllers\{BackupController, BackupDestinationController, FailedJobController, FlushFailedJobsController, HealthResultController, LoginLogController, OnlineSessionController, OnlineTokenController, OperationLogController, RetryFailedJobController, RetryFailedJobsController, RunBackupController, RunHealthChecksController, RunScheduledTaskController, ScheduledTaskController, ScheduledTaskLogController, SystemInfoController};
 use App\Http\Admin\System\Controllers\{AttachmentController, AttachmentDownloadController, AttachmentPreviewController, AuthCodesController, DictItemController, DictOptionsController, DictTypeController, EnumOptionsController, ExportController, MenuAllController, MenuController, PublicSettingsController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, SettingController, SettingGroupController, UserController, UserExportController, UserInfoController, UserPasswordController, UserStatusController};
@@ -95,6 +96,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('announcements/{announcement}/publish', PublishAnnouncementController::class)->whereNumber('announcement')->name('announcements.publish');
         Route::post('announcements/{announcement}/revoke', RevokeAnnouncementController::class)->whereNumber('announcement')->name('announcements.revoke');
         Route::apiResource('announcements', AnnouncementController::class)->whereNumber('announcement');
+    });
+
+    // 业务模块示范：文章（设计文档 §6.11，删除 Content 模块时连同本组删除）；软删除整套（§10.1）：
+    // 默认的路由绑定不含已删除的文章，恢复与彻底删除的路由 withTrashed()；导出另经过发起导出的限流（admin-exports）
+    Route::prefix('content')->name('content.')->group(function (): void {
+        Route::post('articles/export', ArticleExportController::class)->middleware('throttle:'.AdminServiceProvider::EXPORT_LIMITER)->name('articles.export');
+        Route::post('articles/{article}/publish', PublishArticleController::class)->whereNumber('article')->name('articles.publish');
+        Route::post('articles/{article}/unpublish', UnpublishArticleController::class)->whereNumber('article')->name('articles.unpublish');
+        Route::post('articles/{article}/restore', RestoreArticleController::class)->whereNumber('article')->withTrashed()->name('articles.restore');
+        Route::delete('articles/{article}/force-delete', ForceDeleteArticleController::class)->whereNumber('article')->withTrashed()->name('articles.force-delete');
+        Route::apiResource('articles', ArticleController::class)->whereNumber('article');
     });
 
     // 系统监控（设计文档 §6.6）：日志只读；在线会话的 {session} 是会话 ID 的前 16 位，失败任务的 {failed_job} 是 UUID；

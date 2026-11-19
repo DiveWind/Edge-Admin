@@ -91,7 +91,7 @@ config/core.php                       入口清单与部署级配置
 tests/                                与 app/ 对应；tests/Arch 为边界与约定测试
 ```
 
-业务模块放在 `app/Modules/<模块>`（目前还没有，用 `php artisan core:make-module` 创建）。分层与依赖规则见 [`CLAUDE.md`](CLAUDE.md) 与设计文档 §4、§5。
+业务模块放在 `app/Modules/<模块>`（用 `php artisan core:make-module` 创建）。`app/Modules/Content`（文章）是业务对接示范：只通过 Core 的扩展点接入、可整块删除，接口见设计文档 §6.11，删除步骤见它的 [`README.md`](app/Modules/Content/README.md)。分层与依赖规则见 [`CLAUDE.md`](CLAUDE.md) 与设计文档 §4、§5。
 
 ## 代码生成
 

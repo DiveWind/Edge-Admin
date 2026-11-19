@@ -4,6 +4,7 @@ use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Enums\{PermissionType, Status};
 use App\Core\System\Models\{Permission, Role};
 use App\Core\System\Services\MenuRegistryService;
+use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
@@ -208,7 +209,8 @@ it('does not recreate an existing super-admin role', function (): void {
 it('syncs the nodes declared by the Core modules', function (): void {
     $this->artisan('core:sync-permissions')->assertSuccessful();
 
-    expect(Permission::query()->orderBy('id')->pluck('name')->all())->toBe([
+    // 只看 Core 模块的节点：业务模块（app/Modules）同样在 MenuRegistry 中注册，测试不依赖有哪些业务模块
+    expect(Permission::query()->orderBy('id')->pluck('name')->filter(fn (string $name): bool => in_array(Str::before($name, '.'), CORE_CATALOGS, true))->values()->all())->toBe([
         'system',
         'system.user', 'system.user.create', 'system.user.update', 'system.user.delete', 'system.user.status', 'system.user.password', 'system.user.export',
         'system.role', 'system.role.create', 'system.role.update', 'system.role.delete', 'system.role.status',
