@@ -18,10 +18,10 @@ describe('CORE_APPS', function (): void {
         $this->refreshApplicationWithEnv(['CORE_APPS' => $apps]);
 
         expect(config('core.apps.admin.enabled'))->toBeTrue()
-            ->and(Route::has('admin.ping'))->toBeTrue()
+            ->and(Route::has('admin.sanctum.csrf-cookie'))->toBeTrue()
             ->and(Route::getMiddlewareGroups())->toHaveKey('admin');
 
-        $this->getJson('/api/admin/ping')->assertOk()->assertExactJson(['code' => 0, 'data' => ['pong' => true], 'message' => 'ok']);
+        $this->getJson('/api/admin/sanctum/csrf-cookie')->assertOk()->assertExactJson(['code' => 0, 'data' => null, 'message' => 'ok']);
     })->with([
         'admin' => 'admin',
         'with spaces and case' => ' Device , ADMIN ',
@@ -37,12 +37,12 @@ describe('CORE_APPS', function (): void {
         $this->refreshApplicationWithEnv(['CORE_APPS' => $apps]);
 
         expect(config('core.apps.admin.enabled'))->toBeFalse()
-            ->and(Route::has('admin.ping'))->toBeFalse()
+            ->and(Route::has('admin.sanctum.csrf-cookie'))->toBeFalse()
             ->and(Route::has('login.store'))->toBeFalse()
             ->and(Route::getMiddlewareGroups())->not->toHaveKey('admin');
 
         // 路由不存在，404 也不再是 Vben 格式
-        $this->getJson('/api/admin/ping')->assertNotFound()->assertJsonMissingPath('code');
+        $this->getJson('/api/admin/sanctum/csrf-cookie')->assertNotFound()->assertJsonMissingPath('code');
     })->with([
         'empty' => '',
         'other entries only' => 'device',
@@ -52,13 +52,12 @@ describe('CORE_APPS', function (): void {
 it('uses the configurable URL prefix', function (): void {
     $this->refreshApplicationWithEnv(['CORE_ADMIN_PREFIX' => '/backend/']);
 
-    expect(route('admin.ping', absolute: false))->toBe('/backend/ping')
-        ->and(route('login.store', absolute: false))->toBe('/backend/login')
+    expect(route('login.store', absolute: false))->toBe('/backend/login')
         ->and(route('admin.sanctum.csrf-cookie', absolute: false))->toBe('/backend/sanctum/csrf-cookie');
 
-    $this->getJson('/backend/ping')->assertOk()->assertJsonPath('data.pong', true);
+    $this->getJson('/backend/sanctum/csrf-cookie')->assertOk()->assertJsonPath('code', 0);
     $this->getJson('/backend/missing')->assertNotFound()->assertJsonPath('code', 404);
-    $this->getJson('/api/admin/ping')->assertNotFound()->assertJsonMissingPath('code');
+    $this->getJson('/api/admin/sanctum/csrf-cookie')->assertNotFound()->assertJsonMissingPath('code');
 });
 
 describe('exceptions', function (): void {
@@ -197,10 +196,10 @@ describe('exceptions', function (): void {
 it('rate limits requests per minute', function (): void {
     config(['core.apps.admin.rate_limit' => 2]);
 
-    $this->getJson('/api/admin/ping')->assertOk();
-    $this->getJson('/api/admin/ping')->assertOk();
+    $this->getJson('/api/admin/sanctum/csrf-cookie')->assertOk();
+    $this->getJson('/api/admin/sanctum/csrf-cookie')->assertOk();
 
-    $this->getJson('/api/admin/ping')
+    $this->getJson('/api/admin/sanctum/csrf-cookie')
         ->assertTooManyRequests()
         ->assertHeader('Retry-After')
         ->assertExactJson(['code' => 429, 'data' => null, 'message' => 'Too Many Attempts.']);

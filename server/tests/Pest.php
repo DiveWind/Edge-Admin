@@ -1,5 +1,8 @@
 <?php
 
+use App\Core\System\Actions\SyncPermissions;
+use App\Core\System\Models\{Role, User};
+use App\Core\System\Services\PermissionRegistry;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -31,3 +34,38 @@ pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Arch', 'Core', 'Http', 'Modules', 'Providers', 'Support');
+
+/*
+|--------------------------------------------------------------------------
+| 授权辅助（设计文档 §10.5）
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * 同步各模块声明的内置节点（System 的菜单与按钮等）到 permissions 表，并确保 super-admin 角色存在（core:sync-permissions）。
+ */
+function syncBuiltinPermissions(): void
+{
+    resolve(SyncPermissions::class)->handle();
+}
+
+/**
+ * 拥有给定权限码的用户：一个启用角色授予这些权限码及其全部祖先（节点需已存在，如 syncBuiltinPermissions()）。
+ */
+function userWithPermissions(string ...$codes): User
+{
+    $role = Role::factory()->create();
+    $role->givePermissionTo(resolve(PermissionRegistry::class)->withAncestors($codes));
+
+    return User::factory()->create()->assignRole($role);
+}
+
+/**
+ * 拥有启用的 super-admin 角色的用户（角色不存在时创建）。
+ */
+function superAdminActor(): User
+{
+    $role = Role::query()->where('name', Role::SUPER_ADMIN)->first() ?? Role::factory()->superAdmin()->create();
+
+    return User::factory()->create()->assignRole($role);
+}

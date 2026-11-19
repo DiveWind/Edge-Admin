@@ -1,9 +1,11 @@
 <?php
 
 use App\Core\System\Contracts\MenuRegistry;
+use App\Core\System\Models\{Permission, User};
 use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route as RouteDefinition;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\{Gate, Route};
 use Illuminate\Support\Str;
 
 require_once __DIR__.'/helpers.php';
@@ -17,9 +19,8 @@ require_once __DIR__.'/helpers.php';
 |   只需登录的路由显式列在 LOGIN_ONLY_ROUTES 中；
 | - 代码里用到的权限码（含 "." 的 ability）都已在 MenuRegistry 中声明；
 | - 不使用 spatie 的判定 API 与 role / permission 中间件（它们不看节点与角色的停用状态）。
-|   “不调用判定 API”同时由 PHPStan（phpstan.neon 的 disallowedMethodCalls）检查。
-|
-| 每个模型都有 Policy 且标准方法齐全（§8.3）：在用户、角色、菜单的 Policy 就绪后加入。
+|   “不调用判定 API”同时由 PHPStan（phpstan.neon 的 disallowedMethodCalls）检查；
+| - 每个模型都有 Policy，且标准方法齐全（§8.3）。
 |
 */
 
@@ -33,6 +34,17 @@ const LOGIN_ONLY_ROUTES = [
     'logout', 'password.confirmation', 'password.confirm.store',
     'user-profile-information.update', 'user-password.update', 'two-factor.*',
 ];
+
+/**
+ * Policy 的标准方法（§8.3）。
+ */
+const POLICY_METHODS = ['viewAny', 'view', 'create', 'update', 'delete', 'restore', 'forceDelete', 'deleteAny', 'restoreAny', 'forceDeleteAny'];
+
+/**
+ * 暂时还没有 Policy 的模型（临时豁免）：User 的 Policy 在 5.3（用户管理）、Permission 的在 5.4（菜单管理）中加入。
+ * TODO: 5.3 / 5.4 完成后移除；对应的 Policy 加入后本名单中的条目会让测试失败，提醒删除。
+ */
+const MODELS_PENDING_POLICY = [User::class, Permission::class];
 
 /**
  * spatie 的判定 API（§8.1）。
@@ -83,6 +95,28 @@ test('每条受保护的路由都有授权声明，只需登录的路由列在 L
         } else {
             expect(routeAbilities($route))->not->toBeEmpty(routeLabel($route).' 缺少授权声明：在控制器方法上添加 #[Authorize(...)]，或（只需登录时）加入 LOGIN_ONLY_ROUTES');
         }
+    }
+});
+
+test('每个模型都有 Policy，且标准方法齐全', function (): void {
+    $models = array_values(array_filter(archClasses(), fn (string $class): bool => is_subclass_of($class, Model::class) && ! new ReflectionClass($class)->isAbstract()));
+
+    expect($models)->not->toBeEmpty();
+
+    foreach ($models as $model) {
+        $policy = Gate::getPolicyFor($model);
+
+        if (in_array($model, MODELS_PENDING_POLICY, true)) {
+            expect($policy)->toBeNull("{$model} 已有 Policy：请从 MODELS_PENDING_POLICY 中移除");
+
+            continue;
+        }
+
+        expect($policy)->not->toBeNull("{$model} 缺少 Policy：执行 php artisan core:make-policy（设计文档 §8.3）");
+
+        $missing = array_values(array_filter(POLICY_METHODS, fn (string $method): bool => ! method_exists($policy, $method)));
+
+        expect($missing)->toBe([], $model.' 的 Policy 缺少标准方法');
     }
 });
 

@@ -42,5 +42,22 @@
     "Internal Server Error": "服务器错误",
     "Bad Gateway": "网关错误",
     "Service Unavailable": "服务暂不可用",
-    "Unknown Error": "未知错误"
+    "Unknown Error": "未知错误",
+    "All data": "全部数据",
+    "Own data only": "仅本人数据",
+    "Identifier": "标识",
+    "Display name": "显示名",
+    "Status": "状态",
+    "Data scope": "数据范围",
+    "Remark": "备注",
+    "Sort order": "排序",
+    "Permissions": "权限",
+    "You cannot grant permissions you do not have: :codes.": "不能授予自己没有的权限：:codes。",
+    "The identifier of the super admin role cannot be changed.": "超级管理员角色的标识不能修改。",
+    "The super admin role cannot be disabled.": "超级管理员角色不能停用。",
+    "The super admin role has all permissions; they cannot be assigned.": "超级管理员角色拥有全部权限，无需分配。",
+    "The super admin role cannot be deleted.": "超级管理员角色不能删除。",
+    "The role is assigned to users and cannot be deleted.": "该角色已分配给用户，不能删除。",
+    "Unsupported filter: :fields.": "不支持的筛选条件：:fields。",
+    "Unsupported sort: :fields.": "不支持的排序字段：:fields。"
 }

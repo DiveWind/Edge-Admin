@@ -76,6 +76,40 @@ class PermissionRegistry
     }
 
     /**
+     * 全部已登记的权限码（含停用节点）。
+     *
+     * @return list<string>
+     */
+    public function registeredCodes(): array
+    {
+        return array_keys($this->nodes());
+    }
+
+    /**
+     * 补齐祖先：$codes 及其每个节点的全部祖先节点（未登记的权限码忽略），按节点顺序去重（保存角色权限时使用，§8.5）。
+     *
+     * @param  iterable<string>  $codes
+     * @return list<string>
+     */
+    public function withAncestors(iterable $codes): array
+    {
+        $nodes = $this->nodes();
+        $result = [];
+
+        foreach ($codes as $code) {
+            $node = $nodes[$code] ?? null;
+
+            // 已经加入过的节点，其祖先也已加入；遇到成环的脏数据时同样停下
+            while ($node !== null && ! isset($result[$node->name])) {
+                $result[$node->name] = true;
+                $node = $node->parent_id === null ? null : ($this->byId[$node->parent_id] ?? null);
+            }
+        }
+
+        return array_values(array_filter(array_keys($nodes), fn (string $code): bool => isset($result[$code])));
+    }
+
+    /**
      * 全部生效节点的权限码（即超管的有效权限码）。
      *
      * @return list<string>
@@ -159,16 +193,35 @@ class PermissionRegistry
             }
         }
 
-        return $this->assemble($visible, 0);
+        return $this->assemble($visible, 0, pruneEmptyCatalogs: true);
     }
 
     /**
-     * 从根开始逐层组装；父节点不可见的节点不会被提升为根。
+     * 授权用的节点树（`/system/roles/permission-tree`，§6.5）：全部生效节点（含按钮，本身及全部祖先都启用），
+     * 同级按 sort、id 排序。返回根节点，children 关联已组装（节点为副本，不影响缓存）。
+     *
+     * @return list<Permission>
+     */
+    public function enabledTree(): array
+    {
+        $nodes = $this->nodes();
+        $grouped = [];
+
+        foreach (array_keys($this->enabled) as $code) {
+            $node = $nodes[$code];
+            $grouped[$node->parent_id ?? 0][] = $node;
+        }
+
+        return $this->assemble($grouped, 0, pruneEmptyCatalogs: false);
+    }
+
+    /**
+     * 从根开始逐层组装；父节点不可见的节点不会被提升为根。$pruneEmptyCatalogs 为 true 时剔除没有可见子节点的目录。
      *
      * @param  array<int, list<Permission>>  $visible  上级 id（根为 0）=> 可见节点
      * @return list<Permission>
      */
-    private function assemble(array $visible, int $parentId): array
+    private function assemble(array $visible, int $parentId, bool $pruneEmptyCatalogs): array
     {
         $children = $visible[$parentId] ?? [];
 
@@ -177,9 +230,9 @@ class PermissionRegistry
         $tree = [];
 
         foreach ($children as $node) {
-            $grandchildren = $this->assemble($visible, $node->id);
+            $grandchildren = $this->assemble($visible, $node->id, $pruneEmptyCatalogs);
 
-            if ($node->type === PermissionType::Catalog && $grandchildren === []) {
+            if ($pruneEmptyCatalogs && $node->type === PermissionType::Catalog && $grandchildren === []) {
                 continue;
             }
 

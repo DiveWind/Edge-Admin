@@ -32,8 +32,7 @@ php artisan schedule:work
 |---|---|
 | `GET /` | 应用名（JSON） |
 | `GET /up` | 健康检查 |
-| `GET /api/admin/ping` | 后台入口的示例路由，返回 `{"code":0,"data":{"pong":true},"message":"ok"}` |
-| `/api/admin/...` | 后台的认证接口，见下文“认证” |
+| `/api/admin/...` | 后台接口：认证见下文“认证”，系统管理见设计文档 §6.5 |
 
 ## 认证
 

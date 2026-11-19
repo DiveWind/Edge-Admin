@@ -45,7 +45,7 @@ it('logs out the session of a user disabled outside the action and returns 401',
 })->with([
     'own route' => ['get', '/api/admin/user/info'],
     'Fortify route' => ['put', '/api/admin/user/profile-information'],
-    'public route' => ['get', '/api/admin/ping'],
+    'public route' => ['get', '/api/admin/sanctum/csrf-cookie'],
 ]);
 
 it('takes effect immediately when the user is disabled through the action', function (): void {

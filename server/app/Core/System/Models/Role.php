@@ -41,6 +41,14 @@ class Role extends SpatieRole
     }
 
     /**
+     * 是否为超管角色（标识 super-admin）：不能删除、停用、改标识，权限隐含全部（§8.6）。
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->name === self::SUPER_ADMIN;
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

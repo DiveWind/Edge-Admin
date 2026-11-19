@@ -6,7 +6,7 @@ use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPass
 use App\Core\System\Commands\SyncPermissionsCommand;
 use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Models\{Permission, Role, User};
-use App\Core\System\Services\{MenuRegistryService, PermissionRegistry};
+use App\Core\System\Services\{AllDataScope, DataScopeRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope};
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\CanResetPassword;
@@ -27,6 +27,8 @@ use Laravel\Fortify\Fortify;
  *
  * 菜单与权限（设计文档 §8.1、§8.2）：MenuRegistry 扩展点（本模块的节点见 resources/menus.php）、同步命令 core:sync-permissions、
  * 基于 PermissionRegistry 的 Gate::before。
+ *
+ * 数据权限（设计文档 §8.4）：DataScopeRegistry 扩展点，本模块注册默认的 `all`、`self` 两个范围。
  */
 class SystemServiceProvider extends ServiceProvider
 {
@@ -50,7 +52,7 @@ class SystemServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(MenuRegistry $menus): void
+    public function boot(MenuRegistry $menus, DataScopeRegistry $scopes): void
     {
         Relation::morphMap([
             'permission' => Permission::class,
@@ -58,6 +60,7 @@ class SystemServiceProvider extends ServiceProvider
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
+        $scopes->register(new AllDataScope, new SelfDataScope);
 
         if ($this->app->runningInConsole()) {
             $this->commands([SyncPermissionsCommand::class]);

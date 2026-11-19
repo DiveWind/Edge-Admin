@@ -3,6 +3,7 @@
 namespace App\Core\System\Models;
 
 use App\Core\System\Enums\Status;
+use App\Core\System\Models\Concerns\HasDataScope;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use Database\Factories\Core\System\Models\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\{Fillable, Hidden};
@@ -24,14 +25,28 @@ use Spatie\Permission\Traits\HasRoles;
  * - HasApiTokens：Sanctum 的 token（设备、App 等受限入口），后台使用会话 Cookie；
  * - HasRoles：spatie 的角色关联与分配（Action 中 syncRoles()）。判定一律走 can() / Gate / Policy（设计文档 §8.1），
  *   不使用 hasRole() 等 spatie 的判定 API（PHPStan 拦截）；除“是否超管”（isSuperAdmin()）外不按角色判断；
- * - created_by：创建人，供“仅本人”数据范围使用（§8.4、§8.5），由 Action 写入。
+ * - created_by：创建人，供“仅本人”数据范围使用（§8.4、§8.5），由 Action 写入；
+ * - HasDataScope：数据权限，`User::query()->visibleTo($actor)` 与 `$user->isVisibleTo($actor)`（用户管理的列表、详情、Policy 使用）。
  */
 #[Fillable(['username', 'name', 'email', 'avatar', 'password', 'status'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable, UsesAppTimezone;
+    use HasApiTokens, HasDataScope, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable, UsesAppTimezone;
+
+    /**
+     * spatie 的 guard：角色与权限统一使用 web（用设备 token 认证的也是同一个 User，设计文档 §8.1）。
+     */
+    public const string GUARD = 'web';
+
+    /**
+     * spatie 查找、分配角色时使用的 guard。不声明时 spatie 取当前请求的默认 guard（auth:sanctum 下为 sanctum），会找不到角色。
+     */
+    public function guardName(): string
+    {
+        return self::GUARD;
+    }
 
     /**
      * 账号是否启用。

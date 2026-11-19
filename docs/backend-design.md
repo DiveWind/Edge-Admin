@@ -411,6 +411,12 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 菜单节点的写接口中，`meta.title`、`meta.icon` 存入 `title`、`icon` 列，`meta.order` 存入 `sort` 列（不接受顶层 `sort`），其余 `meta.*` 按白名单存入 `meta` 列（§8.2）。
 - 内置节点的 `name`、`type`、`path`、`component` 在前端只读；提交的值与库中不同时返回 422（§8.6）。
 - 菜单管理页拿到的节点：顶层 `id`、`parent_id`、`type`、`name`、`path`、`component`、`status`、`is_builtin`、`children`，以及 `meta`（含 `title`、`icon`、`order` 和 `meta` 列中的键）。
+- **角色**的输出字段：`id`、`name`（标识）、`title`、`status`、`data_scope`、`remark`、`sort`、`is_super_admin`（是否为 `super-admin` 角色，前端据此隐藏授权树、禁用删除与停用）、`created_at`、`updated_at`；详情与新增、修改的响应另含 `permissions`（权限码 `string[]`），列表不含。
+  - 列表：筛选 `name`、`title`（模糊）、`status`（精确）；排序 `sort`、`id`、`created_at`，默认 `sort,id`。
+  - 新增、修改：`name`、`title` 必填；`status`（默认 `enabled`）、`data_scope`（必须是已登记的范围，默认 `self`）、`remark`、`sort`（默认 0）、`permissions`（已登记的权限码）可选；修改时未提交 `permissions` 表示权限不变，`super-admin` 角色不能提交 `permissions`（422）。新增成功返回 201。
+  - Policy（`RolePolicy`）方法：`viewAny` / `view`（`system.role`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.role.status`）、`viewFormOptions`（授权树与数据范围选项）、`viewOptions`（角色下拉）。
+- **授权树**节点：`{ name, type, meta: { title, icon }, children }`，`icon` 可为 null，叶子的 `children` 为空数组；只含生效节点（本身及全部祖先都启用，含按钮与没有子节点的目录），同级按 `sort`、`id` 排序。
+- 路由参数加格式约束（§9）：`{role}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
 - 业务保护规则（不能删除自己、内置节点不能删等）见 §8.6。
 
 ## 7. 认证
@@ -468,7 +474,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 ```
 
 - **spatie/laravel-permission** 只负责“角色与权限存在哪”：表结构、关联、分配（Action 中使用 `syncRoles()`、`syncPermissions()` 等）与缓存，不负责判定。
-  - 模型 `App\Core\System\Models\Permission`、`Role` 继承 spatie 的模型，在 `config/permission.php` 中指向它们；guard 统一为 `web`（用设备 token 认证的也是同一个 `User`）。
+  - 模型 `App\Core\System\Models\Permission`、`Role` 继承 spatie 的模型，在 `config/permission.php` 中指向它们；guard 统一为 `web`（用设备 token 认证的也是同一个 `User`）：`User::guardName()` 固定返回 `web`，新建角色时显式写入 `guard_name`，否则 spatie 会取当前请求的 guard（`auth:sanctum` 下为 `sanctum`）。
   - `permission.register_permission_check_method = false`（不注册 spatie 自带的 Gate 检查）；`permission.register_octane_reset_listener = true`。
 - **权限判定由自建的 `Gate::before` 完成**（在 `SystemServiceProvider` 中注册），只处理权限码：
   - ability 是**已登记的权限码**（以是否登记为准，不看格式；顶级目录 `system` 也是权限码）：在用户的有效权限码中 → `true`，否则 → `false`。节点或其任一祖先停用时，超管也得到 `false`。
@@ -592,7 +598,7 @@ public function delete(User $actor, User $user): Response
 - **模型 trait `HasDataScope`** 提供 `scopeVisibleTo()`（查询范围 `visibleTo($user)`）与 `isVisibleTo($user)`（单条判定），Policy 复用同一规则。两者的规则相同：
   1. 超管，或任一启用角色的范围是 `all` → 不限制；
   2. 否则各启用角色的范围做 OR 并集；
-  3. 没有启用角色，或范围 key 未登记 → 默认拒绝（查询加 `1=0`，单条判定为否）。
+  3. 没有启用角色，或范围 key 未登记 → 默认拒绝（查询加 `1=0`，单条判定为否）。范围 key 未登记的角色不贡献任何范围，用户其他角色的范围照常生效。
 - 停用的角色，其权限与数据范围都不生效。
 - 职责划分：**角色决定能做什么（功能权限），范围提供者决定能看哪些数据（数据权限）**。多角色取并集只会让可见范围变大，不会变得更细；更细的范围需要新增一个数据维度（即新增提供者）。
 - **不内置部门等组织维度**。业务需要按部门、区域、门店等维度控制时，新增一个 `DataScopeProvider` 并在角色上选用即可，不改动脚手架代码。
@@ -620,7 +626,8 @@ public function delete(User $actor, User $user): Response
 - 保存角色权限时，后端先把提交的权限码规范化：自动补齐每个节点的全部祖先节点，再 `syncPermissions()`。
 - `users` 表加 `created_by`（可空），供“仅本人”数据范围使用，由 Action 写入。
 - **防提权**：
-  - 非超管授予角色的权限码，必须是自己有效权限码的子集；
+  - 非超管授予角色的权限码，必须是自己有效权限码的子集：提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422（`permissions`）；
+  - 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的权限码（对非超管是自己没有的码，对超管是停用节点的授权——它们不出现在授权树中），无论是否提交都保留，操作者既不能加也不能删；
   - 只有超管能授予或收回 `super-admin` 角色。
 
 ### 8.6 业务保护规则
@@ -638,7 +645,7 @@ public function delete(User $actor, User $user): Response
 
 **角色**
 
-- `super-admin` 不能删除 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树。
+- `super-admin` 不能删除 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树；修改时提交 `permissions` —— 422（`permissions`）。
 - 已分配给用户的角色不能删除 —— 422（`message`）。
 - 授予的权限码超出自己的有效权限码 —— 422（`permissions`）。
 - 停用角色的权限与数据范围都不生效。

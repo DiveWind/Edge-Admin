@@ -10,10 +10,12 @@
 - 停用账号、修改密码时让已登录的会话与 token 失效；
 - 角色与菜单权限（设计文档 §8.1、§8.2）：`Models/Role`、`Models/Permission`（继承 spatie 的模型，菜单树建在 `permissions` 表上，
   节点类型见 `Enums/PermissionType`）、菜单与权限节点的扩展点 `MenuRegistry`、同步命令 `core:sync-permissions`、
-  有效权限码 `PermissionRegistry` 与 `Gate::before`。
+  有效权限码 `PermissionRegistry` 与 `Gate::before`；
+- 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
+- 数据权限（设计文档 §8.4）：扩展点 `DataScopeProvider` / `DataScopeRegistry`、默认范围 `all` 与 `self`、模型 trait `HasDataScope`（下文“数据权限”）。
 
-不负责：认证接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php` 与 `app/Http/Admin`）。
-用户、角色、菜单的管理（Policy、Action、接口）、数据权限、字典、参数、附件等在后续接入。
+不负责：认证接口与管理接口的路由与响应格式（Fortify 的路由挂在后台入口下，见 `config/fortify.php`；管理接口在 `app/Http/Admin/System`）。
+用户、菜单的管理（Policy、Action、接口）、字典、参数、附件等在后续接入。
 
 ## 对外提供
 
@@ -30,6 +32,12 @@
 | `Services/PermissionRegistry` | 有效权限码与菜单树（`#[Scoped]`），`Gate::before`、`/auth/codes`、`/menu/all` 共用 |
 | `Enums/Status` | 通用的启用 / 停用状态，用户、角色、菜单节点共用 |
 | `Models/User::isSuperAdmin()` | 是否拥有启用的 `super-admin` 角色（`Role::SUPER_ADMIN`）；`enabledRoles()` 为启用的角色 |
+| `Models/Role::isSuperAdmin()` | 是否为 `super-admin` 角色本身 |
+| `Actions/CreateRole`、`UpdateRole`、`DeleteRole`、`ChangeRoleStatus` | 角色的新增、修改、删除、启用 / 停用（规则见下文“角色管理”） |
+| `Actions/SyncRolePermissions` | 保存角色的权限码：防提权、保留操作者管不到的授权、补齐祖先（由 CreateRole、UpdateRole 调用） |
+| `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`、`viewOptions` |
+| `Contracts/DataScopeProvider`、`Services/DataScopeRegistry` | 扩展点：数据范围提供者与其登记（下文“数据权限”） |
+| `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`） |
 
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
@@ -76,6 +84,53 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 - `menuTreeFor()`：`/menu/all` 的节点树（不含按钮，没有可见子节点的目录剔除，同级按 sort、id 排序），输出格式由后台入口的 `MenuRouteResource` 负责。
 
 判定一律走 `can()` / Gate / Policy；spatie 的判定 API（`hasRole()`、`hasPermissionTo()` 等）与 `role:` / `permission:` 中间件被 PHPStan 与 `tests/Arch` 禁止。
+
+## 角色管理
+
+接口见设计文档 §6.5（`/system/roles`），由后台入口的 `RoleController` 等调用本模块的 Action；403 / 422 按 §6.1 分工：
+
+| 规则 | 结果 | 在哪 |
+|---|---|---|
+| 没有对应的权限码 | 403 | `RolePolicy` |
+| 删除 `super-admin` 角色 | 403 | `RolePolicy::delete()` |
+| `super-admin` 改标识 / 停用 / 提交 `permissions` | 422（`name` / `status` / `permissions`） | `UpdateRole`、`ChangeRoleStatus` |
+| 删除已分配给用户的角色 | 422（只有 `message`） | `DeleteRole` |
+| 授予自己没有、且角色原本也没有的权限码（非超管） | 422（`permissions`） | `SyncRolePermissions` |
+| 标识重复 | 422（`name`） | 表单校验；并发时 `CreateRole::save()` 捕获唯一索引冲突 |
+
+保存权限码（`SyncRolePermissions`）：
+
+1. 防提权：非超管提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422；超管不受限；
+2. 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的（非超管自己没有的码；对超管是停用节点的授权，它们不出现在授权树中），
+   无论是否提交都保留；
+3. 补齐每个节点的全部祖先（`PermissionRegistry::withAncestors()`），再 `syncPermissions()`；spatie 随之清除权限缓存，
+   `/auth/codes`、`/menu/all` 立即按新授权计算。停用角色同样立即生效。
+
+guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它，`CreateRole` 显式写入 `guard_name`；
+否则 spatie 会取当前请求的 guard（`auth:sanctum` 下为 `sanctum`），找不到角色与权限。
+
+## 数据权限
+
+角色决定能做什么，数据范围决定能看哪些数据（设计文档 §8.4）。每个角色选用一个范围（`roles.data_scope`，新建默认 `self`）。
+
+- 扩展点：实现 `Contracts/DataScopeProvider`（`key()`、`label()`、`constrain()`、`contains()`，两者同一规则，实现必须无状态），
+  在模块 Provider 的 `boot()` 中注册，角色表单的 `/system/roles/data-scopes` 自动出现：
+
+  ```php
+  public function boot(DataScopeRegistry $scopes): void
+  {
+      $scopes->register(new DepartmentDataScope);
+  }
+  ```
+
+- `Services/DataScopeRegistry`：单例（`#[Singleton]`），只保存注册的提供者；key 重复或不合法时抛出 `InvalidArgumentException`。
+  本模块注册 `all`（`AllDataScope`，不限制）与 `self`（`SelfDataScope`，按记录的 `created_by`）；
+- `Models/Concerns/HasDataScope`：`Model::query()->visibleTo($user)` 与 `$record->isVisibleTo($user)`（Policy 复用），规则：
+  1. 超管，或任一启用角色的范围是 `all` → 不限制；
+  2. 否则各启用角色的范围 OR 并集（每个提供者收到选用它的启用角色，条件包在独立的括号组中）；
+  3. 没有启用角色，或范围 key 未登记（该角色不贡献范围）→ 拒绝：查询加 `1 = 0`，单条判定为 false。
+
+所有查询入口（列表、详情、下拉选项、导出、统计）都要经过它；使用 `self` 范围的模型需要 `created_by` 列（由 Action 写入）。
 
 ## 依赖 Core 的能力
 

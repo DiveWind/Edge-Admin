@@ -4,6 +4,7 @@ use App\Core\System\Models\User;
 use App\Http\Admin\Requests\ListRequest;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Route;
+use Spatie\QueryBuilder\QueryBuilder;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,6 +16,9 @@ beforeEach(function (): void {
     Route::middleware('admin')->prefix('api/admin/_test')->group(function (): void {
         Route::get('params', fn (ListRequest $request): array => ['page' => $request->page(), 'pageSize' => $request->pageSize()]);
         Route::get('users', fn (ListRequest $request) => JsonResource::collection(User::query()->orderBy('id')->paginate($request->pageSize())));
+        Route::get('query', fn (ListRequest $request) => JsonResource::collection(
+            QueryBuilder::for(User::class, $request)->allowedFilters('username')->allowedSorts('id')->paginate($request->pageSize()),
+        ));
     });
 });
 
@@ -63,4 +67,22 @@ it('paginates with pageSize and returns { items, total }', function (): void {
         ->assertOk()
         ->assertJsonPath('data.total', 5)
         ->assertJsonCount(2, 'data.items');
+});
+
+it('returns 422 instead of 400 for filters and sorts outside the query-builder allowlist', function (string $query, string $field, string $message): void {
+    $this->getJson("/api/admin/_test/query?{$query}", ['Accept-Language' => 'zh-CN'])
+        ->assertUnprocessable()
+        ->assertExactJson(['code' => 422, 'data' => null, 'message' => $message, 'errors' => [$field => [$message]]]);
+})->with([
+    'filter' => ['filter[email]=a&filter[name]=b', 'filter', '不支持的筛选条件：email, name。'],
+    'sort' => ['sort=-created_at', 'sort', '不支持的排序字段：created_at。'],
+]);
+
+it('accepts the allowed filters and sorts', function (): void {
+    User::factory()->create(['username' => 'alice']);
+    User::factory()->create(['username' => 'bob']);
+
+    $this->getJson('/api/admin/_test/query?filter[username]=ali&sort=-id')
+        ->assertOk()
+        ->assertJsonPath('data.items.*.username', ['alice']);
 });

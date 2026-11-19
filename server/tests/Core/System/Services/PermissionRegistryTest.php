@@ -119,3 +119,26 @@ it('builds the menu tree from the visible route nodes only', function (): void {
         ->and($tree[1]->children->pluck('name')->all())->toBe(['a.page'])
         ->and($tree[1]->children[0]->children->all())->toBe([]);
 });
+
+it('lists every registered code, disabled ones included', function (): void {
+    $this->b->update(['status' => Status::Disabled]);
+
+    expect(resolve(PermissionRegistry::class)->registeredCodes())->toBe(['a', 'a.page', 'a.page.create', 'b', 'b.page']);
+});
+
+it('completes the ancestors of codes in node order', function (): void {
+    expect(resolve(PermissionRegistry::class)->withAncestors(['b.page', 'a.page.create', 'a', 'unknown']))
+        ->toBe(['a', 'a.page', 'a.page.create', 'b', 'b.page']);
+});
+
+it('builds the tree of enabled nodes with buttons and empty catalogs', function (): void {
+    $this->bPage->update(['status' => Status::Disabled]);
+    Permission::factory()->button()->childOf($this->bPage)->create(['name' => 'b.page.create']);
+
+    $tree = resolve(PermissionRegistry::class)->enabledTree();
+
+    expect(array_map(fn (Permission $node): string => $node->name, $tree))->toBe(['a', 'b'])
+        ->and($tree[0]->children->pluck('name')->all())->toBe(['a.page'])
+        ->and($tree[0]->children->first()?->children->pluck('name')->all())->toBe(['a.page.create'])
+        ->and($tree[1]->children->all())->toBe([]);
+});

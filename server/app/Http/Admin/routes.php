@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, UserInfoController};
+use App\Http\Admin\System\Controllers\{AuthCodesController, MenuAllController, RoleController, RoleDataScopesController, RoleOptionsController, RolePermissionTreeController, RoleStatusController, UserInfoController};
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
@@ -14,10 +14,10 @@ use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 |
 | 登录、登出、两步验证、找回密码、修改资料与密码由 Fortify 提供（同一前缀与中间件组，见 config/fortify.php）。
 |
+| 路由参数统一加格式约束（设计文档 §9）：模型 id 为数字（whereNumber），非法参数直接 404，
+| 也避免 `system/roles/options` 这类固定路径被当成 id。
+|
 */
-
-// 验证骨架用的示例路由，接入第一个模块后删除
-Route::get('ping', fn () => response()->vben(['pong' => true]))->name('ping');
 
 // 登录前获取 CSRF Cookie（XSRF-TOKEN），之后的写请求带上 X-XSRF-TOKEN 请求头（Sanctum SPA 认证）
 Route::get('sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])->name('sanctum.csrf-cookie');
@@ -26,4 +26,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('user/info', UserInfoController::class)->name('user.info');
     Route::get('auth/codes', AuthCodesController::class)->name('auth.codes');
     Route::get('menu/all', MenuAllController::class)->name('menu.all');
+
+    // 系统管理（设计文档 §6.5）
+    Route::prefix('system')->name('system.')->group(function (): void {
+        Route::get('roles/options', RoleOptionsController::class)->name('roles.options');
+        Route::get('roles/permission-tree', RolePermissionTreeController::class)->name('roles.permission-tree');
+        Route::get('roles/data-scopes', RoleDataScopesController::class)->name('roles.data-scopes');
+        Route::put('roles/{role}/status', RoleStatusController::class)->whereNumber('role')->name('roles.status');
+        Route::apiResource('roles', RoleController::class)->whereNumber('role');
+    });
 });

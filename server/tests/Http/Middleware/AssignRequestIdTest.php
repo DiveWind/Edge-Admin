@@ -21,7 +21,7 @@ it('adds an X-Request-Id header to every response', function (string $method, st
     expect($id)->not->toBeNull()
         ->and(Str::isUuid($id))->toBeTrue();
 })->with([
-    'admin entry' => ['GET', '/api/admin/ping'],
+    'admin entry' => ['GET', '/api/admin/sanctum/csrf-cookie'],
     'admin entry error' => ['GET', '/api/admin/_test/boom'],
     'unmatched route' => ['GET', '/missing'],
     'health check' => ['GET', '/up'],

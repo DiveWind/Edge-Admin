@@ -8,6 +8,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
+use Spatie\QueryBuilder\Exceptions\{InvalidAppendQuery, InvalidFieldQuery, InvalidFilterQuery, InvalidIncludeQuery, InvalidQuery, InvalidSortQuery, UnknownIncludedFieldsQuery};
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -106,6 +107,7 @@ final class VbenResponse extends JsonResponse
      * 把异常转换为 Vben 格式。返回 null 时交给框架的默认渲染（HttpResponseException 自带响应，路由内的由 FormatResponse 包装）。
      *
      * 404 / 405 统一使用通用文案，不暴露路由路径与模型类名；调试模式下 500 附带 `debug` 信息。
+     * query-builder 拒绝不在白名单内的筛选、排序等参数（该包默认为 400）统一转为 422，错误挂在对应的参数上（§6.3）。
      */
     public static function fromException(Throwable $e): ?self
     {
@@ -116,6 +118,7 @@ final class VbenResponse extends JsonResponse
                 self::firstErrorOf(['errors' => $e->errors()]) ?? self::translate('The given data was invalid.'),
                 ['errors' => $e->errors()],
             ),
+            $e instanceof InvalidQuery => self::invalidQuery($e),
             $e instanceof AuthenticationException => self::error(Response::HTTP_UNAUTHORIZED, self::translate($e->getMessage())),
             $e instanceof HttpExceptionInterface => self::error(
                 $e->getStatusCode(),
@@ -126,6 +129,27 @@ final class VbenResponse extends JsonResponse
             ),
             default => self::serverError($e),
         };
+    }
+
+    /**
+     * query-builder 的参数错误 → 422：`errors.<参数名>`（filter、sort 等，参数名见 config('query-builder.parameters')），
+     * 文案列出不允许的字段，不暴露白名单之外的信息。
+     */
+    private static function invalidQuery(InvalidQuery $e): self
+    {
+        [$parameter, $message] = match (true) {
+            $e instanceof InvalidFilterQuery => ['filter', self::translate('Unsupported filter: :fields.', ['fields' => $e->unknownFilters->implode(', ')])],
+            $e instanceof InvalidSortQuery => ['sort', self::translate('Unsupported sort: :fields.', ['fields' => $e->unknownSorts->implode(', ')])],
+            $e instanceof InvalidIncludeQuery => ['include', self::translate('The given data was invalid.')],
+            $e instanceof InvalidFieldQuery, $e instanceof UnknownIncludedFieldsQuery => ['fields', self::translate('The given data was invalid.')],
+            $e instanceof InvalidAppendQuery => ['append', self::translate('The given data was invalid.')],
+            default => ['query', self::translate('The given data was invalid.')],
+        };
+
+        $name = config('query-builder.parameters.'.$parameter, $parameter);
+        $errors = [is_string($name) ? $name : $parameter => [$message]];
+
+        return self::error(Response::HTTP_UNPROCESSABLE_ENTITY, $message, ['errors' => $errors]);
     }
 
     /**
@@ -245,9 +269,12 @@ final class VbenResponse extends JsonResponse
         return self::translate(Response::$statusTexts[$status] ?? 'Unknown Error');
     }
 
-    private static function translate(string $message): string
+    /**
+     * @param  array<string, string>  $replace
+     */
+    private static function translate(string $message, array $replace = []): string
     {
-        $translated = __($message);
+        $translated = __($message, $replace);
 
         return is_string($translated) ? $translated : $message;
     }
