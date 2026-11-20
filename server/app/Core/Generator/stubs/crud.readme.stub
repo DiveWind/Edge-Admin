@@ -20,7 +20,7 @@
 {{/softDeletes}}
 
 - 授权：`Policies/{{ model }}Policy`（§8.3）{{#dataScope}}；数据范围按 `created_by`（`HasDataScope`，§8.4）：“仅本人”的操作者只能看到、修改、删除{{#softDeletes}}、恢复、彻底删除{{/softDeletes}}{{#export}}、导出{{/export}}自己创建的记录{{/dataScope}}{{^dataScope}}；不使用数据范围{{/dataScope}}。
-- 写操作：`Actions/Create{{ model }}`、`Update{{ model }}`、`Delete{{ model }}`{{#softDeletes}}、`Restore{{ model }}`、`ForceDelete{{ model }}`（软删除整套，§10.1）{{/softDeletes}}{{#audit}}；审计日志 `Actions/{{ log }}`（日志名 `{{ logName }}`，同一事务）{{/audit}}。
+- 写操作：`Actions/Create{{ model }}`、`Update{{ model }}`、`Delete{{ model }}`{{#softDeletes}}、`Restore{{ model }}`、`ForceDelete{{ model }}`（软删除整套，§10.1）{{/softDeletes}}{{#audit}}；审计日志由 Monitor 的 `LogAudit` 在同一事务中写入（模型实现 `Auditable`，日志名 `{{ logName }}`）{{/audit}}。
 - 列表查询：`Queries/{{ model }}List`{{#export}}，导出 `Exporters/{{ model }}Exporter`（对外名称 `{{ permission }}`）共用它{{/export}}。
 - 后端文案：`resources/lang/<语言>/{{ modelSnake }}.php`（`{{ lang }}`）；菜单与目录的标题是前端 i18n key `{{ permission }}.title`、`{{ catalog }}.title`。
 - 测试：`tests/Http/{{ app }}/{{ module }}/Controllers/{{ model }}*Test.php`{{#audit}}、`tests/{{ kindDir }}/{{ module }}/Actions/{{ model }}ActivityTest.php`{{/audit}}。
@@ -29,7 +29,7 @@
 
 1. 迁移 `database/migrations/*_create_{{ table }}_table.php`；
 2. 模型 `Models/{{ model }}`：`#[Fillable]`、`casts()`（富文本用 `SanitizedHtml`）、`@property`；工厂 `database/factories/{{ kindDir }}/{{ module }}/Models/{{ model }}Factory.php`；
-3. 写入：`Create{{ model }}::ATTRIBUTES`、`Update{{ model }}::ATTRIBUTES`{{#audit}}、`{{ log }}::snapshot()`（大字段记摘要）{{/audit}}；
+3. 写入：模型的 `#[Fillable]` 即可写入的字段（`Create{{ model }}`、`Update{{ model }}` 按它取输入）；有唯一索引的字段改用 `UniqueConstraint::save()`（§5.4）{{#audit}}；审计字段 `{{ model }}::auditSnapshot()`（大字段再列入 `auditDigestedFields()`）{{/audit}}；
 4. 入口：`Requests/{{ model }}Request`（校验与 `attributes()`）、`Requests/{{ model }}IndexRequest`（筛选值）、`Resources/{{ model }}Resource`；
 5. 列表：`Queries/{{ model }}List` 的筛选与排序白名单{{#export}}；导出 `Exporters/{{ model }}Exporter` 的 `columns()` 与 `map()`{{/export}}；
 6. 语言包 `resources/lang/*/{{ modelSnake }}.php`（字段名{{#export}}、导出表头{{/export}}）；需要字典时在 `resources/dicts.php` 声明，校验用 `InDict`；

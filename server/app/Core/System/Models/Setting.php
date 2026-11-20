@@ -2,6 +2,7 @@
 
 namespace App\Core\System\Models;
 
+use App\Core\System\Data\SettingData;
 use App\Core\System\Enums\SettingType;
 use App\Core\System\Observers\SettingObserver;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
@@ -29,6 +30,23 @@ class Setting extends Model
 {
     /** @use HasFactory<SettingFactory> */
     use HasFactory, UsesAppTimezone;
+
+    /**
+     * 结构性字段以声明为准：key、group、type、name、remark、is_public，并标记 is_builtin（value 不动）。
+     * 同步命令（SyncSettings）与修改值时库中还没有该参数（尚未同步，UpdateSettings）共用。
+     */
+    public function fillFromDeclaration(SettingData $declaration): static
+    {
+        return $this->forceFill([
+            'key' => $declaration->key,
+            'group' => $declaration->group,
+            'type' => $declaration->type,
+            'name' => $declaration->title,
+            'remark' => $declaration->remark,
+            'is_public' => $declaration->public,
+            'is_builtin' => true,
+        ]);
+    }
 
     /**
      * Get the attributes that should be cast.

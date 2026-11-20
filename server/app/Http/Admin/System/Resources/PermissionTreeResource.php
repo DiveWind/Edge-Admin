@@ -11,7 +11,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * - name：权限码（角色的 permissions 提交它）；type：节点类型（catalog / menu / embedded / link / button）；
  * - meta.title：前端 i18n key（或纯文本），由前端翻译；meta.icon：可为 null；
- * - children：子节点（叶子为空数组）。节点的选取与排序由 PermissionRegistry::enabledTree() 完成。
+ * - children：子节点（叶子为空数组）。节点的选取与排序由 EffectivePermissions::enabledTree() 完成。
  *
  * @mixin Permission
  */

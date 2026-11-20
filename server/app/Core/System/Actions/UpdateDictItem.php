@@ -3,6 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\DictItem;
+use App\Support\Database\UniqueConstraint;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -10,20 +11,20 @@ use Illuminate\Validation\ValidationException;
  *
  * - 内置字典项的 value 不能修改 → 422（value）：InDict 与业务代码按它判断，只能由 core:sync-dicts 维护；
  *   label、color、sort、status 可以修改，再次同步不会覆盖；
- * - 同一类型内 value 唯一 → 422（value）；所属类型不能修改。
+ * - 同一类型内 value 唯一 → 422（value，UniqueConstraint，含并发冲突）；所属类型不能修改。
  */
 class UpdateDictItem
 {
     /**
      * Execute the action.
      *
-     * @param  array<string, mixed>  $attributes  已校验的字段（CreateDictItem::ATTRIBUTES，未提交的保持不变）
+     * @param  array<string, mixed>  $attributes  已校验的字段（未提交的保持不变）
      *
      * @throws ValidationException
      */
     public function handle(DictItem $item, array $attributes): DictItem
     {
-        $item->fill(array_intersect_key($attributes, array_flip(CreateDictItem::ATTRIBUTES)));
+        $item->fill(array_intersect_key($attributes, array_flip($item->getFillable())));
 
         if ($item->is_builtin && $item->isDirty('value')) {
             throw ValidationException::withMessages([
@@ -31,7 +32,7 @@ class UpdateDictItem
             ]);
         }
 
-        CreateDictItem::save($item);
+        UniqueConstraint::save($item, ['value' => __('Value')]);
 
         return $item;
     }

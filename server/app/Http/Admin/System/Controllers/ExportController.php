@@ -4,13 +4,12 @@ namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\DeleteExport;
 use App\Core\System\Models\{Export, User};
+use App\Core\System\Queries\ExportList;
 use App\Http\Admin\System\Requests\ExportIndexRequest;
 use App\Http\Admin\System\Resources\ExportResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 我的导出（设计文档 §6.10）：列表、详情、删除。发起导出在各列表的导出入口（如 UserExportController）。
@@ -24,20 +23,9 @@ class ExportController
      * 列表（只有本人的，预加载 file）：筛选 name、status、format（精确）、created_at（区间 `起,止`）；排序 id、created_at，默认 `-id`。
      * 不在白名单内的参数返回 422（§6.3）。
      */
-    public function index(ExportIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(ExportIndexRequest $request, ExportList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $exports = QueryBuilder::for(Export::query()->ownedBy($actor)->with('file'), $request)
-            ->allowedFilters(
-                AllowedFilter::exact('name', 'exporter'),
-                AllowedFilter::exact('status'),
-                AllowedFilter::exact('format'),
-                DateTimeRangeFilter::allowed('created_at'),
-            )
-            ->allowedSorts('id', 'created_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return ExportResource::collection($exports);
+        return ExportResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

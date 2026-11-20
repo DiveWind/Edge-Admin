@@ -136,23 +136,27 @@ Core 与 Modules 下的模块结构相同，按需创建子目录，不建空目
 app/Modules/Content/
 ├── Models/            Eloquent 模型（与迁移、工厂、Policy 一起由 core:make-model 生成）
 │   └── Concerns/      模型 trait（如 Core/System 的 HasDataScope，供各模块的模型使用）
-├── Actions/           写操作用例（一个类一个用例，handle() 方法）
+├── Actions/           写操作用例（一个类一个用例，只暴露 handle()；边界见 §5.4）
 ├── Policies/          授权规则（每个模型一个，标准方法齐全，§8.3）
-├── Queries/           复杂查询、统计指标（只读）
+├── Queries/           列表（<Model>List::builder()，筛选白名单与数据范围）、复杂查询、统计指标（只读）
 ├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
 ├── Exporters/         导出类（实现 Core/System 的 Exporter，调用列表的 Query 类，§6.10）
 ├── Commands/          Artisan 命令（在模块 Provider 中 $this->commands([...]) 登记，§4.5）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
 ├── Rules/  Casts/
-├── Contracts/  Data/  Services/   接口、只读数据对象（`<Name>Data`）与接口的实现：向受限入口开放的契约（§5.2），
-│                                  以及 Core 提供的扩展点（如 Core/System 的 MenuRegistry、DataScopeProvider 与 MenuNodeData，§5.5）
+├── Contracts/  Data/  Services/   接口、只读数据对象（`<Name>Data`）与服务：向受限入口开放的契约（§5.2）；
+│                                  Core 提供的扩展点（注册表是 Services 中的具体类，如 Core/System 的 MenuRegistry；
+│                                  由模块实现的接口在 Contracts，如 DataScopeProvider，§5.5）；不写库的领域规则（Services，§5.4）
 ├── resources/
 │   ├── lang/          模块自己的语言包（命名空间 content::）
 │   ├── views/         邮件、PDF、导出模板（不对外访问）
 │   ├── menus.php      本模块的菜单与权限节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
 │   │                  `$menus->register(require __DIR__.'/resources/menus.php')`，由 core:sync-permissions 写入数据库
 │   ├── dicts.php      本模块用到的字典类型与初始字典项（§6.7），注册到 DictRegistry，由 core:sync-dicts 写入
-│   └── settings.php   本模块的系统参数分组（§6.7），注册到 SettingRegistry，由 core:sync-settings 写入
+│   ├── settings.php   本模块的系统参数分组（§6.7），注册到 SettingRegistry，由 core:sync-settings 写入
+│   ├── enums.php      下发给前端的枚举（对外名称 => 枚举类），注册到 EnumRegistry（§6.7）
+│   ├── exporters.php  异步导出（对外名称 => 导出类），注册到 ExporterRegistry（§6.10）
+│   └── data-scopes.php  数据范围提供者类的列表，注册到 DataScopeRegistry（§8.4）
 ├── README.md          模块说明：职责、对外提供什么、依赖了 Core 的哪些能力
 └── ContentServiceProvider.php    注册本模块的命令、监听、语言包、视图，并通过扩展点接入 Core（§5.5）
 ```
@@ -165,6 +169,7 @@ app/Modules/Content/
 - **Core 的模块**：`System`、`Monitor`、`Message`。**业务模块**用业务名（`Content`、`Device`、`Order`……）。
 - 入口内部的目录与模块**同名一一对应**。删除一个业务 = 删除 `Modules/<模块>` + 各入口里的同名目录 + 前端对应页面，Core 不受影响。
 - `App\Modules\Device`（设备业务）与 `App\Http\Device`（设备接入入口）同名，但命名空间不同、职责不同。
+- 同一入口内，业务模块的目录可以使用内核模块目录的 API Resource（如 `Http/Admin/Content` 使用 `Http/Admin/System/Resources/AttachmentResource`）：方向是业务 → 内核，与 §5.1 一致；反过来不行。
 
 ### 4.5 偏离默认目录：官方支持与需要的配置
 
@@ -224,37 +229,85 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
 | 层 | 职责 | 不做 |
 |---|---|---|
-| Controller（入口） | 授权声明 → 调用 Action / 查询 → 返回 Resource | 业务逻辑、事务 |
-| Form Request（入口） | 输入格式校验（必填、长度、类型、白名单字段） | 业务约束 |
+| Controller（入口） | 授权声明 → 调用 Action / Query → 返回 Resource | 业务逻辑、事务、拼查询条件 |
+| Form Request（入口） | 输入格式校验（必填、长度、类型、白名单字段）；`Rule::unique` 只为尽早给出友好提示 | 业务约束 |
 | API Resource（入口） | 按该入口的前端格式输出，**逐个列出字段** | 查询 |
 | Action（模块） | 写入、事务、业务约束（唯一性、状态流转、引用检查）、触发事件 | 依赖 HTTP 层 |
-| Query（模块） | 复杂查询、统计指标（独立类，统一缓存策略） | 写数据 |
+| Query（模块） | 列表（筛选与排序白名单、数据范围、归属过滤）、复杂查询、统计指标（独立类，统一缓存策略） | 写数据 |
+| Service（模块） | 不写库的领域规则与计算：跨多条记录或多张表、需要注入依赖（防提权、权限树、守卫） | 写数据 |
 | Policy（模块） | 记录级授权、数据权限判定 | 依赖调用方 |
-| Contracts / Data（模块） | 受限入口的唯一入口 | 暴露模型 |
+| Contracts / Data（模块） | 受限入口的唯一入口；扩展点的接口 | 暴露模型 |
 
 所有写入都经过 Action（保证“写只有一个入口”）；单表、无副作用的 Action 由生成命令自动生成，不增加手写成本。
 
+**Action 的边界**。“写只走 Action”是**准入**规则（谁能写库），下面是**拆分**规则（写库的代码怎么组织、可复用的逻辑放哪里）。判定顺序：
+
+1. **会改变持久状态**（数据库、存储中的文件、派发队列任务、对外调用），**并且单独拿出来也是一个说得通的用例** → Action（`Actions/<动词><名词>`）。
+   - 被其他 Action 组合的子用例也是 Action（如 `SyncAttachments`、`SyncUserRoles`、`SyncRolePermissions`、`SyncAnnouncementRoles`、`RevokeUserSessions`、`DisableUser`、`StoreAttachment`、`LogAudit`）。它必须能**独立正确运行**：自己开事务（嵌套时即保存点）、自己做校验，不依赖调用方先做了什么。
+   - 只被一处调用、只有一两行写入、没有自己的规则的步骤**不单独成类**，写在调用方里（如启用用户就是 `ChangeUserStatus` 里的一行）。
+   - 一个 Action 超过约 150 行、其中大半是“算”或“判断”时，把规则抽到 Service（如菜单树的规则在 `PermissionHierarchy`），Action 只保留“取数据 → 调规则 → 写入”。
+2. Action **只暴露 `handle()`**：不允许有其他公开方法、公开静态方法，也不放供别处读取的公开常量（实现框架契约所需的方法除外，如 Fortify 的 `update()` / `reset()`，内部转给 `handle()`）。兄弟用例之间（`Update<X>` 与 `Create<X>`）不互相调用辅助方法，需要共享的东西按第 3 条放到别处。依赖一律构造注入，不在 Action 里 `resolve()`。
+3. **不写库的可复用逻辑**按依赖范围放：
+
+   | 性质 | 放哪里 | 例子 |
+   |---|---|---|
+   | 只依赖一条记录自身：判断、派生值、状态前置条件、可写入的字段、按声明填充 | **模型方法**（可写入的字段就是 `#[Fillable]`） | `isDraft()`、`auditSnapshot()`、`Setting::fillFromDeclaration()`、`User::normalizeUsername()` |
+   | 只依赖一个枚举值：规则、文案 | **枚举方法** | `PermissionType::canBeChildOf()`、`hierarchyMessage()` |
+   | 跨多条记录或多张表、需要注入依赖的领域规则或计算；只加锁也算不写库 | **Service**（`Services/`，无状态，或 `#[Scoped]`） | `Manageability`（防提权）、`PermissionHierarchy`（权限树）、`SuperAdminGuard`（最后一个超管，加锁计数） |
+   | 输入校验，结果是 422 字段错误、与请求格式无关 | **Rule**（`Rules/`，Form Request 与 Action 共用） | `InDict`、`OwnedAttachment` |
+   | 单个可复用的 where 条件 | **模型 scope** | `visibleTo()`、`boundTo()` |
+   | 组合查询：筛选与排序白名单、数据范围、归属过滤、统计；多个入口或导出共用 | **Query**（`Queries/`） | `UserList`、`ArticleList`、`LatestHealthResults` |
+   | 与业务无关的技术性重复 | **Support** | `UniqueConstraint`（唯一冲突转 422）、`BusinessRuleViolation` |
+
+   一句话：会写库并且能独立成立的，做 Action；只是“算”或“判断”的，按依赖范围放到模型、枚举、Service；只是“拼查询”的，放到 scope 或 Query。
+4. **唯一性**：有唯一索引的字段，新增与修改的 Action 都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存——它在保存点中保存（PostgreSQL 在语句失败后会中止整个事务，必须回滚到保存点），撞上唯一索引时返回 422 并挂在冲突的字段上。Form Request 的 `Rule::unique` 可选，Action 的兜底必须有（并发、命令行、受限入口都经过它）。
+5. **业务规则违反**：领域层不依赖 HTTP，不抛 Symfony 的 `HttpException`。与字段无关的（只有草稿能发布、最后一个超管不能删除、并发时状态已变）抛 `App\Support\Exceptions\BusinessRuleViolation`（可带挂靠的字段）；某个字段的值不合法抛 `ValidationException`。状态码由入口决定：后台入口（Admin）把 `BusinessRuleViolation` 映射为 422 + `message`（带字段时加 `errors`），与 §6.1 的格式一致；`AuthorizationException`（403）与 `ModelNotFoundException`（404）是框架的领域异常，照常使用。
+6. **唯一的“模型 → Action”例外**：模型 trait `HasAttachments` 与 `Attachment` 的模型事件在记录被彻底删除时调用 `DeleteAttachment`，让“连同附件与文件一起删除”对所有模块自动生效；除此之外模型、Query、Policy、Rule 不调用 Action（读侧不使用 Action 由 `tests/Arch` 检查，模型不在检查范围内）。
+7. **读写分开**：Action 不返回查询结果（返回被写入的模型即可）；需要写后再读的，入口先调 Action 再调 Query（如立即健康检查）。
+
+**列表查询一律放在 Query 类**：带数据范围、归属过滤、业务默认条件或筛选白名单的列表，查询都写在模块的 `Queries/<Model>List::builder(User $actor, array $parameters): QueryBuilder` 中（`$parameters` 为列表请求的 `filter`、`sort` 等参数，用来构造 query-builder 的请求），入口的控制器只调用它并分页；导出、下拉选项等其他入口复用同一个类，因此数据范围与筛选白名单只有一份。筛选白名单的**校验**（取值格式，422 挂在 `filter.<字段>`）仍在列表请求中，字段名的白名单只在 Query 中（不在白名单内的筛选、排序由 query-builder 拒绝，同样是 422，§6.3）。
+
 ### 5.5 Core 的扩展点
 
-业务模块通过以下扩展点接入 Core，**不修改 Core 的任何文件**。扩展点的接口放在提供它的 Core 模块中（如 `Core/System/Contracts`），由业务模块在自己的 ServiceProvider 里注册。
+业务模块通过以下扩展点接入 Core，**不修改 Core 的任何文件**。扩展点放在提供它的 Core 模块中：注册表是 `Services/` 中的具体类，由模块实现的接口（`DataScopeProvider`、`Exporter`、`Auditable` 等）放在 `Contracts/`，由业务模块在自己的 ServiceProvider 里注册。
+
+**注册表的统一形态**（`MenuRegistry`、`DictRegistry`、`SettingRegistry`、`DataScopeRegistry`、`EnumRegistry`、`ExporterRegistry`，都在 `App\Core\System\Services`）：
+
+- 都是**具体类 + `#[Singleton]`**，没有接口、不加 `Service` 后缀；只保存启动时登记的声明，不保存请求数据（§10.3）。不抽公共基类：各注册表的校验、值类型与解析方式不同。
+- 签名统一为 `register(mixed $declarations): void`：声明有误（不是数组、名称不合法或重复、类不符合要求）时抛出 `InvalidArgumentException`，这是开发期错误；一组声明全部合法才登记。
+- 注册方式统一：在模块 Provider 的 `boot()` 中注入注册表，登记 `resources/` 下的声明文件——`$menus->register(require __DIR__.'/resources/menus.php')`，同样有 `dicts.php`、`settings.php`、`enums.php`（对外名称 => 枚举类）、`exporters.php`（对外名称 => 导出类）、`data-scopes.php`（提供者类的列表，由容器解析）。模块用到哪个才建哪个文件。
+- “注册表”只指启动时登记的静态声明。请求级的计算用别的名字并加 `#[Scoped]`（如有效权限码的计算器 `EffectivePermissions`，§8.1），单例不得注入 `#[Scoped]` 的类（`tests/Arch` 检查）。
 
 | 扩展点 | 业务模块怎么用 |
 |---|---|
-| 菜单与权限节点 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\MenuRegistry` 注册本模块的目录、菜单、按钮节点；由同步命令 `core:sync-permissions` 统一写入（§8.2） |
-| 数据权限范围提供者 | 实现 `App\Core\System\Contracts\DataScopeProvider` 并注册到 `DataScopeRegistry`（如按部门、区域），角色表单中自动出现（§8.4） |
-| 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`（如 `device.heartbeat_interval`） |
-| 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Contracts\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
-| 日志 | 数据变更审计写入 activitylog 时使用本模块的日志名（模块名小写，如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
+| 菜单与权限节点 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\MenuRegistry` 注册本模块的目录、菜单、按钮节点；由同步命令 `core:sync-permissions` 统一写入（§8.2） |
+| 数据权限范围提供者 | 实现 `App\Core\System\Contracts\DataScopeProvider`，列入模块的 `resources/data-scopes.php` 并注册到 `App\Core\System\Services\DataScopeRegistry`（如按部门、区域），角色表单中自动出现（§8.4） |
+| 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`（如 `device.heartbeat_interval`） |
+| 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
+| 日志 | 数据变更审计：模型实现 `App\Core\Monitor\Contracts\Auditable`（`auditSnapshot()` 给出审计的字段，`auditDigestedFields()` 列出只记摘要的大字段），模块的 Action 在同一事务中调用 Monitor 的 `LogAudit`（`handle($actor, $model, '<事件>', $before)`）。日志名为多态别名的模块段（如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。差异计算、“没有变化不写”、大字段摘要、`description`（`<多态别名>.<事件>`）由 `LogAudit` 统一处理，模块只提供快照（§6.11）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
 | 通知 | 定义本模块的通知类：继承 `App\Core\Message\Notifications\InboxNotification`，实现 `type()`（对外的类型名，以模块名开头，如 `content.article_approved`）与 `toInbox()`（返回 `NotificationContentData`：`title`、`content`、`level`、`link`、`params`），用 `$user->notify()` 发送，即统一出现在通知中心；停用的用户不接收，项目装了 Reverb 后在 `via()` 中加上 `broadcast` 即可实时推送（§6.9）。`tests/Arch` 强制 `app/` 中的通知类都继承它、`type()` 格式合法且唯一 |
-| 异步导出 | 实现 `App\Core\System\Contracts\Exporter`（显示名、权限码、列、按“操作者 + 列表参数”构造查询——**调用该列表的 Query 类**，复用同一份筛选白名单与数据范围——与逐行映射），在 Provider 的 `boot()` 中向 `App\Core\System\Services\ExporterRegistry` 登记对外名称（如 `system.user`），列表再提供一个导出入口（`POST /<列表路径>/export`，权限码 `<菜单>.export`），即接入统一的异步导出（队列、simple-excel 流式写出）、完成通知与下载（附件的签名地址），§6.10 |
-| 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在 Provider 的 `boot()` 中向 `App\Core\System\Services\EnumRegistry` 登记对外名称（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
-| Core 事件 | 监听 Core 发出的事件（如用户被删除），清理本模块的数据 |
+| 异步导出 | 实现 `App\Core\System\Contracts\Exporter`（显示名、权限码、列、按“操作者 + 列表参数”构造查询——**调用该列表的 Query 类**，复用同一份筛选白名单与数据范围——与逐行映射），在模块的 `resources/exporters.php` 中登记对外名称（如 `system.user`，由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`），列表再提供一个导出入口（`POST /<列表路径>/export`，权限码 `<菜单>.export`），即接入统一的异步导出（队列、simple-excel 流式写出）、完成通知与下载（附件的签名地址），§6.10 |
+| 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在模块的 `resources/enums.php` 中登记对外名称（由 Provider 的 `boot()` 注册到 `App\Core\System\Services\EnumRegistry`）（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
+| Core 事件 | 在模块 Provider 中 `Event::listen()` Core 发出的领域事件（清单见下），清理或同步本模块的数据。不要监听 Core 模型的 Eloquent 事件（`eloquent.deleting: …`）：它们与领域语义不一致（批量操作、`forceFill()->save()` 等），也不是公开约定 |
+
+**Core 发出的事件**（`App\Core\System\Events`，可监听的公开约定）：
+
+| 事件 | 派发方 | 时机 | 用途（Core 内的监听） |
+|---|---|---|---|
+| `UserDeleting` | `DeleteUser` | 删除用户的事务中、删除用户行之前，同步分发（`$event->user` 及其关联仍在） | 在同一事务中清理属于该用户的数据，失败则删除整体回滚（System 删除他的导出连同文件，Message 删除他的通知） |
+| `UserDeleted` | `DeleteUser` | 事务提交之后（`ShouldDispatchAfterCommit`），回滚时不分发；`$event->user` 只能读属性 | 删除后才做、不必同进退的事：通知外部系统、清理缓存、派发队列任务 |
+| `ExportFinished` | `GenerateExport`、`FailExport` | 导出完成或失败、状态写入之后 | Message 给发起人发送通知（System 不依赖 Message） |
+
+**Core 对模块公开的类**：上表的扩展点与事件，加上 `Contracts`、`Data`、`Enums`、`Models`（含 `Models/Concerns`）、`Rules`，点名的 Action（`SyncAttachments`、`StoreAttachment`、`CreateExport`、Monitor 的 `LogAudit`）与点名的 Service（各注册表、`Settings`、`Dictionary`、`DataScopeRegistry`）。其余是 Core 的内部实现，可能随重构变化。
 
 ### 5.6 强制手段
 
 - **Pest 架构测试**：§5.1、§5.3 的依赖规则；入口不得依赖 `DB` 门面；入口内不得出现模型；受限入口不得依赖任何 `Models` 命名空间；Core 不得依赖 `App\Modules`；业务模块的测试只在 `tests/Modules/<模块>` 与 `tests/Http/<入口>/<模块>` 中（Core 与其他模块的测试不引用它，删除业务模块后其余测试不受影响；Core 的菜单树测试按 name 定位节点、只比较 Core 的目录）。
 - **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Http` 中调用模型写方法（落地前核实版本）。
 - **授权只走 Gate**：同样用 `spaze/phpstan-disallowed-calls` 加架构测试，禁止直接调用 spatie 的判定 API（§8.1）。
+- **Core 的内部方向**（Pest 架构测试）：System 是底座，不依赖 Monitor、Message；Monitor 与 Message 互不依赖。读侧（Query、Policy、Rule、导出类、Data）不使用 Action。领域层（Core、Modules）不使用 Symfony 的 `HttpKernel\Exception`（§5.4）。
+- **分层的写法**（Pest 架构测试）：Action 只暴露 `handle()`，没有其他公开方法、公开静态方法与公开常量（§5.4 的 Action 边界）；`Data` 目录的类是 `readonly`；导出类实现 `Exporter`；`Services` 中的注册表是 `#[Singleton]`，单例不注入 `#[Scoped]` 的类；列表请求校验的 `filter.*` 与 Query 类的筛选白名单一致（§5.4）；模块语言包各语言的键一致。
+- **入口的写入**（PHPStan）：除模型与查询构造器的写方法外，spatie 的授权写入（`assignRole()`、`syncRoles()`、`givePermissionTo()`、`syncPermissions()` 等）与数据库通知的 `markAsRead()` / `markAsUnread()` 同样禁止出现在 `app/Http` 中。
 - **代码审查清单**写入 `CONTRIBUTING.md`。
 
 ### 5.7 入口的注册与运行
@@ -716,13 +769,13 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 **枚举选项**（`GET /options/enums?names=a,b`）
 
 - `names` 必填，逗号分隔的对外名称；响应是以名称为键的对象，按请求顺序，每个枚举的值是 `[{ value, label, color? }]`（按 `cases()` 顺序），`label` 是 `HasLabel::label()`，**按 `Accept-Language` 翻译**（与提示文案相同，§6.1）；枚举另外实现了 `HasColor` 时每个选项有 `color`（规则同字典项的 `color`），没有实现时不输出该键。
-- **显式白名单**：只下发在 `EnumRegistry` 中登记过对外名称的枚举，名称不在登记中 → 422（`names`），不按类名反射。登记时校验：名称为小写点分标识、不重复，类是实现 `HasLabel` 的 backed enum；实现了 `HasColor` 的，每个 case 的颜色都合法。模块在 Provider 的 `boot()` 中登记：`$enums->register(['content.article_status' => ArticleStatus::class])`。
+- **显式白名单**：只下发在 `EnumRegistry` 中登记过对外名称的枚举，名称不在登记中 → 422（`names`），不按类名反射。登记时校验：名称为小写点分标识、不重复，类是实现 `HasLabel` 的 backed enum；实现了 `HasColor` 的，每个 case 的颜色都合法。模块在 `resources/enums.php` 中声明（`return ['content.article_status' => ArticleStatus::class];`），由 Provider 的 `boot()` 注册（`$enums->register(require __DIR__.'/resources/enums.php')`，§5.5）。
 - 已登记：`status`（`Status`，有颜色：`enabled` 为 `success`、`disabled` 为 `error`）、`permission_type`（`PermissionType`）、`setting_type`（`SettingType`）、`login_event`（`LoginEvent`，有颜色：`login` 为 `success`、`logout` 为 `default`、`failed` 为 `error`、`lockout` 为 `warning`、`password_reset` 为 `processing`）、`login_failure_reason`（`LoginFailureReason`）；Message 登记了 `notification_level`（`NotificationLevel`，有颜色）、`announcement_status`（`AnnouncementStatus`，有颜色）、`announcement_target`（`AnnouncementTarget`，§6.9）；System 另登记了导出的 `export_status`（`ExportStatus`，有颜色：`queued` 为 `default`、`running` 为 `processing`、`completed` 为 `success`、`failed` 为 `error`）、`export_format`（`ExportFormat`，§6.10）。
 - **登录即可访问**：枚举是代码中的固定集合，不是业务数据；不开放给未登录请求（登录页不需要），默认拒绝。不缓存（直接由代码计算）。
 
 **声明与同步**
 
-字典与参数的声明与菜单节点同构：Core 提供接口（`Contracts/DictRegistry`、`Contracts/SettingRegistry`）与 `Services` 中的单例实现，只保存启动时注册的静态声明；各模块在 Provider 的 `boot()` 中 `register(require __DIR__.'/resources/dicts.php')`（`settings.php` 同理）；同步命令由 `core:sync` 依次执行（`DatabaseSeeder` 调用，部署时也执行，§11.4）。都幂等（再次执行没有变更），在一个事务中，结束时清除缓存，在命令输出中列出每一类变更。
+字典与参数的声明与菜单节点同构：Core 提供接口（`Services/DictRegistry`、`Services/SettingRegistry`）与 `Services` 中的单例实现，只保存启动时注册的静态声明；各模块在 Provider 的 `boot()` 中 `register(require __DIR__.'/resources/dicts.php')`（`settings.php` 同理）；同步命令由 `core:sync` 依次执行（`DatabaseSeeder` 调用，部署时也执行，§11.4）。都幂等（再次执行没有变更），在一个事务中，结束时清除缓存，在命令输出中列出每一类变更。
 
 ```php
 // resources/dicts.php
@@ -989,7 +1042,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 导出请求直接继承该列表的 Form Request（筛选值的格式校验与列表完全相同），前端在列表页用同一份 `filter`、`sort` 调用；
 - “我的导出”的列表、详情、删除仍是统一的 `/exports`。
 
-**导出类（扩展点，§5.5）**：实现 `App\Core\System\Contracts\Exporter`，在模块 Provider 的 `boot()` 中向 `App\Core\System\Services\ExporterRegistry` 登记对外名称（**显式白名单**，`$exporters->register(['system.user' => UserExporter::class])`）。名称存入导出记录（不存类名，移动、重命名类不用迁移数据，与多态别名同理），格式与通知的类型名相同（小写点分、以模块名开头、全局唯一），登记时校验（类须实现 `Exporter`）。
+**导出类（扩展点，§5.5）**：实现 `App\Core\System\Contracts\Exporter`，在模块的 `resources/exporters.php` 中登记对外名称（**显式白名单**，`return ['system.user' => UserExporter::class];`，由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`，§5.5）。名称存入导出记录（不存类名，移动、重命名类不用迁移数据，与多态别名同理），格式与通知的类型名相同（小写点分、以模块名开头、全局唯一），登记时校验（类须实现 `Exporter`）。
 
 | 方法 | 说明 |
 |---|---|
@@ -1109,7 +1162,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 
 **审计日志**（§5.5、§6.6 的“模块的审计使用模块自己的日志名”）
 
-- 写入 activitylog，日志名 `content`；由 Action 在**同一个事务**中调用 `LogArticleActivity` 写入（不用 activitylog 的 `LogsActivity` trait：它只有模型事件 `created` / `updated` / `deleted` / `restored`，分不出发布、取消发布与彻底删除，也无法改写大字段）。写入失败与业务写入一起回滚：审计与数据一致。这与操作日志（§6.6）不同：操作日志在响应发送后写入、失败只 `report()` 不影响响应（它记录的是请求，丢一条不影响数据）；审计记录的是数据变更本身，必须与数据一起提交或回滚。
+- 写入 activitylog，日志名 `content`；`Article` 实现 Monitor 的 `Auditable`（`auditSnapshot()`、`auditDigestedFields()`），由 Action 在**同一个事务**中调用 Monitor 的 `LogAudit` 写入（通用写法，§5.5 的“日志”；不用 activitylog 的 `LogsActivity` trait：它只有模型事件 `created` / `updated` / `deleted` / `restored`，分不出发布、取消发布与彻底删除，也无法改写大字段）。写入失败与业务写入一起回滚：审计与数据一致。这与操作日志（§6.6）不同：操作日志在响应发送后写入、失败只 `report()` 不影响响应（它记录的是请求，丢一条不影响数据）；审计记录的是数据变更本身，必须与数据一起提交或回滚。
 - `subject` 为文章（`content.article`），`causer` 为操作者；`event` 与 `description` 为稳定的标识（前端翻译）：`event` 为 `created`、`updated`、`published`、`unpublished`、`deleted`、`restored`、`force_deleted`，`description` 为 `content.article.<event>`；`properties` 另有 `username`（操作者的快照）与 `request_id`（Monitor 的 `Activity` 自动写入，与同一请求的操作日志关联）。
 - 字段变化（spatie 的 `attributes` / `old` 结构）：记录 `title`、`summary`、`category`、`status`、`published_at`、`cover_id`、`content`。新增记 `attributes`（全部字段）；修改、发布、取消发布只记变化了的字段（`old` 与 `attributes`），没有变化时不写日志；彻底删除记 `old`（记录删除前的全部字段）；删除、恢复只记事件。
 - **大字段不存原文**：`content` 记为摘要 `{ sha256, length }`（净化后 HTML 的 SHA-256 与字符数），能看出是否变化、长度变化多少，并可与某个版本核对；原文可达 64 KB，逐次存入日志会让日志表膨胀，而且正文本身不需要审计到逐字。
@@ -1194,10 +1247,11 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
   - **无参数的调用**（`can('system.user.create')`、`#[Authorize('system.user')]`），且 ability 是**已登记的权限码**（以是否登记为准，不看格式；顶级目录 `system` 也是权限码）：在用户的有效权限码中 → `true`，否则 → `false`。节点或其任一祖先停用时，超管也得到 `false`。
   - **带参数的调用**一律返回 `null`，交给 Policy：Policy 调用总带模型或类（`can('update', $model)`、`can('create', User::class)`、`#[Authorize('update', 'user')]`），权限码检查总是无参数。因此即使有节点恰好叫 `update`、`export`，也不会绕过 Policy。
   - 其他 ability（未登记的名称，如无参数的 `publish`）→ 返回 `null`，交给 Gate 中定义的规则。因此超管只对权限码直接放行，同样受 Policy 中记录级规则的约束（不能删除自己、不能删除内置节点等）。
-- **有效权限码**由 `#[Scoped]` 的 `PermissionRegistry` 计算，每个请求只算一次。`Gate::before`、`/auth/codes`、`/menu/all` 都使用它，三处口径一致：
+- **有效权限码**由 `#[Scoped]` 的 `EffectivePermissions` 计算，每个请求只算一次。`Gate::before`、`/auth/codes`、`/menu/all` 都使用它，三处口径一致：
   - 普通用户：节点本身及全部祖先都**启用**，且都在用户**启用角色**的权限码中，该节点才生效；
   - 超管：全部启用节点（节点本身及全部祖先都启用）。
   - 保存角色权限时后端会自动补齐祖先节点（§8.5），正常情况下不会出现“有子无父”的授权。
+  - `EffectivePermissions` 是请求级的计算器，不是扩展点（声明在 `MenuRegistry`，节点在 `permissions` 表）。树的规则——遍历、防环、“节点及全部祖先都满足才算数”、组树——只有一份实现，在纯计算的 `PermissionHierarchy` 中，有效权限码、菜单管理的成环 / 生命线 / 生效规则（§8.6）与菜单管理、授权用的节点树都调用它；脏数据（上级不存在、成环）一律按不生效处理。
 - **禁止**直接使用 spatie 的判定 API：`hasRole()`、`hasAnyRole()`、`hasPermissionTo()`、`checkPermissionTo()`、路由宏 `->role()` / `->permission()`、`role:` / `permission:` 中间件等，它们绕过停用逻辑。由 PHPStan `disallowed-calls` 加架构测试强制；所有判定一律走 `can()` / Gate / Policy，除“是否超管”外不按角色判断。
 
 ### 8.2 菜单与权限
@@ -1227,7 +1281,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 停用向子孙级联生效：停用的节点及其子孙对所有人（含超管）失效。
 - 其余保护规则见 §8.6。
 
-**节点声明（扩展点）**：`App\Core\System\Contracts\MenuRegistry` 接口 + `Services` 中的单例实现，只保存启动时注册的静态声明。各模块在自己 Provider 的 `boot()` 中注册，System 自己的节点也这样注册。声明格式与 Vben 节点同构，`buttons` 键展开为 `<父 name>.<key>` 的按钮节点：
+**节点声明（扩展点）**：`App\Core\System\Services\MenuRegistry` 接口 + `Services` 中的单例实现，只保存启动时注册的静态声明。各模块在自己 Provider 的 `boot()` 中注册，System 自己的节点也这样注册。声明格式与 Vben 节点同构，`buttons` 键展开为 `<父 name>.<key>` 的按钮节点：
 
 ```php
 // SystemServiceProvider
@@ -1333,7 +1387,7 @@ public function delete(User $actor, User $user): Response
 1. 在 `Modules` 下新建一个模块（如 `Organization`）：部门树模型与迁移（`departments` 表含 `parent_id`），用户表增加 `department_id`。
 2. 需要按部门隔离的业务表增加 `department_id`，创建记录时自动填入当前用户的部门（模型事件或 Action 中处理）。
 3. 实现 `DataScopeProvider`，提供“本部门”“本部门及下级”“自定义部门”三种范围（每种范围一个提供者，各有自己的 `key()`）；“自定义部门”通过角色与部门的关联表实现，`constrain()` / `contains()` 收到的 `$roles` 即用于查这张关联表。
-4. 在模块的 Provider 中注册到 `DataScopeRegistry` 后，角色表单中自动出现这些范围选项。
+4. 列入模块的 `resources/data-scopes.php`，在 Provider 中注册到 `DataScopeRegistry` 后，角色表单中自动出现这些范围选项。
 5. 增加部门管理的后台接口与前端页面。
 6. 补充越权测试：其他部门的数据在列表、详情、下拉选项、导出中均不可见。
 
@@ -1371,11 +1425,11 @@ public function delete(User $actor, User $user): Response
 - 超管用户只有超管能编辑、重置密码、停用、删除 —— 403。
 - 非超管只能编辑、重置密码、启停、删除“管得到”的用户（§8.5：他的全部角色，含停用的，权限码与数据范围都不超过操作者）—— 403。
 - 系统至少保留一个启用的超管（账号启用且拥有启用的 `super-admin` 角色）：最后一个启用的超管不能删除（`message`）、不能停用（`status`，修改接口与状态接口都拦）、不能去掉超管角色（`roles`）—— 422。
-  - 并发与**锁顺序**：检查与写入在同一事务中。凡是可能减少启用超管的事务——删除用户（`DeleteUser`）、停用用户（`ChangeUserStatus`，状态接口与修改接口）、修改用户时提交了 `roles` 或停用（`UpdateUser`）——**第一条语句**都是对 `super-admin` 角色那一行 `lockForUpdate()`（`EnsureSuperAdminRemains::lock()`），之后才读写用户行、角色分配等其他行。统一的顺序是“先 `super-admin` 角色行，再用户行”，避免两条路径互相等待而死锁；MySQL / MariaDB 默认的 REPEATABLE READ 下，事务的一致性快照在第一条普通读取时建立，拿锁之前不做任何读取，快照就不会早于前一个持锁者的提交。计数本身也是加锁读（`sharedLock()`，只锁 `super-admin` 的持有者及其分配行），加锁读总是读最新提交的版本。这样“两个超管同时停用对方后一个不剩”的写操作被串行化。PostgreSQL（READ COMMITTED）每条语句取新快照；SQLite 不支持行锁，但同一时间只有一个写事务。MySQL 上的并发实测见 §14。
+  - 并发与**锁顺序**：检查与写入在同一事务中。凡是可能减少启用超管的事务——删除用户（`DeleteUser`）、停用用户（`ChangeUserStatus`，状态接口与修改接口）、修改用户时提交了 `roles` 或停用（`UpdateUser`）——**第一条语句**都是对 `super-admin` 角色那一行 `lockForUpdate()`（`SuperAdminGuard::lock()`），之后才读写用户行、角色分配等其他行。统一的顺序是“先 `super-admin` 角色行，再用户行”，避免两条路径互相等待而死锁；MySQL / MariaDB 默认的 REPEATABLE READ 下，事务的一致性快照在第一条普通读取时建立，拿锁之前不做任何读取，快照就不会早于前一个持锁者的提交。计数本身也是加锁读（`sharedLock()`，只锁 `super-admin` 的持有者及其分配行），加锁读总是读最新提交的版本。这样“两个超管同时停用对方后一个不剩”的写操作被串行化。PostgreSQL（READ COMMITTED）每条语句取新快照；SQLite 不支持行锁，但同一时间只有一个写事务。MySQL 上的并发实测见 §14。
   - 其他路径不会减少启用超管：`super-admin` 角色不能删除（403）、不能停用（422，状态接口与修改接口都拦）、标识不能改，同步命令不改它的状态；个人资料不能改状态与角色。
   - 通过接口时，非超管操作超管用户先被 403 拦住，超管操作者自己就是一个启用的超管，因此删除、停用的这条 422 实际只在并发时出现；去掉自己的超管角色在只剩自己时直接出现。
 - 非超管授予或收回 `super-admin` 角色 —— 422（`roles`）。
-- 停用走 `DisableUser`（吊销会话与 token，§7.3），启用走 `EnableUser`；管理员重置密码、删除用户后吊销对方的会话与 token（§7.4）。
+- 停用走 `DisableUser`（吊销会话与 token，§7.3），启用由 `ChangeUserStatus` 直接写入状态；管理员重置密码、删除用户后吊销对方的会话与 token（§7.4）。
 - 分配角色的防提权见 §8.5（422，`roles`）。
 - 用户名唯一，统一存为小写；重复时 422（`username`）；邮箱唯一，重复时 422（`email`）。表单校验之外，并发写入撞上唯一索引时 Action 同样返回 422。
 
@@ -1526,7 +1580,7 @@ Scramble 的兼容性在引入时另行验证。
 - 禁止在请求中修改 `config()`。
 - 禁止 `exit()`、`die()`。
 - 引入第三方包前确认其支持 Octane；有状态的服务登记到 Octane 的 `flush` 配置。
-- **常驻的队列 worker 同样要在任务之间重置状态**：框架在任务之间重置 `#[Scoped]` 实例与 `Cache::memo()`；第三方的单例注册器要自己处理。spatie 的 `PermissionRegistrar` 把节点与授权保存在内存中，Web 端改动授权时只能清掉本进程的副本与共享缓存，worker 中的副本不会更新——`SystemServiceProvider` 监听 `JobProcessing`，每个任务开始前调用 `clearPermissionsCollection()`（只清内存集合，下次读取时从共享缓存重新载入），保证任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。`PermissionRegistry` 是 `#[Scoped]`，参数与字典经 `Cache::memo()` 读取，其余单例（`MenuRegistry`、`DataScopeRegistry` 等）只保存启动时的声明，不需要额外处理。
+- **常驻的队列 worker 同样要在任务之间重置状态**：框架在任务之间重置 `#[Scoped]` 实例与 `Cache::memo()`；第三方的单例注册器要自己处理。spatie 的 `PermissionRegistrar` 把节点与授权保存在内存中，Web 端改动授权时只能清掉本进程的副本与共享缓存，worker 中的副本不会更新——`SystemServiceProvider` 监听 `JobProcessing`，每个任务开始前调用 `clearPermissionsCollection()`（只清内存集合，下次读取时从共享缓存重新载入），保证任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。`EffectivePermissions` 是 `#[Scoped]`，参数与字典经 `Cache::memo()` 读取，其余单例（`MenuRegistry`、`DataScopeRegistry` 等）只保存启动时的声明，不需要额外处理。
 - 以上能自动检查的（静态属性、`exit`）加入架构测试。
 
 ### 10.4 代码生成
@@ -1538,7 +1592,7 @@ Scramble 的兼容性在引入时另行验证。
 | `core:make-app {name} [--restricted]` | 入口目录（`app/Http/<Name>`）、ServiceProvider、路由文件、基础测试，并登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`；`--restricted` 生成受限入口（前缀带 `/v1`）。架构测试自动发现新入口 |
 | `core:make-module {name} [--crud=<模型> …]` | 业务模块（`app/Modules/<Name>`）：ServiceProvider（`boot()` 已接上语言包、`MenuRegistry`、`DictRegistry`）、空的 `resources/menus.php` 与 `resources/dicts.php`、README（含“删除本模块”）；`--crud=` 接着执行 `core:make-crud`（下文） |
 | `core:make-crud {model} --module=` | **完整增删改查**（下文） |
-| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope]` | 模型、迁移、工厂、Policy（§8.3 标准写法）、语言包，并在模块 Provider 中登记多态别名与语言包 |
+| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope] [--audit]` | 模型、迁移、工厂、Policy（§8.3 标准写法）、语言包，并在模块 Provider 中登记多态别名与语言包；`--audit` 时模型实现 `Auditable` |
 | `core:make-migration` / `core:make-factory` / `core:make-policy` | 为已有模型单独生成迁移、工厂、Policy（按模型的写法生成，见下文“模型是依据”） |
 | `core:make-action` / `core:make-query` / `core:make-exporter` / `core:make-enum [--color]` / `core:make-data` | 模块中的对应类（`--module=`；`--model=` 生成某个模型的标准写法） |
 | `core:make-contract {name} --module=` | 模块向受限入口导出的接口、只读数据对象与实现绑定 |
@@ -1551,17 +1605,17 @@ Scramble 的兼容性在引入时另行验证。
 - 生成后的提示只列出还没做的事：Policy 用到的权限码已在 `menus.php` 中声明时不再提示，控制器已在 `routes.php` 中登记时不再打印路由。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
 
-**模型是依据**：迁移、工厂、Policy、Action、Query、导出类、Request、Resource、控制器按**模型文件的写法**生成，不另设选项：用了 `SoftDeletes` 就生成软删除整套（§10.1），用了 `HasDataScope` 就加 `visibleTo()` / `isVisibleTo()`（§8.4），有 `creator()` 就预加载并输出创建人，有 `@property string $name` 就带上占位字段 `name`。因此这些命令对手写的模型（如 Content 的 `Article`，没有 `name`）同样生成可通过检查的代码，只是不带业务字段。`core:make-model` 的 `--soft-deletes` 与 `--no-data-scope`（数据范围默认开）决定模型的写法，之后各命令照此生成。
+**模型是依据**：迁移、工厂、Policy、Action、Query、导出类、Request、Resource、控制器按**模型文件的写法**生成，不另设选项：用了 `SoftDeletes` 就生成软删除整套（§10.1），用了 `HasDataScope` 就加 `visibleTo()` / `isVisibleTo()`（§8.4），有 `creator()` 就预加载并输出创建人，有 `@property string $name` 就带上占位字段 `name`。因此这些命令对手写的模型（如 Content 的 `Article`，没有 `name`）同样生成可通过检查的代码，只是不带业务字段。`core:make-model` 的 `--soft-deletes`、`--no-data-scope`（数据范围默认开）与 `--audit`（实现 `Auditable`）决定模型的写法，之后各命令照此生成。
 
 **单个命令的标准写法**（与 Content 一致）：
 
 | 命令 | `--model=` 时生成 |
 |---|---|
-| `core:make-model` | `#[Fillable(['name'])]`、`@property` 注释、`UsesAppTimezone`、`HasDataScope`（归属列 `created_by`）、`creator()`；迁移含 `name`、`created_by`（外键，用户删除后置空）、时间戳（`--soft-deletes`：`softDeletes()->index()`）；工厂含 `name`、`created_by`（`--soft-deletes`：`trashed()` 状态）；语言包 `resources/lang/<语言>/<模型>.php`（字段名、403 提示、导出表头，命名空间 `<模块>::`） |
+| `core:make-model` | `#[Fillable(['name'])]`（即可写入的字段）、`@property` 注释、`UsesAppTimezone`、`HasDataScope`（归属列 `created_by`）、`creator()`；迁移含 `name`、`created_by`（外键，用户删除后置空）、时间戳（`--soft-deletes`：`softDeletes()->index()`）；工厂含 `name`、`created_by`（`--soft-deletes`：`trashed()` 状态）；语言包 `resources/lang/<语言>/<模型>.php`（字段名、403 提示、导出表头，命名空间 `<模块>::`） |
 | `core:make-policy` | §8.3 的十个标准方法：先权限码，再业务保护（软删除的 `restore`、`forceDelete` 只对已删除的，提示文案来自语言包），最后 `isVisibleTo()`；软删除另有 `viewTrashed`；模型没有软删除时 `restore` 等四个方法默认拒绝 |
-| `core:make-action` | 按名称识别用例：`Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>` 为标准写法（`handle(…, User $actor)`、事务、`lockForUpdate()` 复核、并发 422 / 404），`Log<模型>Activity` 为审计日志（日志名为模块名，§6.11 的结构）；其他名称生成“锁行 → 修改 → 返回”的骨架。`--audit` 让写操作在同一事务中调用 `Log<模型>Activity`（缺少时一并生成）；不加 `--model` 时只生成带 `User $actor` 的骨架 |
+| `core:make-action` | 按名称识别用例：`Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>` 为标准写法（`handle(…, User $actor)`、事务、`lockForUpdate()` 复核、并发 422 / 404），其他名称生成“锁行 → 修改 → 返回”的骨架。可写入的字段取模型的 `#[Fillable]`（没有字段白名单常量，§5.4）；模型实现了 `Auditable` 时写操作在同一事务中调用 Monitor 的 `LogAudit`（§5.5）；不加 `--model` 时只生成带 `User $actor` 的骨架 |
 | `core:make-query` | `<模型>List::builder(User $actor, array $parameters): QueryBuilder`：`visibleTo`、预加载、筛选与排序白名单、默认 `-id`，软删除时 `trashed` 筛选与 `viewTrashed` 检查（§6.10）；名称以 `List` 结尾时模型可省略。没有模型时生成 `get(User $actor): array` 的统计骨架 |
-| `core:make-exporter` | `Exporters/<模型>Exporter`（调用 `<模型>List`，缺少时一并生成），并在模块 Provider 中登记到 `ExporterRegistry`（对外名称 `<模块>.<模型>`） |
+| `core:make-exporter` | `Exporters/<模型>Exporter`（调用 `<模型>List`，缺少时一并生成），并登记到模块的 `resources/exporters.php`（对外名称 `<模块>.<模型>`；文件没有时创建，并在 Provider 中注册到 `ExporterRegistry`） |
 | `core:make-enum --color` | 同时实现 `HasColor`（语义色，§10.1） |
 | `core:make-controller` | 资源控制器的五个方法：`index`（列表请求 + `<模型>List`）、`show`（预加载）、`store`（201）、`update`、`destroy`，写操作调用 Action 并传入 `#[CurrentUser]`；缺少的列表请求、表单请求、Resource、Query 与 Action 一并生成。`--invokable` 生成单动作控制器：`<模型>Export`（导出，`CreateExport`）、`ForceDelete<模型>`（返回 `data: null`）与其他 `<动作><模型>`（调用同名 Action、返回 Resource，ability 为动作名），并打印对应的 `Route::post(...)` / `Route::delete(...)` |
 | `core:make-request` | `--list`：继承 `ListRequest` 并校验筛选值（`name`、`created_at`、`trashed`）；`--export`：继承列表请求，去掉 `page`、`pageSize`，加 `format`（§6.10）；只有 `--model`：新增 / 修改的表单请求 |
@@ -1580,7 +1634,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | `--app=` | `admin` | 入口：必须是受信任的、提供 `Requests/ListRequest.php` 的入口 |
 | `--soft-deletes` | 关 | 软删除整套（§10.1）：`deleted_at`、恢复与彻底删除的 Action、单动作控制器、`withTrashed()` 路由、`restore` / `force-delete` 按钮、`trashed` 筛选与 `viewTrashed` |
 | `--export` | 关 | 异步导出（§6.10）：导出类并登记、`export` 按钮、导出请求、`POST /<路径>/export`（`admin-exports` 限流） |
-| `--audit` | 关 | 审计日志（§5.5、§6.11）：`Log<模型>Activity`，写操作在同一事务中写入（日志名为模块名） |
+| `--audit` | 关 | 审计日志（§5.5、§6.11）：模型实现 Monitor 的 `Auditable`（`core:make-model --audit`），写操作在同一事务中调用 `LogAudit`（日志名为模块名） |
 | `--no-data-scope` | 开 | 不使用数据范围（`HasDataScope`）：不加 `visibleTo` / `isVisibleTo`，测试不含数据范围用例。仍保留 `created_by` 与 `creator()` |
 | `-f` / `--force` | 关 | 覆盖已有文件（共享文件的登记仍幂等）；不加时模型已存在即失败，不写任何文件 |
 
@@ -1590,8 +1644,8 @@ php artisan core:make-crud Tag --module=Blog                                    
 
 | 位置 | 文件 |
 |---|---|
-| 模块 `app/Modules/Blog` | `Models/Post`、`Policies/PostPolicy`、`Actions/{Create,Update,Delete}Post`、[`Actions/{Restore,ForceDelete}Post`]、[`Actions/LogPostActivity`]、`Queries/PostList`、[`Exporters/PostExporter`]、`resources/lang/{en,zh_CN}/post.php`（`config('core.locales')` 中的每种语言） |
-| 共享文件（幂等） | `resources/menus.php`：目录 `blog`（没有时创建）下的菜单 `blog.post`（`/blog/post`，组件 `/blog/post/list`）与按钮 `create`、`update`、`delete`[、`restore`、`force-delete`][、`export`]；模块 Provider：多态别名 `blog.post`、语言包、[`ExporterRegistry` 登记 `blog.post`]；模块 README 中加入该模型一节（接口、权限码、文件清单、加字段时要改的地方） |
+| 模块 `app/Modules/Blog` | `Models/Post`、`Policies/PostPolicy`、`Actions/{Create,Update,Delete}Post`、[`Actions/{Restore,ForceDelete}Post`]、`Queries/PostList`、[`Exporters/PostExporter`]、`resources/lang/{en,zh_CN}/post.php`（`config('core.locales')` 中的每种语言） |
+| 共享文件（幂等） | `resources/menus.php`：目录 `blog`（没有时创建）下的菜单 `blog.post`（`/blog/post`，组件 `/blog/post/list`）与按钮 `create`、`update`、`delete`[、`restore`、`force-delete`][、`export`]；模块 Provider：多态别名 `blog.post`、语言包、[`resources/exporters.php` 的注册]；[`resources/exporters.php`：`blog.post`]；模块 README 中加入该模型一节（接口、权限码、文件清单、加字段时要改的地方） |
 | 数据库 | `database/migrations/*_create_posts_table.php`、`database/factories/Modules/Blog/Models/PostFactory.php` |
 | 入口 `app/Http/Admin/Blog` | `Controllers/PostController`（五个资源方法）、[`Controllers/{Restore,ForceDelete}PostController`]、[`Controllers/PostExportController`]、`Requests/{PostIndex,Post}Request`、[`Requests/PostExportRequest`]、`Resources/PostResource` |
 | 路由（`app/Http/Admin/routes.php`） | `auth:sanctum` 分组中的模块分组 `Route::prefix('blog')->name('blog.')`（已有时追加到其中）：[`posts/export`]、[`posts/{post}/restore`、`posts/{post}/force-delete`（`withTrashed()`）]、`Route::apiResource('posts', …)`，参数一律 `whereNumber` |
@@ -1758,7 +1812,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 能力 | 自建内容 | 依托的官方能力 / 包 |
 |---|---|---|
 | Vben 响应格式 | 响应包装中间件 + 响应宏 | 框架响应宏 |
-| 菜单权限 | 建在 `permissions` 表上的菜单树（Vben 的 5 种节点类型，按类型的规则在 `PermissionType`）、扩展点 `MenuRegistry`（`resources/menus.php` 声明，注册时校验）与同步命令 `core:sync-permissions`、`Gate::before` 与 `#[Scoped]` 的 `PermissionRegistry`（有效权限码、停用级联）、按 Vben 路由结构输出菜单（`/menu/all`）、权限码接口（`/auth/codes`）、菜单管理（类型校验、层级、成环、内置节点与生命线保护） | spatie/laravel-permission、Gate |
+| 菜单权限 | 建在 `permissions` 表上的菜单树（Vben 的 5 种节点类型，按类型的规则在 `PermissionType`）、扩展点 `MenuRegistry`（`resources/menus.php` 声明，注册时校验）与同步命令 `core:sync-permissions`、`Gate::before` 与 `#[Scoped]` 的 `EffectivePermissions`（请求级的有效权限码计算器、停用级联，树的规则在 `PermissionHierarchy`）、按 Vben 路由结构输出菜单（`/menu/all`）、权限码接口（`/auth/codes`）、菜单管理（类型校验、层级、成环、内置节点与生命线保护） | spatie/laravel-permission、Gate |
 | 角色与用户的防提权 | 授予权限码、数据范围、分配角色时的“只能给自己有的”、保留操作者管不到的授权、最后一个超管（加锁） | spatie/laravel-permission、数据库行锁 |
 | 数据权限 | `DataScopeProvider` 接口与 `DataScopeRegistry`（含可授予范围的防提权）、默认“全部 / 仅本人”、模型 trait `HasDataScope`（`visibleTo()` / `isVisibleTo()`，归属列可声明） | Eloquent 查询范围、Policy |
 | 列表查询 | 时间区间筛选 `DateTimeRangeFilter`（ISO 8601 带时区）；query-builder 的未知筛选 / 排序异常（`InvalidQuery`，默认 400）统一映射为 422（`VbenResponse`） | spatie/laravel-query-builder |
@@ -1775,6 +1829,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 异步导出 | 扩展点 `Exporter` + `ExporterRegistry`（显式白名单）；列表的 Query 类供列表与导出共用（同一份筛选白名单与数据范围）；导出任务表与状态流转、发起时同步校验参数、并发上限（锁用户行）与限流；队列任务（执行时复核权限、`lazy()` 分块流式写出、按发起时的语言翻译、防公式注入、超时与失败处理）；文件存为附件并绑定到导出记录（签名下载、`PrivateAttachable` 只限发起人）；完成 / 失败事件与 Message 的通知；到期清理 | simple-excel（openspout）、队列（`ShouldQueueAfterCommit`、`failed()`）、附件（§6.8）、通知中心（§6.9）、`Prunable` |
 | 富文本净化 | 统一入口 `HtmlSanitizers`（按配置的档位 `basic` / `rich` 构造只读的净化器，可限定图片主机）与类型转换 `SanitizedHtml`（`:档位` 参数，写入属性时净化）；`tests/Arch` 保证只有这一个入口（§9） | symfony/html-sanitizer |
 | 备份 | 部署级配置（`config/backup.php`：备份盘、内容、保留、健康标准、默认关闭的通知）与调度；备份列表、各盘健康状态的只读接口；立即备份（复用定时任务的立即执行）；与 `backup:monitor` 同一套规则的健康检查 `Backups` | spatie/laravel-backup（`backup:run` / `clean` / `monitor`、`BackupDestination`、`BackupDestinationStatusFactory`）、schedule-monitor、laravel-health |
+| 分层的共享件 | 业务规则异常 `BusinessRuleViolation`（领域层不依赖 HTTP，入口映射为 422，§5.4）；唯一索引冲突的兜底 `UniqueConstraint::save()`（保存点 + 冲突字段 → 422）；通用审计 `LogAudit` + `Auditable`（Monitor，§5.5）；Core 事件 `UserDeleting` / `UserDeleted`（§5.5）；菜单树的纯计算 `PermissionHierarchy`（§8.1） | Eloquent、数据库保存点、activitylog、事件（`ShouldDispatchAfterCommit`） |
 | 代码生成器 | `core:make-*` 命令集（入口、模块、各层类）、定制 stub | 官方 `GeneratorCommand`、`stub:publish` |
 | 架构与约定测试 | 边界、规范的自动检查 | Pest 架构测试、PHPStan |
 

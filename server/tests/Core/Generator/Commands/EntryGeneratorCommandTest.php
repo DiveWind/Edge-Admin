@@ -84,7 +84,7 @@ describe('controller', function (): void {
         expect($this->project->read('app/Http/Admin/Content/Controllers/ArticleExportController.php'))->toContain("#[Authorize('content.article.export')]", "\$action->handle(\$actor, 'content.article',")
             ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleExportRequest.php'))->toContain('class ArticleExportRequest extends ArticleIndexRequest', "unset(\$rules['page'], \$rules['pageSize']);")
             ->and($this->project->read('app/Modules/Content/Exporters/ArticleExporter.php'))->toContain('private readonly ArticleList $list')
-            ->and($this->project->read('app/Modules/Content/ContentServiceProvider.php'))->toContain("'content.article' => ArticleExporter::class,");
+            ->and($this->project->read('app/Modules/Content/resources/exporters.php'))->toContain("'content.article' => ArticleExporter::class,");
     });
 
     it('rejects an export controller in an entry without exports', function (): void {

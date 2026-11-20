@@ -2,6 +2,9 @@
 
 namespace {{ namespace }};
 
+{{#audit}}
+use App\Core\Monitor\Contracts\Auditable;
+{{/audit}}
 use App\Core\System\Models\User;
 {{#dataScope}}
 use App\Core\System\Models\Concerns\HasDataScope;
@@ -30,6 +33,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 {{#softDeletes}}
  * - SoftDeletes：删除是软删除，恢复、彻底删除与“已删除”筛选是整套功能（§10.1）；
 {{/softDeletes}}
+{{#audit}}
+ * - Auditable：写操作的 Action 在同一事务中用 Monitor 的 LogAudit 写审计日志（日志名为模块名，§5.5），字段见 auditSnapshot()；
+{{/audit}}
  * - 后端文案在语言包 `{{ lang }}`（resources/lang/<语言>/{{ modelSnake }}.php）。
  *
  * 写入只在 {{ module }} 模块的 Action 中进行（设计文档 §5.2）；Policy 与工厂按默认规则自动推断。
@@ -42,7 +48,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 {{/softDeletes}}
  */
 #[Fillable(['name'])]
-class {{ class }} extends Model
+class {{ class }} extends Model{{#audit}} implements Auditable{{/audit}}
 {
     /** @use HasFactory<{{ factory }}> */
     use {{ traits }};
@@ -57,6 +63,30 @@ class {{ class }} extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+{{#audit}}
+    /**
+     * 审计的字段（已保存的值，LogAudit）：加字段时一并加上；富文本等大字段同时列入 auditDigestedFields()（日志中只记摘要）。
+     *
+     * @return array{name: string}
+     */
+    public function auditSnapshot(): array
+    {
+        return [
+            'name' => $this->name,
+        ];
+    }
+
+    /**
+     * 只记摘要、不存原文的大字段。
+     *
+     * @return list<string>
+     */
+    public function auditDigestedFields(): array
+    {
+        return [];
+    }
+
+{{/audit}}
     /**
      * Get the attributes that should be cast.
      *

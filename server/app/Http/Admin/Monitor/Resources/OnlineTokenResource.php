@@ -2,7 +2,7 @@
 
 namespace App\Http\Admin\Monitor\Resources;
 
-use App\Core\Monitor\Queries\ActiveTokens;
+use App\Core\Monitor\Services\CurrentAccessToken;
 use App\Core\System\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -35,7 +35,7 @@ class OnlineTokenResource extends JsonResource
             'last_used_at' => $this->last_used_at?->toIso8601String(),
             'expires_at' => $this->expires_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
-            'is_current' => $actor instanceof User && $this->resource instanceof PersonalAccessToken && resolve(ActiveTokens::class)->isCurrent($actor, $this->resource),
+            'is_current' => $actor instanceof User && $this->resource instanceof PersonalAccessToken && resolve(CurrentAccessToken::class)->is($actor, $this->resource),
         ];
     }
 }

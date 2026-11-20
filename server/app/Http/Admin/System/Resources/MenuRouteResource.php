@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * `/menu/all` 中的一个节点，结构与 Vben 的路由一致（设计文档 §6.2）。节点的选取、剔除与排序由 PermissionRegistry::menuTreeFor() 完成：
+ * `/menu/all` 中的一个节点，结构与 Vben 的路由一致（设计文档 §6.2）。节点的选取、剔除与排序由 EffectivePermissions::menuTreeFor() 完成：
  *
  * - name：权限码（Vben 的路由 name）；path：路由路径；
  * - component：目录不输出；菜单为相对 src/views 的路径；内嵌页与外链为 IFrameView（PermissionType::routeComponent()）；

@@ -58,6 +58,16 @@ enum PermissionType: string implements HasLabel
     }
 
     /**
+     * 层级不合法（canBeChildOf() 为 false）时的提示（§8.2）：菜单管理的新增、修改共用。
+     */
+    public function hierarchyMessage(): string
+    {
+        return $this === self::Button
+            ? __('Buttons can only be placed under a menu.')
+            : __('Catalogs, menus, embedded pages and links can only be placed at the root or under a catalog.');
+    }
+
+    /**
      * 能否容纳 $child 类型的子节点（与 canBeChildOf() 同一规则）。
      */
     public function canContain(self $child): bool

@@ -10,7 +10,7 @@ use Override;
 /**
  * core:make-model：模块中的模型（设计文档 §4.5、§10.4），写法与 Content 的 Article 一致：Attribute 写法与 casts()、`@property` 注释、
  * UsesAppTimezone、占位字段 name、创建人 created_by 与 creator()、HasDataScope（数据范围，`--no-data-scope` 去掉）、
- * SoftDeletes（`--soft-deletes`）。
+ * SoftDeletes（`--soft-deletes`）、Monitor 的 Auditable（`--audit`：审计快照 auditSnapshot()，写操作的 Action 随之写审计日志）。
  *
  * 接着调用 core:make-migration、core:make-factory、core:make-policy（它们按模型文件的写法生成），生成本模型的语言包
  * （resources/lang/<语言>/<模型>.php，config('core.locales') 中的每种语言），最后在模块的 ServiceProvider 中登记多态别名
@@ -23,6 +23,7 @@ use Override;
     {name : 模型名（单数），如 Article}
     {--soft-deletes : 软删除（SoftDeletes、deleted_at；恢复、彻底删除与“已删除”筛选随之生成，设计文档 §10.1）}
     {--no-data-scope : 不使用数据范围（HasDataScope，设计文档 §8.4）}
+    {--audit : 审计日志：实现 Monitor 的 Auditable（auditSnapshot()），写操作随之调用 LogAudit（设计文档 §5.5）}
     '.self::MODULE_OPTIONS)]
 #[Description('在模块中生成模型，以及迁移、工厂、Policy、语言包，并登记多态别名与语言包')]
 class ModelMakeCommand extends ModuleGeneratorCommand
@@ -104,7 +105,7 @@ class ModelMakeCommand extends ModuleGeneratorCommand
      */
     protected function sections(string $class): array
     {
-        return ['softDeletes' => (bool) $this->option('soft-deletes'), 'dataScope' => ! $this->option('no-data-scope')];
+        return ['softDeletes' => (bool) $this->option('soft-deletes'), 'dataScope' => ! $this->option('no-data-scope'), 'audit' => (bool) $this->option('audit')];
     }
 
     /**

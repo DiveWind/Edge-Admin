@@ -3,7 +3,7 @@
 use App\Core\System\Actions\{SyncRolePermissions, SyncUserRoles};
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, Role, User};
-use App\Core\System\Services\{Manageability, PermissionRegistry};
+use App\Core\System\Services\{EffectivePermissions, Manageability};
 
 /*
 |--------------------------------------------------------------------------
@@ -28,7 +28,7 @@ beforeEach(function (): void {
 function roleGranting(array $attributes, string ...$codes): Role
 {
     $role = Role::factory()->create($attributes);
-    $role->givePermissionTo(resolve(PermissionRegistry::class)->withAncestors($codes));
+    $role->givePermissionTo(resolve(EffectivePermissions::class)->withAncestors($codes));
 
     return $role->load('permissions');
 }

@@ -4,7 +4,7 @@ namespace App\Http\Admin\System\Requests;
 
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\Role;
-use App\Core\System\Services\{DataScopeRegistry, PermissionRegistry};
+use App\Core\System\Services\{DataScopeRegistry, EffectivePermissions};
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -24,7 +24,7 @@ class RoleRequest extends FormRequest
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
-    public function rules(DataScopeRegistry $scopes, PermissionRegistry $permissions): array
+    public function rules(DataScopeRegistry $scopes, EffectivePermissions $permissions): array
     {
         $role = $this->route('role');
 

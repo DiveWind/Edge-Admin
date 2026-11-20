@@ -7,7 +7,7 @@ use App\Http\Admin\Requests\ListRequest;
 
 /**
  * 操作日志列表的查询参数（GET /monitor/operation-logs，设计文档 §6.3、§6.6）：page、pageSize、sort 由 ListRequest 校验，
- * 这里校验筛选值的格式；允许的筛选与排序字段由控制器中 query-builder 的白名单决定，其他参数返回 422。
+ * 这里校验筛选值的格式；允许的筛选与排序字段由模块 Query 类（<模型>List）中 query-builder 的白名单决定（两边一致由 tests/Arch 检查），其他参数返回 422。
  * created_at 区间（`起,止`）的格式由 DateTimeRangeFilter 校验（422，`filter.created_at`）。
  */
 class OperationLogIndexRequest extends ListRequest

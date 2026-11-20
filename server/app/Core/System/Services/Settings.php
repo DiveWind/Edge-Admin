@@ -2,7 +2,6 @@
 
 namespace App\Core\System\Services;
 
-use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Data\{SettingData, SettingGroupData, SettingValueData};
 use App\Core\System\Enums\SettingType;
 use App\Core\System\Models\Setting;

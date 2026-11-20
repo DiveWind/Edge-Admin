@@ -3,8 +3,8 @@
 use App\Core\System\Models\Attachment;
 use App\Modules\Content\Actions\ForceDeleteArticle;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,7 +66,7 @@ it('returns 422 when the article was restored meanwhile', function (): void {
     Article::query()->withTrashed()->whereKey($article->id)->update(['deleted_at' => null]);
 
     expect(fn () => resolve(ForceDeleteArticle::class)->handle($stale, superAdminActor()))
-        ->toThrow(UnprocessableEntityHttpException::class);
+        ->toThrow(BusinessRuleViolation::class);
 
     expect(Article::query()->find($article->id))->not->toBeNull();
 });

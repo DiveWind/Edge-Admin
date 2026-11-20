@@ -3,12 +3,10 @@
 namespace App\Core\Monitor;
 
 use App\Core\Monitor\Checks\BackupsCheck;
-use App\Core\Monitor\Enums\{LoginEvent, LoginFailureReason};
 use App\Core\Monitor\Listeners\RecordLoginActivity;
 use App\Core\Monitor\Models\{Activity, FailedJob, LoginLog, OperationLog, ScheduledTask, ScheduledTaskLog, Session};
 use App\Core\Monitor\Policies\PersonalAccessTokenPolicy;
-use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Services\EnumRegistry;
+use App\Core\System\Services\{EnumRegistry, MenuRegistry};
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\{Event, Gate};
 use Illuminate\Support\ServiceProvider;
@@ -58,10 +56,7 @@ class MonitorServiceProvider extends ServiceProvider
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
-        $enums->register([
-            'login_event' => LoginEvent::class,
-            'login_failure_reason' => LoginFailureReason::class,
-        ]);
+        $enums->register(require __DIR__.'/resources/enums.php');
 
         Gate::policy(PersonalAccessToken::class, PersonalAccessTokenPolicy::class);
 

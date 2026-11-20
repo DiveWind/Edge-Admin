@@ -3,7 +3,6 @@
 namespace App\Core\System\Services;
 
 use App\Core\System\Contracts\{HasColor, HasLabel};
-use App\Core\System\Models\DictItem;
 use BackedEnum;
 use Illuminate\Container\Attributes\Singleton;
 use InvalidArgumentException;
@@ -16,7 +15,7 @@ use InvalidArgumentException;
  * ```php
  * public function boot(EnumRegistry $enums): void
  * {
- *     $enums->register(['content.article_status' => ArticleStatus::class]);
+ *     $enums->register(require __DIR__.'/resources/enums.php');   // ['content.article_status' => ArticleStatus::class]
  * }
  * ```
  *
@@ -41,12 +40,16 @@ class EnumRegistry
     /**
      * 登记枚举。名称不合法或重复、类不是实现 HasLabel 的 backed enum、HasColor 的颜色不合法时抛出异常：这是开发期错误。
      *
-     * @param  array<string, class-string>  $enums  对外名称 => 枚举类
+     * @param  mixed  $enums  array<string, class-string>：对外名称 => 枚举类
      *
      * @throws InvalidArgumentException
      */
-    public function register(array $enums): void
+    public function register(mixed $enums): void
     {
+        if (! is_array($enums)) {
+            throw new InvalidArgumentException('枚举的声明必须是“对外名称 => 类”的数组。');
+        }
+
         $declared = [];
 
         foreach ($enums as $name => $enum) {
@@ -60,13 +63,13 @@ class EnumRegistry
                 throw new InvalidArgumentException("枚举的对外名称“{$name}”重复登记。");
             }
 
-            if (! is_subclass_of($enum, BackedEnum::class) || ! is_subclass_of($enum, HasLabel::class)) {
-                throw new InvalidArgumentException("枚举 {$name} 的类 [{$enum}] 必须是实现 ".HasLabel::class.' 的 backed enum。');
+            if (! is_string($enum) || ! is_subclass_of($enum, BackedEnum::class) || ! is_subclass_of($enum, HasLabel::class)) {
+                throw new InvalidArgumentException("枚举 {$name} 的类 [".(is_string($enum) ? $enum : get_debug_type($enum)).'] 必须是实现 '.HasLabel::class.' 的 backed enum。');
             }
 
             if (is_subclass_of($enum, HasColor::class)) {
                 foreach ($enum::cases() as $case) {
-                    if (preg_match(DictItem::COLOR_PATTERN, $case->color()) !== 1) {
+                    if (preg_match(HasColor::PATTERN, $case->color()) !== 1) {
                         throw new InvalidArgumentException("枚举 {$name} 的 {$case->name} 的颜色“{$case->color()}”不合法：应为 antd 的预设色名（如 success）或 #RGB / #RRGGBB。");
                     }
                 }

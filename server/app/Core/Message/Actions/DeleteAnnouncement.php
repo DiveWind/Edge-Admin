@@ -3,8 +3,8 @@
 namespace App\Core\Message\Actions;
 
 use App\Core\Message\Models\Announcement;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 删除公告（DELETE /message/announcements/{announcement}，设计文档 §6.9）：草稿与已撤回的可以删除。
@@ -18,7 +18,7 @@ class DeleteAnnouncement
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Announcement $announcement): void
     {
@@ -26,7 +26,7 @@ class DeleteAnnouncement
             $locked = Announcement::query()->lockForUpdate()->findOrFail($announcement->id);
 
             if ($locked->isPublished()) {
-                throw new UnprocessableEntityHttpException(__('Published announcements must be revoked before they can be deleted.'));
+                throw new BusinessRuleViolation(__('Published announcements must be revoked before they can be deleted.'));
             }
 
             $locked->delete();

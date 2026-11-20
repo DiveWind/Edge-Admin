@@ -3,8 +3,8 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\Role;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 删除角色（DELETE /system/roles/{role}，设计文档 §6.5、§8.6）。
@@ -19,7 +19,7 @@ class DeleteRole
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Role $role): void
     {
@@ -27,7 +27,7 @@ class DeleteRole
             Role::query()->whereKey($role->getKey())->lockForUpdate()->first();
 
             if ($role->users()->exists()) {
-                throw new UnprocessableEntityHttpException(__('The role is assigned to users and cannot be deleted.'));
+                throw new BusinessRuleViolation(__('The role is assigned to users and cannot be deleted.'));
             }
 
             $role->delete();

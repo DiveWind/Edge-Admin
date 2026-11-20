@@ -2,10 +2,8 @@
 
 namespace App\Modules\Content;
 
-use App\Core\System\Contracts\{DictRegistry, MenuRegistry};
+use App\Core\System\Services\{DictRegistry, MenuRegistry};
 use App\Core\System\Services\{EnumRegistry, ExporterRegistry};
-use App\Modules\Content\Enums\ArticleStatus;
-use App\Modules\Content\Exporters\ArticleExporter;
 use App\Modules\Content\Models\Article;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
@@ -19,7 +17,8 @@ use Illuminate\Support\ServiceProvider;
  * 只通过扩展点接入，不修改 Core 的任何文件（§5.3）：
  * - 多态别名 `content.article`（§4.5）；语言包（命名空间 `content::`，resources/lang）；
  * - 菜单与权限节点（resources/menus.php）→ MenuRegistry；字典类型 `content.article_category`（resources/dicts.php）→ DictRegistry；
- * - 文章状态枚举 `content.article_status` → EnumRegistry（/options/enums）；文章列表的导出 `content.article` → ExporterRegistry。
+ * - 文章状态枚举 `content.article_status`（resources/enums.php）→ EnumRegistry（/options/enums）；
+ *   文章列表的导出 `content.article`（resources/exporters.php）→ ExporterRegistry。
  */
 class ContentServiceProvider extends ServiceProvider
 {
@@ -44,7 +43,7 @@ class ContentServiceProvider extends ServiceProvider
 
         $menus->register(require __DIR__.'/resources/menus.php');
         $dicts->register(require __DIR__.'/resources/dicts.php');
-        $enums->register(['content.article_status' => ArticleStatus::class]);
-        $exporters->register(['content.article' => ArticleExporter::class]);
+        $enums->register(require __DIR__.'/resources/enums.php');
+        $exporters->register(require __DIR__.'/resources/exporters.php');
     }
 }

@@ -3,16 +3,14 @@
 namespace App\Http\Admin\Monitor\Controllers;
 
 use App\Core\Monitor\Actions\RevokeToken;
-use App\Core\Monitor\Queries\ActiveTokens;
+use App\Core\Monitor\Queries\OnlineTokenList;
 use App\Core\System\Models\User;
 use App\Http\Admin\Monitor\Requests\OnlineTokenIndexRequest;
 use App\Http\Admin\Monitor\Resources\OnlineTokenResource;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Laravel\Sanctum\PersonalAccessToken;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 在线会话页的 token（设计文档 §6.6、§7.3）：有效 token 的列表与吊销。
@@ -27,23 +25,9 @@ class OnlineTokenController
      * 排序 id、last_used_at、created_at，默认 `-id`。
      */
     #[Authorize('viewAny', PersonalAccessToken::class)]
-    public function index(OnlineTokenIndexRequest $request, ActiveTokens $tokens, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(OnlineTokenIndexRequest $request, OnlineTokenList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $page = QueryBuilder::for($tokens->builder($actor), $request)
-            ->allowedFilters(
-                AllowedFilter::exact('user_id', 'tokenable_id'),
-                AllowedFilter::callback('username', fn (Builder $query, mixed $value) => $query->whereHasMorph(
-                    'tokenable',
-                    [User::class],
-                    fn (Builder $users) => $users->whereLike('username', '%'.(is_scalar($value) ? $value : '').'%'),
-                )),
-                AllowedFilter::partial('name'),
-            )
-            ->allowedSorts('id', 'last_used_at', 'created_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return OnlineTokenResource::collection($page);
+        return OnlineTokenResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

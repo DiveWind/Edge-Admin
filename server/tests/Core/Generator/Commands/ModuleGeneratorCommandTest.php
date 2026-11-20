@@ -47,29 +47,36 @@ it('generates an enum with a semantic color with --color', function (): void {
 
 describe('with a model', function (): void {
     beforeEach(function (): void {
-        $this->artisan('core:make-model', ['name' => 'Article', '--module' => 'Content', '--soft-deletes' => true])->assertSuccessful();
+        $this->artisan('core:make-model', ['name' => 'Article', '--module' => 'Content', '--soft-deletes' => true, '--audit' => true])->assertSuccessful();
     });
 
-    it('recognizes the standard actions by name', function (string $name, array $contains): void {
-        $this->artisan('core:make-action', ['name' => $name, '--module' => 'Content', '--model' => 'Article', '--audit' => true])->assertSuccessful();
+    it('recognizes the standard actions by name, writing the audit log because the model is auditable', function (string $name, array $contains): void {
+        $this->artisan('core:make-action', ['name' => $name, '--module' => 'Content', '--model' => 'Article'])->assertSuccessful();
 
         expect($this->project->read("app/Modules/Content/Actions/{$name}.php"))->toContain(...$contains)
-            ->and($this->project->exists('app/Modules/Content/Actions/LogArticleActivity.php'))->toBeTrue();
+            ->not->toContain('public const')
+            ->and($this->project->exists('app/Modules/Content/Actions/LogArticleActivity.php'))->toBeFalse();
     })->with([
-        'create' => ['CreateArticle', ["public const array ATTRIBUTES = ['name'];", 'public function handle(array $attributes, User $actor): Article', '$article->created_by = $actor->id;', 'LogArticleActivity::CREATED']],
-        'update' => ['UpdateArticle', ['public function handle(Article $article, array $attributes, User $actor): Article', 'Article::query()->lockForUpdate()->findOrFail($article->id)', '$before = $this->log->snapshot($locked);']],
-        'delete' => ['DeleteArticle', ['public function handle(Article $article, User $actor): void', '$locked->delete();', 'LogArticleActivity::DELETED']],
-        'restore' => ['RestoreArticle', ['withTrashed()->lockForUpdate()', "throw new UnprocessableEntityHttpException(__('content::article.messages.restore_trashed_only'));", 'LogArticleActivity::RESTORED']],
-        'force delete' => ['ForceDeleteArticle', ['$locked->forceDelete();', 'LogArticleActivity::FORCE_DELETED, $before']],
+        'create' => ['CreateArticle', ['array_intersect_key($attributes, array_flip($article->getFillable()))', 'public function handle(array $attributes, User $actor): Article', '$article->created_by = $actor->id;', "\$this->audit->handle(\$actor, \$article, 'created');", 'use App\Core\Monitor\Actions\LogAudit;']],
+        'update' => ['UpdateArticle', ['public function handle(Article $article, array $attributes, User $actor): Article', 'Article::query()->lockForUpdate()->findOrFail($article->id)', '$before = $locked->auditSnapshot();']],
+        'delete' => ['DeleteArticle', ['public function handle(Article $article, User $actor): void', '$locked->delete();', "'deleted'"]],
+        'restore' => ['RestoreArticle', ['withTrashed()->lockForUpdate()', "throw new BusinessRuleViolation(__('content::article.messages.restore_trashed_only'));", "'restored'"]],
+        'force delete' => ['ForceDeleteArticle', ['$locked->forceDelete();', "'force_deleted', \$before"]],
         'other' => ['PublishArticle', ['public function handle(Article $article, User $actor): Article', '// TODO: 复核状态']],
     ]);
 
-    it('generates the audit log of the model', function (): void {
-        $this->artisan('core:make-action', ['name' => 'LogArticleActivity', '--module' => 'Content'])->assertSuccessful();
-
-        expect($this->project->read('app/Modules/Content/Actions/LogArticleActivity.php'))->toContain(
-            "public const string LOG_NAME = 'content';", 'public const string FORCE_DELETED', '->log("content.article.{$event}");', "'name' => \$article->name,",
+    it('makes the model auditable with --audit', function (): void {
+        expect($this->project->read('app/Modules/Content/Models/Article.php'))->toContain(
+            'use App\Core\Monitor\Contracts\Auditable;', 'class Article extends Model implements Auditable', 'public function auditSnapshot(): array', "'name' => \$this->name,", 'public function auditDigestedFields(): array',
         );
+    });
+
+    it('does not write the audit log for models that are not auditable', function (): void {
+        $this->artisan('core:make-model', ['name' => 'Comment', '--module' => 'Content'])->assertSuccessful();
+        $this->artisan('core:make-action', ['name' => 'CreateComment', '--module' => 'Content'])->assertSuccessful();
+
+        expect($this->project->read('app/Modules/Content/Models/Comment.php'))->not->toContain('Auditable')
+            ->and($this->project->read('app/Modules/Content/Actions/CreateComment.php'))->not->toContain('LogAudit');
     });
 
     it('generates the list query of the model', function (): void {
@@ -95,7 +102,10 @@ describe('with a model', function (): void {
             ->and($this->project->exists('app/Modules/Content/Queries/ArticleList.php'))->toBeTrue()
             ->and($this->project->read('app/Modules/Content/ContentServiceProvider.php'))->toContain(
                 'public function boot(MenuRegistry $menus, DictRegistry $dicts, ExporterRegistry $exporters): void',
-                "        \$exporters->register([\n            'content.article' => ArticleExporter::class,\n        ]);",
+                "        \$exporters->register(require __DIR__.'/resources/exporters.php');",
+            )
+            ->and($this->project->read('app/Modules/Content/resources/exporters.php'))->toContain(
+                'use App\Modules\Content\Exporters\ArticleExporter;', "return [\n    'content.article' => ArticleExporter::class,\n];",
             );
     });
 

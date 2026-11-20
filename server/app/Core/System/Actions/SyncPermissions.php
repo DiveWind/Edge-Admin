@@ -2,10 +2,10 @@
 
 namespace App\Core\System\Actions;
 
-use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Data\MenuNodeData;
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, Role};
+use App\Core\System\Services\MenuRegistry;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;

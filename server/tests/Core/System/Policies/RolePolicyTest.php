@@ -2,7 +2,7 @@
 
 use App\Core\System\Models\Role;
 use App\Core\System\Policies\RolePolicy;
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\EffectivePermissions;
 use Illuminate\Support\Facades\Gate;
 
 /*
@@ -33,7 +33,7 @@ dataset('abilities', [
 it('allows each ability only with its permission codes', function (string $ability, bool $onRecord, array $codes): void {
     // 其余全部权限码（不含这些码的子孙：授予子孙会补齐祖先）
     $others = array_filter(
-        resolve(PermissionRegistry::class)->registeredCodes(),
+        resolve(EffectivePermissions::class)->registeredCodes(),
         fn (string $other): bool => ! array_any($codes, fn (string $code): bool => $other === $code || str_starts_with($other, "{$code}.")),
     );
     $arguments = $onRecord ? $this->role : Role::class;

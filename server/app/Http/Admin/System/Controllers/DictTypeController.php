@@ -3,12 +3,13 @@
 namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{CreateDictType, DeleteDictType, UpdateDictType};
-use App\Core\System\Models\DictType;
+use App\Core\System\Models\{DictType, User};
+use App\Core\System\Queries\DictTypeList;
 use App\Http\Admin\System\Requests\{DictTypeIndexRequest, DictTypeRequest};
 use App\Http\Admin\System\Resources\DictTypeResource;
+use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 字典类型管理（设计文档 §6.7、§8.6）：列表、详情、新增、修改、删除。字典项见 DictItemController。
@@ -23,15 +24,9 @@ class DictTypeController
      * 不在白名单内的筛选、排序参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', DictType::class)]
-    public function index(DictTypeIndexRequest $request): AnonymousResourceCollection
+    public function index(DictTypeIndexRequest $request, DictTypeList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $types = QueryBuilder::for(DictType::class, $request)
-            ->allowedFilters(AllowedFilter::partial('code'), AllowedFilter::partial('name'), AllowedFilter::exact('status'))
-            ->allowedSorts('id', 'code', 'created_at')
-            ->defaultSort('id')
-            ->paginate($request->pageSize());
-
-        return DictTypeResource::collection($types);
+        return DictTypeResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Core\System\Models;
 
+use App\Core\System\Contracts\HasColor;
 use App\Core\System\Enums\Status;
 use App\Core\System\Observers\DictionaryObserver;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
@@ -37,7 +38,7 @@ class DictItem extends Model
     /**
      * color 的格式：antd Tag 的预设色名（小写字母与 -，如 success、processing、geekblue）或 #RGB / #RRGGBB。
      */
-    public const string COLOR_PATTERN = '/^([a-z][a-z-]*|#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})$/';
+    public const string COLOR_PATTERN = HasColor::PATTERN;
 
     /**
      * 所属的字典类型。

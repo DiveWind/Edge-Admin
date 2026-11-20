@@ -3,6 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\DictType;
+use App\Support\Database\UniqueConstraint;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -10,20 +11,20 @@ use Illuminate\Validation\ValidationException;
  *
  * - 内置类型的 code 不能修改 → 422（code）：InDict 与业务代码按它引用，只能由 core:sync-dicts 维护；
  *   名称、备注、状态可以修改，再次同步不会覆盖；
- * - code 唯一 → 422（code）。
+ * - code 唯一 → 422（code，UniqueConstraint，含并发冲突）。
  */
 class UpdateDictType
 {
     /**
      * Execute the action.
      *
-     * @param  array<string, mixed>  $attributes  已校验的字段（CreateDictType::ATTRIBUTES，未提交的保持不变）
+     * @param  array<string, mixed>  $attributes  已校验的字段（未提交的保持不变）
      *
      * @throws ValidationException
      */
     public function handle(DictType $type, array $attributes): DictType
     {
-        $type->fill(array_intersect_key($attributes, array_flip(CreateDictType::ATTRIBUTES)));
+        $type->fill(array_intersect_key($attributes, array_flip($type->getFillable())));
 
         if ($type->is_builtin && $type->isDirty('code')) {
             throw ValidationException::withMessages([
@@ -31,7 +32,7 @@ class UpdateDictType
             ]);
         }
 
-        CreateDictType::save($type);
+        UniqueConstraint::save($type, ['code' => __('Code')]);
 
         return $type;
     }

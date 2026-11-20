@@ -2,8 +2,7 @@
 
 use App\Core\Message\Enums\{AnnouncementStatus, AnnouncementTarget, NotificationLevel};
 use App\Core\Message\Models\{Announcement, Notification};
-use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Services\EnumRegistry;
+use App\Core\System\Services\{EnumRegistry, MenuRegistry};
 use Illuminate\Console\Scheduling\{Event, Schedule};
 use Illuminate\Database\Eloquent\Relations\Relation;
 

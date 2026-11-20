@@ -2,10 +2,13 @@
 
 namespace {{ namespace }};
 
+{{#audit}}
+use App\Core\Monitor\Actions\LogAudit;
+{{/audit}}
 use {{ namespacedModel }};
 use {{ namespacedUserModel }};
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 
 /**
  * 彻底删除已删除的{{ model }}（设计文档 §10.1）。
@@ -19,13 +22,13 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 class {{ class }}
 {
 {{#audit}}
-    public function __construct(private readonly {{ log }} $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
 {{/audit}}
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle({{ model }} ${{ modelVariable }}, {{ userModel }} $actor): void
     {
@@ -33,17 +36,17 @@ class {{ class }}
             $locked = {{ model }}::query()->withTrashed()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
 
             if (! $locked->trashed()) {
-                throw new UnprocessableEntityHttpException(__('{{ lang }}.messages.force_delete_trashed_only'));
+                throw new BusinessRuleViolation(__('{{ lang }}.messages.force_delete_trashed_only'));
             }
 {{#audit}}
 
-            $before = $this->log->snapshot($locked);
+            $before = $locked->auditSnapshot();
 {{/audit}}
 
             $locked->forceDelete();
 {{#audit}}
 
-            $this->log->handle($actor, $locked, {{ log }}::FORCE_DELETED, $before);
+            $this->audit->handle($actor, $locked, 'force_deleted', $before);
 {{/audit}}
         });
     }

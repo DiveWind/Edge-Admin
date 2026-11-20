@@ -2,11 +2,10 @@
 
 namespace App\Core\System\Actions;
 
-use App\Core\System\Contracts\DictRegistry;
 use App\Core\System\Data\{DictItemData, DictTypeData};
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{DictItem, DictType};
-use App\Core\System\Services\Dictionary;
+use App\Core\System\Services\{DictRegistry, Dictionary};
 use Illuminate\Support\Facades\DB;
 
 /**

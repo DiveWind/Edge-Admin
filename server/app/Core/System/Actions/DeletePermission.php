@@ -3,8 +3,8 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\Permission;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 删除菜单与权限节点（DELETE /system/menus/{menu}，设计文档 §6.5、§8.6）。
@@ -20,7 +20,7 @@ class DeletePermission
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Permission $permission): void
     {
@@ -28,7 +28,7 @@ class DeletePermission
             Permission::query()->whereKey($permission->getKey())->lockForUpdate()->first();
 
             if ($permission->children()->exists()) {
-                throw new UnprocessableEntityHttpException(__('The node has child nodes and cannot be deleted.'));
+                throw new BusinessRuleViolation(__('The node has child nodes and cannot be deleted.'));
             }
 
             $permission->delete();

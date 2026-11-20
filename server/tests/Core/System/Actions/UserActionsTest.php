@@ -2,9 +2,11 @@
 
 use App\Core\System\Actions\{ChangeUserStatus, CreateUser, DeleteUser, UpdateUser};
 use App\Core\System\Enums\Status;
+use App\Core\System\Events\{UserDeleted, UserDeleting};
 use App\Core\System\Models\User;
+use App\Support\Exceptions\BusinessRuleViolation;
+use Illuminate\Support\Facades\{DB, Event};
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,7 +48,7 @@ it('disables a super admin while another one remains', function (): void {
 
 it('does not delete the last enabled super admin', function (): void {
     expect(fn () => resolve(DeleteUser::class)->handle($this->superAdmin))
-        ->toThrow(UnprocessableEntityHttpException::class, 'The last enabled super admin cannot be deleted.');
+        ->toThrow(BusinessRuleViolation::class, 'The last enabled super admin cannot be deleted.');
 
     $this->assertModelExists($this->superAdmin);
 });
@@ -72,4 +74,35 @@ it('reports the email when updating a user to a taken email', function (): void 
         ->toThrow(function (ValidationException $e): void {
             expect(array_keys($e->errors()))->toBe(['email']);
         });
+});
+
+it('dispatches UserDeleting inside the transaction before the delete, and UserDeleted only after the commit', function (): void {
+    $user = User::factory()->create();
+    $seen = [];
+
+    Event::listen(UserDeleting::class, function (UserDeleting $event) use (&$seen): void {
+        $seen[] = ['deleting', $event->user->exists && User::query()->whereKey($event->user->id)->exists(), DB::transactionLevel()];
+    });
+    Event::listen(UserDeleted::class, function (UserDeleted $event) use (&$seen): void {
+        $seen[] = ['deleted', $event->user->exists, DB::transactionLevel()];
+    });
+
+    $level = DB::transactionLevel();
+    resolve(DeleteUser::class)->handle($user);
+
+    expect($seen)->toBe([['deleting', true, $level + 1], ['deleted', false, $level]]);
+});
+
+it('does not dispatch UserDeleted when the deletion is rolled back', function (): void {
+    $user = User::factory()->create();
+    Event::listen(UserDeleting::class, fn (): never => throw new RuntimeException('cleanup failed'));
+    $deleted = false;
+    Event::listen(UserDeleted::class, function () use (&$deleted): void {
+        $deleted = true;
+    });
+
+    expect(fn () => resolve(DeleteUser::class)->handle($user))->toThrow(RuntimeException::class, 'cleanup failed');
+
+    expect($deleted)->toBeFalse()
+        ->and($user->fresh())->not->toBeNull();
 });

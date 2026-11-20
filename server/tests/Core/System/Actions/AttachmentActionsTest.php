@@ -2,11 +2,11 @@
 
 use App\Core\System\Actions\{DeleteAttachment, DeleteUnboundAttachment, DeleteUser, StoreAttachment, SyncAttachments};
 use App\Core\System\Models\{Attachment, User};
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\{DB, Storage};
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -163,7 +163,7 @@ describe('DeleteUnboundAttachment', function (): void {
         resolve(SyncAttachments::class)->handle(User::factory()->create(), 'files', [$attachment->id]);
 
         expect(fn () => resolve(DeleteUnboundAttachment::class)->handle($stale))
-            ->toThrow(UnprocessableEntityHttpException::class, 'Attachments in use cannot be deleted.');
+            ->toThrow(BusinessRuleViolation::class, 'Attachments in use cannot be deleted.');
 
         $this->assertModelExists($attachment);
         Storage::disk('local')->assertExists($attachment->path);

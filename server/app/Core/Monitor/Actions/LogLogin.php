@@ -23,7 +23,7 @@ class LogLogin
     /**
      * 提交的用户名的最大长度。
      */
-    public const int USERNAME_LENGTH = 255;
+    private const int USERNAME_LENGTH = 255;
 
     /**
      * Execute the action.
@@ -50,7 +50,7 @@ class LogLogin
                 'reason' => $event === LoginEvent::Failed ? $reason?->value : null,
                 ...($event === LoginEvent::Login ? ['via_remember' => $viaRemember] : []),
                 'ip_address' => $ipAddress,
-                'user_agent' => $userAgent === null ? null : Str::limit($userAgent, LogOperation::USER_AGENT_LENGTH, ''),
+                'user_agent' => $userAgent === null ? null : Str::limit($userAgent, Activity::USER_AGENT_LENGTH, ''),
             ])
             ->log($event->value);
 

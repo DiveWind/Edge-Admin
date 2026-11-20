@@ -4,14 +4,13 @@ namespace App\Http\Admin\Message\Controllers;
 
 use App\Core\Message\Actions\{CreateAnnouncement, DeleteAnnouncement, UpdateAnnouncement};
 use App\Core\Message\Models\Announcement;
+use App\Core\Message\Queries\AnnouncementList;
 use App\Core\System\Models\User;
 use App\Http\Admin\Message\Requests\{AnnouncementIndexRequest, AnnouncementRequest};
 use App\Http\Admin\Message\Resources\AnnouncementResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 公告管理（设计文档 §6.9、§8.6）：列表、详情、新增、修改、删除。发布、撤回、目标角色下拉是单动作控制器。
@@ -26,22 +25,9 @@ class AnnouncementController
      * 排序 id、created_at、published_at，默认 `-id`。不在白名单内的参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', Announcement::class)]
-    public function index(AnnouncementIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(AnnouncementIndexRequest $request, AnnouncementList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $announcements = QueryBuilder::for(Announcement::query()->visibleTo($actor)->with(AnnouncementResource::relations()), $request)
-            ->allowedFilters(
-                AllowedFilter::partial('title'),
-                AllowedFilter::exact('status'),
-                AllowedFilter::exact('level'),
-                AllowedFilter::exact('target'),
-                DateTimeRangeFilter::allowed('created_at'),
-                DateTimeRangeFilter::allowed('published_at'),
-            )
-            ->allowedSorts('id', 'created_at', 'published_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return AnnouncementResource::collection($announcements);
+        return AnnouncementResource::collection($list->builder($actor, $request->listParameters())->with(AnnouncementResource::relations())->paginate($request->pageSize()));
     }
 
     /**

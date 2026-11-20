@@ -10,7 +10,7 @@
 - 停用账号、修改密码时让已登录的会话与 token 失效；
 - 角色与菜单权限（设计文档 §8.1、§8.2）：`Models/Role`、`Models/Permission`（继承 spatie 的模型，菜单树建在 `permissions` 表上，
   节点类型见 `Enums/PermissionType`）、菜单与权限节点的扩展点 `MenuRegistry`、同步命令 `core:sync-permissions`、
-  有效权限码 `PermissionRegistry` 与 `Gate::before`；
+  有效权限码 `EffectivePermissions` 与 `Gate::before`；
 - 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
 - 用户管理（设计文档 §6.5、§8.5、§8.6）：`Policies/UserPolicy` 与用户的 Action（下文“用户管理”）；
 - 菜单管理（设计文档 §6.5、§8.2、§8.6）：`Policies/PermissionPolicy`、节点的 Action 与 `Queries/PermissionTree`（下文“菜单管理”）；
@@ -35,55 +35,60 @@
 | `Actions/UpdateUserPassword` | 修改密码，其他会话与全部 token 失效（Fortify：`PUT /user/password`） |
 | `Actions/ResetUserPassword` | 重置密码，全部会话与 token 失效（Fortify：`POST /reset-password`） |
 | `Actions/DisableUser` | 停用用户：不能再登录，已登录的会话与 token 立即失效（由 `ChangeUserStatus` 调用） |
-| `Actions/EnableUser` | 启用用户（由 `ChangeUserStatus` 调用） |
 | `Actions/RevokeUserSessions` | 删除用户的会话（database 驱动，按 `sessions.user_id`，可保留一个）与全部 token |
 | `Actions/SyncPermissions` | 把声明的节点同步到 `permissions` 表（`core:sync-permissions` 调用，规则见下文） |
 | `Commands/SyncPermissionsCommand` | `php artisan core:sync-permissions`：调用 `SyncPermissions` 并输出变更（在 `SystemServiceProvider` 中登记） |
-| `Contracts/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册菜单与权限节点（下文） |
+| `Services/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册菜单与权限节点（下文） |
 | `Data/MenuNodeData` | 已校验、已展开 `buttons` 的一个声明节点（`MenuRegistry::all()` 的元素）；`structuralMeta()` 为同步命令修正的 meta 键 |
 | `Models/Permission` | 菜单与权限节点；`isValidName()`（权限码格式，声明与写接口共用）、`META_KEYS`（meta 列白名单）、`LIFELINE_NAMES`（生命线节点） |
 | `Enums/PermissionType` | 5 种节点类型与按类型的规则：`canBeChildOf()` / `canContain()`（层级）、`isRoute()`（有 path）、`usesComponent()`、`requiredMetaKey()`、`allowsMetaKey()`、`routeComponent()`（`/menu/all` 的 component） |
-| `Services/PermissionRegistry` | 有效权限码与菜单树（`#[Scoped]`），`Gate::before`、`/auth/codes`、`/menu/all` 共用 |
+| `Services/EffectivePermissions` | 请求级的有效权限码与菜单树计算器（`#[Scoped]`，不是注册表），`Gate::before`、`/auth/codes`、`/menu/all` 共用 |
+| `Services/PermissionHierarchy` | 菜单树的纯计算：`chain()`、`isSelfOrDescendant()`、`everyInChain()`、`isEffective()`（节点及全部祖先都启用）、`withAncestors()`、`tree()`；有效权限码、菜单管理与节点树共用（脏数据按不生效处理） |
 | `Enums/Status` | 通用的启用 / 停用状态，用户、角色、菜单节点共用 |
 | `Models/User::isSuperAdmin()` | 是否拥有启用的 `super-admin` 角色（`Role::SUPER_ADMIN`）；`enabledRoles()` 为启用的角色 |
 | `Models/Role::isSuperAdmin()` | 是否为 `super-admin` 角色本身 |
 | `Actions/CreateRole`、`UpdateRole`、`DeleteRole`、`ChangeRoleStatus` | 角色的新增、修改、删除、启用 / 停用（规则见下文“角色管理”） |
 | `Actions/SyncRolePermissions` | 保存角色的权限码：防提权、保留操作者管不到的授权、补齐祖先（由 CreateRole、UpdateRole 调用） |
+| `Queries/RoleList` | 角色列表的查询（筛选与排序白名单） |
 | `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`、`viewOptions` |
 | `Actions/CreateUser`、`UpdateUser`、`DeleteUser`、`ChangeUserStatus` | 用户的新增、修改、删除、启用 / 停用（规则见下文“用户管理”）；重置密码复用 `ResetUserPassword::handle()` |
 | `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管（由 CreateUser、UpdateUser 调用） |
-| `Actions/EnsureSuperAdminRemains` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用）；`lock()` 是可能减少启用超管的事务的第一条语句（锁顺序） |
-| `Services/Manageability` | “管得到”的统一判定（§8.5）：`canManageRole()`、`canManageUser()`、可授予的权限码与数据范围；Policy（403）与 `SyncRolePermissions`、`SyncUserRoles`、`CreateRole`（422）共用 |
+| `Services/SuperAdminGuard` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用）；`lock()` 是可能减少启用超管的事务的第一条语句（锁顺序） |
+| `Services/Manageability` | “管得到”的统一判定（§8.5）：`canManageRole()`、`canManageUser()`、可授予的权限码与数据范围、`ensureGrantableDataScope()`（422）；Policy（403）与 `SyncRolePermissions`、`SyncUserRoles`、`CreateRole`、`UpdateRole`（422）共用 |
+| `Events/UserDeleting`、`Events/UserDeleted` | Core 事件：`DeleteUser` 在事务中删除前派发 `UserDeleting`（同步清理属于该用户的数据），提交后派发 `UserDeleted`；本模块的 `Listeners/DeleteExportsOfUser` 监听前者 |
 | `Policies/UserPolicy` | 用户的授权：标准方法 + `changeStatus`、`resetPassword`，记录级方法检查数据范围 |
 | `Contracts/DataScopeProvider`、`Services/DataScopeRegistry` | 扩展点：数据范围提供者与其登记（下文“数据权限”） |
 | `Actions/CreatePermission`、`UpdatePermission`、`DeletePermission` | 菜单节点的新增、修改、删除（规则见下文“菜单管理”） |
 | `Queries/PermissionTree` | 菜单管理用的整棵节点树（含停用节点与按钮，一次查询组装） |
 | `Policies/PermissionPolicy` | 菜单节点的授权：标准方法，删除内置节点 403 |
 | `Models/Concerns/HasDataScope` | 模型 trait：`visibleTo($user)` 查询范围与 `isVisibleTo($user)` 单条判定（已用于 `User`）；`dataScopeOwnerColumns()` 声明“仅本人”的归属列 |
-| `Contracts/DictRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中声明字典类型与初始字典项（下文“字典”） |
+| `Services/DictRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中声明字典类型与初始字典项（下文“字典”） |
+| `Queries/DictTypeList`、`Queries/DictItemList` | 字典类型、某个类型下字典项的列表查询（筛选与排序白名单） |
 | `Actions/SyncDicts`、`Commands/SyncDictsCommand` | `php artisan core:sync-dicts`：把声明的字典同步到 `dict_types`、`dict_items` |
 | `Actions/CreateDictType`、`UpdateDictType`、`DeleteDictType`、`CreateDictItem`、`UpdateDictItem`、`DeleteDictItem` | 字典类型与字典项的新增、修改、删除（内置的保护见下文） |
 | `Services/Dictionary` | 字典的读取（启用类型下的启用项，整体缓存）：`options()`、`many()`、`values()`、`has()`、`flush()` |
 | `Rules/InDict` | 校验规则：值必须是某个字典类型下的启用项；修改记录时用 `new InDict('<类型>')->allowing($record?->field)` 放行当前值（即使已停用，保持原值不拦），改成其他值仍只接受启用项 |
 | `Policies/DictTypePolicy`、`DictItemPolicy` | 字典的授权：标准方法，删除内置的 403 |
-| `Contracts/SettingRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册系统参数分组（下文“系统参数”） |
+| `Services/SettingRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册系统参数分组（下文“系统参数”） |
 | `Actions/SyncSettings`、`Commands/SyncSettingsCommand` | `php artisan core:sync-settings`：把声明的参数同步到 `settings` |
 | `Actions/UpdateSettings` | 修改参数的值（按类型转换，null 恢复默认值） |
 | `Services/Settings` | 系统参数的读取（给代码用的唯一方式）：`get()`、`string()`、`integer()`、`float()`、`boolean()`、`array()`、`public()` |
 | `Enums/SettingType` | 参数类型 `string`、`text`、`int`、`float`、`bool`、`json`：校验规则、输入转换、类型判断 |
 | `Policies/SettingPolicy` | 系统参数的授权：查看、修改值；新增、删除一律拒绝 |
-| `Services/EnumRegistry` | 可下发给前端的枚举（显式白名单，`/options/enums`） |
+| `Services/EnumRegistry` | 可下发给前端的枚举（显式白名单，`/options/enums`；各模块的 `resources/enums.php`） |
 | `Contracts/HasColor` | 枚举的语义色（可选）：`color()` 为 antd 预设色名或 hex，`/options/enums` 据此输出 `color`；`Status` 已实现 |
 | `Models/Attachment` | 附件：`PREVIEWABLE_MIME_TYPES`（可预览、可作头像的图片白名单）、`isBound()`、`isBoundTo()`、`isPreviewable()`、`asciiFileName()`（下载的 ASCII 回退文件名）；`Prunable`（孤儿清理）；删除后在事务提交后删除文件 |
 | `Models/Concerns/HasAttachments` | 模型 trait：`attachments()`、`attachmentsIn()`、`attachmentIn()`；记录删除时一并删除附件（已用于 `User` 的头像 `avatar()`） |
-| `Actions/StoreAttachment` | 保存上传的文件并登记为未绑定的附件（随机文件名、服务端探测 MIME、sha256） |
+| `Actions/StoreAttachment` | 保存文件并登记为附件（随机文件名、服务端探测 MIME、sha256；上传时未绑定，导出文件直接绑定到导出记录），附件元数据规则的唯一实现 |
 | `Actions/SyncAttachments` | 把附件绑定到记录的某个用途上，替换、移除的删除；加锁复核“未绑定或已在这里”（422） |
 | `Actions/DeleteAttachment` | 删除附件，文件在事务提交后删除 |
+| `Queries/AttachmentList` | 附件管理的列表查询（`visibleTo`、不含私有绑定的附件、筛选与排序白名单） |
 | `Actions/DeleteUnboundAttachment` | 附件管理的删除与孤儿清理：锁内复核仍未绑定才删除（管理时已被绑定 → 422，清理时跳过） |
 | `Rules/AllowedUpload` | 上传校验：内容 MIME 推断的扩展名与客户端扩展名都在白名单中、大小上限（系统参数 `attachment.*`） |
 | `Rules/OwnedAttachment` | 引用附件的归属校验：自己上传的未绑定附件，或这条记录已有的附件；可限定 MIME |
 | `Contracts/PrivateAttachable` | 标记接口：绑定在实现它的记录上的附件只跟随记录（附件管理不列出、管理员不能访问），`Export` 已实现 |
-| `Contracts/Exporter`、`Services/ExporterRegistry` | 扩展点：导出类（显示名、权限码、列、按“操作者 + 列表参数”构造查询、逐行映射）与其登记（下文“异步导出”） |
+| `Contracts/Exporter`、`Services/ExporterRegistry` | 扩展点：导出类（显示名、权限码、列、按“操作者 + 列表参数”构造查询、逐行映射）与其登记（各模块的 `resources/exporters.php`，下文“异步导出”） |
+| `Queries/ExportList` | “我的导出”的列表查询（只含本人的，筛选与排序白名单） |
 | `Queries/UserList` | 用户列表的查询（query-builder 白名单 + `visibleTo`），列表接口与 `UserExporter` 共用 |
 | `Exporters/UserExporter` | 用户列表的导出（`system.user`，权限码 `system.user.export`） |
 | `Actions/CreateExport` | 发起导出：同步校验参数、并发上限（锁用户行，422）、入队 `RunExport` |
@@ -92,9 +97,12 @@
 | `Policies/ExportPolicy` | 导出只属于发起人：查看、下载、删除只限本人 |
 | `Events/ExportFinished` | 导出完成或失败（Message 据此通知发起人） |
 | `Policies/AttachmentPolicy` | 附件的授权：上传只需登录；访问权委托给绑定对象；附件管理按 `system.attachment` 与数据范围；已绑定的不能删 |
+| `Contracts/HasLabel` | 枚举的显示名（必须，`tests/Arch` 强制）：`label()` 按当前语言翻译 |
 | `Commands/SyncCommand` | `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即停止（非 0 退出）；`DatabaseSeeder` 与部署使用 |
 
-- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
+- 内部实现（不对外）：`Services/{AllDataScope, SelfDataScope}`（默认的数据范围）、`Services/ExportWriter`、`Observers/*`、`Data/{Dict*,Setting*}Data`、`Enums/Export*`、`Listeners/DeleteExportsOfUser`。
+- 唯一冲突兜底（`App\Support\Database\UniqueConstraint`）与业务规则异常（`App\Support\Exceptions\BusinessRuleViolation`）在 Support，本模块的 Action 都用它们（设计文档 §5.4）。
+- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；列表的查询调用 `Queries/<模型>List`；接口放在各受信任入口的同名目录：`app/Http/Admin/System`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 - 停用账号的即时检查是多入口共用的中间件 `App\Http\Middleware\EnsureUserIsEnabled`（放在各入口的中间件组中）。
   会话为 database 以外的驱动时，停用后的会话由它在下一次请求时注销；修改密码后的其他会话由 Sanctum 的 `AuthenticateSession` 注销。
@@ -132,7 +140,7 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 `path` 唯一：声明节点的 path 被不在声明中的节点占用时，命令列出冲突（哪个声明节点、哪个 path、被哪个节点占用）与处理建议，
 退出码 1，不写入任何数据（检查在写入前、整次同步在一个事务中）。声明之间互换 path 时先清空要变更的 path，不会撞上唯一索引。
 
-### 判定：`PermissionRegistry` 与 `Gate::before`
+### 判定：`EffectivePermissions` 与 `Gate::before`
 
 - 节点从 spatie 的 `PermissionRegistrar` 缓存读取，不额外查库；`#[Scoped]`，每个请求内复用计算结果，spatie 的缓存被清除后重新计算；
   队列 worker 中每个任务开始前（`JobProcessing`）清掉 registrar 的内存集合，任务按最新的授权判定（设计文档 §10.3）；
@@ -163,7 +171,7 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 | 非超管让不生效的节点生效（启用；移出停用的祖先） | 422（`status` / `parent_id`） | `UpdatePermission`（比较修改前后每个节点的生效状态） |
 | 新增时上级已不存在 | 422（`parent_id`） | `CreatePermission`（对上级加共享锁，与 `DeletePermission` 的行锁互斥） |
 | 删除有子节点的节点 | 422（只有 `message`） | `DeletePermission` |
-| 权限码、path 重复 | 422（`name` / `path`） | 表单校验；并发时 `CreatePermission::save()` 捕获唯一索引冲突 |
+| 权限码、path 重复 | 422（`name` / `path`） | 表单校验；并发时 `UniqueConstraint::save()` 捕获唯一索引冲突（新增、修改都是） |
 
 - 新增的节点是自定义节点（`is_builtin = false`），guard 为 `web`；内置节点只能由同步命令新增，管理员可以调整它的 `title`、`icon`、`sort`、
   `status`、`parent_id` 与其余 meta 键，再次同步不会覆盖；
@@ -184,15 +192,15 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 | `super-admin` 改标识 / 停用 / 提交 `permissions` | 422（`name` / `status` / `permissions`） | `UpdateRole`、`ChangeRoleStatus` |
 | 删除已分配给用户的角色 | 422（只有 `message`） | `DeleteRole` |
 | 授予自己没有、且角色原本也没有的权限码（非超管） | 422（`permissions`） | `SyncRolePermissions` |
-| 选用（改为）自己不可授予的数据范围（非超管） | 422（`data_scope`） | `CreateRole::ensureGrantableDataScope()`（`CreateRole`、`UpdateRole` 调用） |
-| 标识重复 | 422（`name`） | 表单校验；并发时 `CreateRole::save()` 捕获唯一索引冲突 |
+| 选用（改为）自己不可授予的数据范围（非超管） | 422（`data_scope`） | `Manageability::ensureGrantableDataScope()`（`CreateRole`、`UpdateRole` 调用） |
+| 标识重复 | 422（`name`） | 表单校验；并发时 `UniqueConstraint::save()` 捕获唯一索引冲突（新增、修改都是） |
 
 保存权限码（`SyncRolePermissions`）：
 
 1. 防提权：非超管提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422；超管不受限；
 2. 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的（非超管自己没有的码；对超管是停用节点的授权，它们不出现在授权树中），
    无论是否提交都保留（非超管只能修改管得到的角色，对非超管这条只在并发改动时起作用）；
-3. 补齐每个节点的全部祖先（`PermissionRegistry::withAncestors()`），再 `syncPermissions()`；spatie 随之清除权限缓存，
+3. 补齐每个节点的全部祖先（`EffectivePermissions::withAncestors()`），再 `syncPermissions()`；spatie 随之清除权限缓存，
    `/auth/codes`、`/menu/all` 立即按新授权计算。停用角色同样立即生效。
 
 - 非超管不能修改、启停 `super-admin` 角色（`RolePolicy::update()`、`changeStatus()`，403）。
@@ -212,17 +220,17 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 | 非超管编辑、重置密码、启停、删除超管用户 | 403 | `UserPolicy` |
 | 非超管编辑、重置密码、启停、删除管不到的用户（他的某个角色，含停用的，管不到）；强制下线他的会话与 token | 403 | `UserPolicy`、Monitor 的 `SessionPolicy`、`PersonalAccessTokenPolicy`（`Services/Manageability`） |
 | 修改接口中提交 `status: disabled` 停用自己 | 422（`status`） | `ChangeUserStatus` |
-| 最后一个启用的超管：删除 / 停用 / 去掉超管角色 | 422（只有 `message` / `status` / `roles`） | `EnsureSuperAdminRemains`（`DeleteUser`、`ChangeUserStatus`、`SyncUserRoles` 调用） |
+| 最后一个启用的超管：删除 / 停用 / 去掉超管角色 | 422（只有 `message` / `status` / `roles`） | `SuperAdminGuard`（`DeleteUser`、`ChangeUserStatus`、`SyncUserRoles` 调用） |
 | 非超管授予或收回 `super-admin`；分配管不到的角色（权限码或数据范围超出自身） | 422（`roles`） | `SyncUserRoles` |
-| 用户名、邮箱重复 | 422（`username` / `email`） | 表单校验；并发时 `CreateUser::save()` 捕获唯一索引冲突 |
+| 用户名、邮箱重复 | 422（`username` / `email`） | 表单校验；并发时 `UniqueConstraint::save()` 捕获唯一索引冲突（新增、修改都是） |
 
 - 用户名统一存为小写（`CreateUser::only()`，表单也先转小写再校验唯一）；`created_by` 写入操作者；
 - 分配角色（`SyncUserRoles`，spatie 的 `syncRoles()`）：非超管只能分配、移除权限码全部在自己有效权限码之内、且数据范围可授予的角色；
   用户原本就有、但操作者管不到的角色（含 `super-admin`）无论是否提交都保留；超管不受限；
-- 最后一个启用的超管（`EnsureSuperAdminRemains`）：可能减少启用超管的事务（`DeleteUser`、`ChangeUserStatus` 停用、`UpdateUser` 提交了 `roles`
+- 最后一个启用的超管（`SuperAdminGuard`）：可能减少启用超管的事务（`DeleteUser`、`ChangeUserStatus` 停用、`UpdateUser` 提交了 `roles`
   或停用）**第一条语句**是对 `super-admin` 角色那一行 `lockForUpdate()`（`lock()`），之后才读写用户行——锁顺序一致，避免死锁，
   MySQL REPEATABLE READ 下快照也不会早于拿锁；计数用加锁读（`sharedLock()`）读最新提交的版本。不在事务中调用时抛出 `LogicException`；
-- 停用走 `DisableUser`（会话与 token 立即失效），启用走 `EnableUser`；重置密码（`ResetUserPassword::handle()`）、删除（`DeleteUser`）
+- 停用走 `DisableUser`（会话与 token 立即失效），启用由 `ChangeUserStatus` 直接写入；重置密码（`ResetUserPassword::handle()`）、删除（`DeleteUser`）
   同样吊销对方的会话与 token。
 
 ## 数据权限
@@ -230,12 +238,13 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 角色决定能做什么，数据范围决定能看哪些数据（设计文档 §8.4）。每个角色选用一个范围（`roles.data_scope`，新建默认 `self`）。
 
 - 扩展点：实现 `Contracts/DataScopeProvider`（`key()`、`label()`、`constrain()`、`contains()`，两者同一规则，实现必须无状态），
-  在模块 Provider 的 `boot()` 中注册，角色表单的 `/system/roles/data-scopes` 自动出现：
+  列入模块的 `resources/data-scopes.php`（`return [DepartmentDataScope::class];`，由容器解析）并在 Provider 的 `boot()` 中注册，
+  角色表单的 `/system/roles/data-scopes` 自动出现：
 
   ```php
   public function boot(DataScopeRegistry $scopes): void
   {
-      $scopes->register(new DepartmentDataScope);
+      $scopes->register(require __DIR__.'/resources/data-scopes.php');
   }
   ```
 
@@ -302,7 +311,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 | 没有对应的权限码（`system.dict`、`.create`、`.update`、`.delete`，类型与字典项共用） | 403 | `DictTypePolicy`、`DictItemPolicy` |
 | 删除内置类型、内置字典项（超管也一样） | 403 | `DictTypePolicy::delete()`、`DictItemPolicy::delete()` |
 | 内置类型改 `code`、内置字典项改 `value` | 422（`code` / `value`） | `UpdateDictType`、`UpdateDictItem` |
-| `code` 重复、同一类型内 `value` 重复 | 422（`code` / `value`） | 表单校验；并发时 `CreateDictType::save()`、`CreateDictItem::save()` 捕获唯一索引冲突 |
+| `code` 重复、同一类型内 `value` 重复 | 422（`code` / `value`） | 表单校验；并发时 `UniqueConstraint::save()` 捕获唯一索引冲突（新增、修改都是） |
 
 删除类型时连同其字典项一起删除（`DeleteDictType`，外键 `cascadeOnDelete` 兜底）：内置字典项只会出现在内置类型下，不会因此绕过保护。
 
@@ -314,19 +323,17 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
   业务模块同样注册自己的分组（一个分组只属于一个模块，键为 `<分组>.<参数名>`）：
 
   ```php
-  public function boot(SettingRegistry $settings): void
-  {
-      $settings->register([
-          'device' => [
-              'title' => 'device.setting.title',
-              'order' => 100,
-              'settings' => [
-                  'heartbeat_interval' => ['type' => 'int', 'name' => 'device.setting.heartbeatInterval', 'default' => 60, 'rules' => ['min:10']],
-                  'paused' => ['type' => 'bool', 'name' => 'device.setting.paused', 'default' => false],
-              ],
+  // resources/settings.php，由 Provider 的 boot() 中 $settings->register(require __DIR__.'/resources/settings.php') 注册
+  return [
+      'device' => [
+          'title' => 'device.setting.title',
+          'order' => 100,
+          'settings' => [
+              'heartbeat_interval' => ['type' => 'int', 'name' => 'device.setting.heartbeatInterval', 'default' => 60, 'rules' => ['min:10']],
+              'paused' => ['type' => 'bool', 'name' => 'device.setting.paused', 'default' => false],
           ],
-      ]);
-  }
+      ],
+  ];
   ```
 
   `type` 为 `SettingType`；默认值用 `default`（值）或 `config`（config 键，读取时取当前值）二选一；`public` 表示出现在免登录的公开参数接口中；
@@ -343,13 +350,17 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 ## 枚举选项
 
 `Services/EnumRegistry`（`#[Singleton]`）是可下发给前端的枚举的**显式白名单**：`/options/enums?names=...` 只下发登记过的名称（未登记 422），
-label 为 `HasLabel::label()`，按 `Accept-Language` 翻译；枚举另外实现了 `Contracts/HasColor` 时每个选项再输出 `color`（登记时校验，规则同字典项的 color）。本模块登记 `status`、`permission_type`、`setting_type`；Monitor 登记 `login_event`、`login_failure_reason`。
-业务模块在 Provider 的 `boot()` 中登记（名称以模块名开头）：
+label 为 `HasLabel::label()`，按 `Accept-Language` 翻译；枚举另外实现了 `Contracts/HasColor` 时每个选项再输出 `color`（登记时校验，规则同字典项的 color）。本模块登记 `status`、`permission_type`、`setting_type`、`export_status`、`export_format`；Monitor 登记 `login_event`、`login_failure_reason`；
+Message 登记 `notification_level`、`announcement_status`、`announcement_target`（各自的 `resources/enums.php`）。
+业务模块同样在 `resources/enums.php` 中声明（名称以模块名开头），在 Provider 的 `boot()` 中注册：
 
 ```php
+// resources/enums.php
+return ['content.article_status' => ArticleStatus::class];
+
 public function boot(EnumRegistry $enums): void
 {
-    $enums->register(['content.article_status' => ArticleStatus::class]);
+    $enums->register(require __DIR__.'/resources/enums.php');
 }
 ```
 
@@ -398,8 +409,8 @@ public function boot(EnumRegistry $enums): void
 模块接入（设计文档 §5.5、§6.10）：
 
 1. 把列表的查询放进本模块的 Query 类（`builder(User $actor, array $parameters): QueryBuilder`，如 `UserList`），列表控制器调用它；
-2. 实现 `Contracts/Exporter`，`query()` 调用同一个 Query 类（同一份筛选白名单与数据范围），在 Provider 的 `boot()` 中
-   `$exporters->register(['content.article' => ArticleExporter::class])`；
+2. 实现 `Contracts/Exporter`，`query()` 调用同一个 Query 类（同一份筛选白名单与数据范围），在模块的 `resources/exporters.php` 中
+   `return ['content.article' => ArticleExporter::class];`，由 Provider 的 `boot()` 中 `$exporters->register(require __DIR__.'/resources/exporters.php')` 注册；
 3. 在 `resources/menus.php` 的列表菜单下加按钮 `export`（权限码 `<菜单>.export`）；
 4. 入口加 `POST /<列表路径>/export`：请求继承列表请求（去掉 `page`、`pageSize`，加 `format`），`#[Authorize('<菜单>.export')]`，
    经过 `admin-exports` 限流，调用 `CreateExport::handle($actor, '<名称>', $format, $request->listParameters())`。

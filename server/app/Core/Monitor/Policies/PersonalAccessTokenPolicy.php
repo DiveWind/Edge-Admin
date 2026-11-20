@@ -2,7 +2,7 @@
 
 namespace App\Core\Monitor\Policies;
 
-use App\Core\Monitor\Queries\ActiveTokens;
+use App\Core\Monitor\Services\CurrentAccessToken;
 use App\Core\System\Models\User;
 use App\Core\System\Services\Manageability;
 use Illuminate\Auth\Access\Response;
@@ -64,7 +64,7 @@ class PersonalAccessTokenPolicy
             return Response::deny();
         }
 
-        if (resolve(ActiveTokens::class)->isCurrent($actor, $token)) {
+        if (resolve(CurrentAccessToken::class)->is($actor, $token)) {
             return Response::deny(__('You cannot revoke the token used by this request. Sign out instead.'));
         }
 

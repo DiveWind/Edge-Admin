@@ -2,11 +2,12 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Models\User;
 use App\Modules\Content\Enums\ArticleStatus;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 取消发布（POST /content/articles/{article}/unpublish，设计文档 §6.11）：已发布 → 草稿，published_at 置空。
@@ -16,12 +17,12 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class UnpublishArticle
 {
-    public function __construct(private readonly LogArticleActivity $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Article $article, User $actor): Article
     {
@@ -29,16 +30,16 @@ class UnpublishArticle
             $locked = Article::query()->lockForUpdate()->findOrFail($article->id);
 
             if (! $locked->isPublished()) {
-                throw new UnprocessableEntityHttpException(__('content::article.messages.unpublish_published_only'));
+                throw new BusinessRuleViolation(__('content::article.messages.unpublish_published_only'));
             }
 
-            $before = $this->log->snapshot($locked);
+            $before = $locked->auditSnapshot();
 
             $locked->status = ArticleStatus::Draft;
             $locked->published_at = null;
             $locked->save();
 
-            $this->log->handle($actor, $locked, LogArticleActivity::UNPUBLISHED, $before);
+            $this->audit->handle($actor, $locked, 'unpublished', $before);
 
             return $locked;
         });

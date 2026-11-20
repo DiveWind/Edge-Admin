@@ -17,7 +17,7 @@
 
 - **模型是依据**：模型之外的命令读取模型文件的写法（`SoftDeletes`、`HasDataScope`、`creator()`、`@property string $name`，`ModuleGeneratorCommand::modelFeatures()`）决定生成什么，不另设选项；对手写的模型同样生成可通过检查的代码。
 - **模板的条件块**：`{{#开关}}…{{/开关}}`（为真时保留）、`{{^开关}}…{{/开关}}`（为假时保留），独占一行的标记连同换行去掉；开关由各命令的 `sections()` 给出。不同名的块可嵌套，同名的不可以。
-- **按名称识别标准用例**：`core:make-action` 的 `Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>`、`Log<模型>Activity`；`core:make-controller --invokable` 的 `<模型>Export`、`ForceDelete<模型>` 与其他 `<动作><模型>`。
+- **按名称识别标准用例**：`core:make-action` 的 `Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>`（模型实现 `Auditable` 时写审计日志）；`core:make-controller --invokable` 的 `<模型>Export`、`ForceDelete<模型>` 与其他 `<动作><模型>`。
 - **共享文件**：只认生成器自己生成的格式（与 Content、Core 的现有文件一致），找不到锚点时抛出 `UnexpectedFormatException`，命令失败并打印需要手工粘贴的内容，不猜测位置；登记是幂等的。
 - **提示只列出还没做的事**：Policy 的权限码已在 `menus.php` 中声明时不提示，控制器已在 `routes.php` 中登记时不打印路由。
 

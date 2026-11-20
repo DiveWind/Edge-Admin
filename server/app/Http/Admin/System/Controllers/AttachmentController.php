@@ -4,16 +4,14 @@ namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{DeleteUnboundAttachment, StoreAttachment};
 use App\Core\System\Models\{Attachment, User};
+use App\Core\System\Queries\AttachmentList;
 use App\Http\Admin\System\Requests\{AttachmentIndexRequest, AttachmentUploadRequest};
 use App\Http\Admin\System\Resources\AttachmentResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 use LogicException;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 附件（设计文档 §6.8）：上传与详情（`/attachments`，各业务表单使用），附件管理的列表与删除（`/system/attachments`）。
@@ -29,24 +27,9 @@ class AttachmentController
      * is_bound（true / false）、created_at（区间 `起,止`）；排序 id、size、created_at，默认 `-id`。不在白名单内的参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', Attachment::class)]
-    public function index(AttachmentIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(AttachmentIndexRequest $request, AttachmentList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $attachments = QueryBuilder::for(Attachment::query()->visibleTo($actor)->withoutPrivate()->with('creator'), $request)
-            ->allowedFilters(
-                AllowedFilter::partial('name'),
-                AllowedFilter::partial('mime_type'),
-                AllowedFilter::exact('created_by'),
-                AllowedFilter::exact('collection'),
-                AllowedFilter::callback('is_bound', fn (Builder $query, mixed $value) => filter_var($value, FILTER_VALIDATE_BOOLEAN)
-                    ? $query->whereNotNull('attachable_type')
-                    : $query->whereNull('attachable_type')),
-                DateTimeRangeFilter::allowed('created_at'),
-            )
-            ->allowedSorts('id', 'size', 'created_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return AttachmentResource::collection($attachments);
+        return AttachmentResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

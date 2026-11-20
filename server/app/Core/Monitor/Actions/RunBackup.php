@@ -3,7 +3,7 @@
 namespace App\Core\Monitor\Actions;
 
 use App\Core\Monitor\Models\ScheduledTask;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 
 /**
  * 立即备份（POST /monitor/backups/run，设计文档 §6.10）：按任务名 `backup:run` 找到已同步的定时任务，交给 RunScheduledTask
@@ -18,19 +18,19 @@ class RunBackup
     /**
      * schedule-monitor 中备份任务的名称（routes/console.php 中的 BackupCommand）。
      */
-    public const string TASK = 'backup:run';
+    private const string TASK = 'backup:run';
 
     public function __construct(private readonly RunScheduledTask $run) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(): void
     {
         $task = ScheduledTask::query()->where('name', self::TASK)->first()
-            ?? throw new UnprocessableEntityHttpException(__('The backup task is not in the schedule. Enable the backup schedule and sync the scheduled tasks first.'));
+            ?? throw new BusinessRuleViolation(__('The backup task is not in the schedule. Enable the backup schedule and sync the scheduled tasks first.'));
 
         $this->run->handle($task);
     }

@@ -2,10 +2,11 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Models\User;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 删除文章（DELETE /content/articles/{article}，设计文档 §6.11、§10.1）：软删除，任何状态都可以删除。
@@ -16,12 +17,12 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class DeleteArticle
 {
-    public function __construct(private readonly LogArticleActivity $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Article $article, User $actor): void
     {
@@ -29,12 +30,12 @@ class DeleteArticle
             $locked = Article::query()->withTrashed()->lockForUpdate()->findOrFail($article->id);
 
             if ($locked->trashed()) {
-                throw new UnprocessableEntityHttpException(__('content::article.messages.already_deleted'));
+                throw new BusinessRuleViolation(__('content::article.messages.already_deleted'));
             }
 
             $locked->delete();
 
-            $this->log->handle($actor, $locked, LogArticleActivity::DELETED);
+            $this->audit->handle($actor, $locked, 'deleted');
         });
     }
 }

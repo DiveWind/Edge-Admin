@@ -3,15 +3,13 @@
 namespace App\Http\Admin\Monitor\Controllers;
 
 use App\Core\Monitor\Models\OperationLog;
+use App\Core\Monitor\Queries\OperationLogList;
 use App\Core\System\Models\User;
 use App\Http\Admin\Monitor\Requests\OperationLogIndexRequest;
 use App\Http\Admin\Monitor\Resources\OperationLogResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 操作日志（设计文档 §6.6）：列表、详情。只读：没有新增、修改、删除接口，过期日志由 activitylog:clean 清理。
@@ -26,24 +24,9 @@ class OperationLogController
      * status 在 JSON 中是整数，按整数比较（SQLite 的 json_extract 返回整数，与字符串不相等）。
      */
     #[Authorize('viewAny', OperationLog::class)]
-    public function index(OperationLogIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(OperationLogIndexRequest $request, OperationLogList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $logs = QueryBuilder::for(OperationLog::query()->visibleTo($actor), $request)
-            ->allowedFilters(
-                AllowedFilter::exact('user_id', 'causer_id'),
-                AllowedFilter::exact('method', 'properties->method'),
-                AllowedFilter::callback('status', fn (Builder $query, mixed $value) => $query->where('properties->status', is_numeric($value) ? (int) $value : 0)),
-                AllowedFilter::exact('request_id', 'properties->request_id'),
-                AllowedFilter::partial('username', 'properties->username'),
-                AllowedFilter::partial('description'),
-                AllowedFilter::partial('ip_address', 'properties->ip_address'),
-                DateTimeRangeFilter::allowed('created_at'),
-            )
-            ->allowedSorts('id', 'created_at')
-            ->defaultSort('-id')
-            ->paginate($request->pageSize());
-
-        return OperationLogResource::collection($logs);
+        return OperationLogResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

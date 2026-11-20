@@ -1,12 +1,11 @@
 <?php
 
-use {{ moduleNamespace }}\Actions\{{ log }};
 use {{ namespacedModel }};
 use App\Core\Monitor\Models\Activity;
 
 /*
 |--------------------------------------------------------------------------
-| {{ model }} 的审计日志（日志名 {{ logName }}，设计文档 §5.5、§6.11）：由写操作在同一事务中写入
+| {{ model }} 的审计日志（日志名 {{ logName }}，设计文档 §5.5、§6.11）：由写操作在同一事务中写入（Monitor 的 LogAudit）
 |--------------------------------------------------------------------------
 */
 
@@ -21,7 +20,7 @@ beforeEach(function (): void {
  */
 function {{ modelVariable }}Activities{{ module }}(): array
 {
-    return array_values(Activity::query()->where('log_name', {{ log }}::LOG_NAME)->orderBy('id')->get()->all());
+    return array_values(Activity::query()->where('log_name', '{{ logName }}')->orderBy('id')->get()->all());
 }
 
 it('logs creating, updating and deleting with the changed fields', function (): void {

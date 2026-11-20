@@ -1,9 +1,8 @@
 <?php
 
-use App\Core\System\Contracts\MenuRegistry;
 use App\Core\System\Enums\{PermissionType, Status};
 use App\Core\System\Models\{Permission, Role};
-use App\Core\System\Services\MenuRegistryService;
+use App\Core\System\Services\MenuRegistry;
 use Illuminate\Support\Str;
 
 /*
@@ -20,9 +19,9 @@ use Illuminate\Support\Str;
  *
  * @param  list<array<string, mixed>>  $nodes
  */
-function declareMenus(array $nodes): MenuRegistryService
+function declareMenus(array $nodes): MenuRegistry
 {
-    $registry = new MenuRegistryService;
+    $registry = new MenuRegistry;
     $registry->register($nodes);
     app()->instance(MenuRegistry::class, $registry);
 

@@ -2,6 +2,9 @@
 
 namespace {{ namespace }};
 
+{{#audit}}
+use App\Core\Monitor\Actions\LogAudit;
+{{/audit}}
 use {{ namespacedModel }};
 use {{ namespacedUserModel }};
 use Illuminate\Support\Facades\DB;
@@ -10,39 +13,34 @@ use Illuminate\Support\Facades\DB;
  * 新增{{ model }}{{#createdBy}}：created_by 为操作者{{/createdBy}}（设计文档 §5.4）。
  *
  * 字段的格式已由入口的 Form Request 校验；唯一性、引用检查等业务约束放在这里（422）。
+ * 有唯一索引的字段：把 `->save()` 换成 `UniqueConstraint::save($model, [字段 => 显示名])`（App\Support\Database，并发冲突时同样 422，§5.4）。
 {{#audit}}
- * 审计日志 `{{ permission }}.created`（{{ log }}，同一事务）。
+ * 审计日志 `{{ permission }}.created`（Monitor 的 LogAudit，同一事务）。
 {{/audit}}
  */
 class {{ class }}
 {
-    /**
-     * 可写入的字段（其余键忽略）。
-     *
-     * @var list<string>
-     */
-    public const array ATTRIBUTES = [{{ attributes }}];
 {{#audit}}
+    public function __construct(private readonly LogAudit $audit) {}
 
-    public function __construct(private readonly {{ log }} $log) {}
 {{/audit}}
-
     /**
      * Execute the action.
      *
-     * @param  array<string, mixed>  $attributes  已校验的字段（ATTRIBUTES）
+     * @param  array<string, mixed>  $attributes  已校验的字段（模型的 `#[Fillable]`，其余键忽略）
      */
     public function handle(array $attributes, {{ userModel }} $actor): {{ model }}
     {
         return DB::transaction(function () use ($attributes{{#needsActor}}, $actor{{/needsActor}}): {{ model }} {
-            ${{ modelVariable }} = new {{ model }}(array_intersect_key($attributes, array_flip(self::ATTRIBUTES)));
+            ${{ modelVariable }} = new {{ model }};
+            ${{ modelVariable }}->fill(array_intersect_key($attributes, array_flip(${{ modelVariable }}->getFillable())));
 {{#createdBy}}
             ${{ modelVariable }}->created_by = $actor->id;
 {{/createdBy}}
             ${{ modelVariable }}->save();
 {{#audit}}
 
-            $this->log->handle($actor, ${{ modelVariable }}, {{ log }}::CREATED);
+            $this->audit->handle($actor, ${{ modelVariable }}, 'created');
 {{/audit}}
 
             return ${{ modelVariable }}->refresh();

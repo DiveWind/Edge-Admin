@@ -2,8 +2,8 @@
 
 namespace App\Http\Admin;
 
-use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Data\{SettingData, SettingGroupData};
+use App\Core\System\Services\SettingRegistry;
 use App\Http\Admin\Middleware\{ForceJson, FormatResponse, RecordOperationLog};
 use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenResponse};
 use App\Http\Middleware\EnsureUserIsEnabled;

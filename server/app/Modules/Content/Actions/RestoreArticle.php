@@ -2,10 +2,11 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Models\User;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 恢复已删除的文章（POST /content/articles/{article}/restore，设计文档 §6.11、§10.1）：状态与封面不变。
@@ -15,12 +16,12 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class RestoreArticle
 {
-    public function __construct(private readonly LogArticleActivity $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Article $article, User $actor): Article
     {
@@ -28,12 +29,12 @@ class RestoreArticle
             $locked = Article::query()->withTrashed()->lockForUpdate()->findOrFail($article->id);
 
             if (! $locked->trashed()) {
-                throw new UnprocessableEntityHttpException(__('content::article.messages.restore_trashed_only'));
+                throw new BusinessRuleViolation(__('content::article.messages.restore_trashed_only'));
             }
 
             $locked->restore();
 
-            $this->log->handle($actor, $locked, LogArticleActivity::RESTORED);
+            $this->audit->handle($actor, $locked, 'restored');
 
             return $locked;
         });

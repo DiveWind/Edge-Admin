@@ -35,6 +35,11 @@ class Activity extends SpatieActivity
     public const string REQUEST_ID = 'request_id';
 
     /**
+     * properties.user_agent 的最大长度（操作日志、登录日志，LogOperation、LogLogin 写入时截断）。
+     */
+    public const int USER_AGENT_LENGTH = 500;
+
+    /**
      * 写入前补上请求 ID（已有时不覆盖；命令行等没有请求 ID 时不写）。
      */
     protected static function booted(): void

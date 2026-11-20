@@ -2,6 +2,7 @@
 
 namespace App\Http\Admin\Responses;
 
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -106,6 +107,7 @@ final class VbenResponse extends JsonResponse
     /**
      * 把异常转换为 Vben 格式。返回 null 时交给框架的默认渲染（HttpResponseException 自带响应，路由内的由 FormatResponse 包装）。
      *
+     * 领域层的业务规则异常（BusinessRuleViolation，§5.4）→ 422 + message（带字段时加 `errors.<字段>`）。
      * 404 / 405 统一使用通用文案，不暴露路由路径与模型类名；调试模式下 500 附带 `debug` 信息。
      * query-builder 拒绝不在白名单内的筛选、排序等参数（该包默认为 400）统一转为 422，错误挂在对应的参数上（§6.3）。
      */
@@ -117,6 +119,11 @@ final class VbenResponse extends JsonResponse
                 $e->status,
                 self::firstErrorOf(['errors' => $e->errors()]) ?? self::translate('The given data was invalid.'),
                 ['errors' => $e->errors()],
+            ),
+            $e instanceof BusinessRuleViolation => self::error(
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+                $e->getMessage(),
+                $e->field === null ? [] : ['errors' => [$e->field => [$e->getMessage()]]],
             ),
             $e instanceof InvalidQuery => self::invalidQuery($e),
             $e instanceof AuthenticationException => self::error(Response::HTTP_UNAUTHORIZED, self::translate($e->getMessage())),

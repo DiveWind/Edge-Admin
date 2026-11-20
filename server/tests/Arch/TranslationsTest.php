@@ -37,3 +37,31 @@ test('中文语言包中的键都有英文版', function (): void {
         }
     }
 });
+
+test('模块语言包（resources/lang）中，各语言的键一致', function (): void {
+    $missing = [];
+
+    foreach (glob(archBasePath('app/{Core,Modules}/*/resources/lang'), GLOB_BRACE | GLOB_ONLYDIR) ?: [] as $directory) {
+        $keysByLocale = [];
+
+        foreach (glob("{$directory}/*", GLOB_ONLYDIR) ?: [] as $localeDirectory) {
+            foreach (glob("{$localeDirectory}/*.php") ?: [] as $file) {
+                $translations = require $file;
+
+                foreach (array_keys(Arr::dot(is_array($translations) ? $translations : [])) as $key) {
+                    $keysByLocale[basename($localeDirectory)][] = basename($file, '.php').'.'.$key;
+                }
+            }
+        }
+
+        $all = array_unique(array_merge(...array_values($keysByLocale), ...[[]]));
+
+        foreach ($keysByLocale as $locale => $keys) {
+            foreach (array_diff($all, $keys) as $key) {
+                $missing[] = str_replace(archBasePath().'/', '', $directory)."/{$locale}: {$key}";
+            }
+        }
+    }
+
+    expect($missing)->toBe([], '模块的每种语言都要有相同的键');
+});

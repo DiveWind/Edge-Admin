@@ -137,9 +137,10 @@ abstract class ModuleGeneratorCommand extends CoreGeneratorCommand
      * - softDeletes：使用 SoftDeletes（软删除整套，§10.1）；
      * - dataScope：使用 HasDataScope（visibleTo / isVisibleTo，§8.4）；
      * - createdBy：有创建人列 created_by；creator：有 creator() 关联（预加载、输出创建人）；
-     * - name：有占位字段 name（`@property string $name`）。
+     * - name：有占位字段 name（`@property string $name`）；
+     * - audit：实现了 Monitor 的 Auditable（写操作调用 LogAudit 写审计日志，§5.5）。
      *
-     * @return array{softDeletes: bool, dataScope: bool, createdBy: bool, creator: bool, name: bool}
+     * @return array{softDeletes: bool, dataScope: bool, createdBy: bool, creator: bool, name: bool, audit: bool}
      */
     protected function modelFeatures(string $model): array
     {
@@ -152,6 +153,7 @@ abstract class ModuleGeneratorCommand extends CoreGeneratorCommand
             'createdBy' => str_contains($code, 'created_by'),
             'creator' => preg_match('/function creator\(\)/', $code) === 1,
             'name' => preg_match('/@property\s+string\s+\$name\b/', $code) === 1,
+            'audit' => preg_match('/\bimplements\b[^{]*\bAuditable\b/', $code) === 1,
         ];
     }
 

@@ -24,6 +24,31 @@ arch('业务模块不依赖入口')
     ->expect('App\Modules')
     ->not->toUse('App\Http');
 
+arch('领域层不依赖 HTTP 的异常：业务规则违反抛 BusinessRuleViolation，状态码由入口映射（设计文档 §5.4）')
+    ->expect(['App\Core', 'App\Modules'])
+    ->not->toUse('Symfony\Component\HttpKernel\Exception');
+
+arch('Core 的内部方向：System 是底座，不依赖其他 Core 模块（设计文档 §5.1）')
+    ->expect('App\Core\System')
+    ->not->toUse(['App\Core\Monitor', 'App\Core\Message', 'App\Core\Generator']);
+
+arch('Core 的内部方向：Monitor 与 Message 互不依赖（只依赖 System）')
+    ->expect('App\Core\Monitor')
+    ->not->toUse(['App\Core\Message', 'App\Core\Generator']);
+
+arch('Core 的内部方向：Message 不依赖 Monitor')
+    ->expect('App\Core\Message')
+    ->not->toUse(['App\Core\Monitor', 'App\Core\Generator']);
+
+$readSide = archNamespaces('Core/*/Queries', 'Modules/*/Queries', 'Core/*/Policies', 'Modules/*/Policies', 'Core/*/Rules', 'Modules/*/Rules', 'Core/*/Exporters', 'Modules/*/Exporters', 'Core/*/Data', 'Modules/*/Data');
+$actions = archNamespaces('Core/*/Actions', 'Modules/*/Actions');
+
+if ($readSide !== [] && $actions !== []) {
+    arch('读侧不调用写侧：Query、Policy、Rule、导出类、Data 不使用 Action（设计文档 §5.4）')
+        ->expect($readSide)
+        ->not->toUse($actions);
+}
+
 arch('Support 不依赖 Core、业务模块与入口')
     ->expect('App\Support')
     ->not->toUse(['App\Core', 'App\Modules', 'App\Http']);

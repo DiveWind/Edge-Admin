@@ -2,10 +2,8 @@
 
 namespace App\Core\System\Actions;
 
-use App\Core\System\Contracts\SettingRegistry;
-use App\Core\System\Data\SettingData;
 use App\Core\System\Models\Setting;
-use App\Core\System\Services\Settings;
+use App\Core\System\Services\{SettingRegistry, Settings};
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -44,7 +42,7 @@ class SyncSettings
                 $isNew = ! $setting->exists;
                 $adopted = ! $isNew && ! $setting->is_builtin;
 
-                self::fillStructure($setting, $declaration);
+                $setting->fillFromDeclaration($declaration);
 
                 if (! $isNew && $setting->value !== null && ! $declaration->type->accepts($setting->value)) {
                     $setting->value = null;
@@ -75,22 +73,5 @@ class SyncSettings
         $this->settings->flush();
 
         return $result;
-    }
-
-    /**
-     * 结构性字段以声明为准：key、group、type、name、remark、is_public，并标记 is_builtin（value 不动）。
-     * 修改值时库中还没有该参数（尚未同步）也用它新建（UpdateSettings）。
-     */
-    public static function fillStructure(Setting $setting, SettingData $declaration): void
-    {
-        $setting->forceFill([
-            'key' => $declaration->key,
-            'group' => $declaration->group,
-            'type' => $declaration->type,
-            'name' => $declaration->title,
-            'remark' => $declaration->remark,
-            'is_public' => $declaration->public,
-            'is_builtin' => true,
-        ]);
     }
 }

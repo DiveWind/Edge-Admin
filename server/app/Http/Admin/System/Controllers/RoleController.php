@@ -4,12 +4,12 @@ namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{CreateRole, DeleteRole, UpdateRole};
 use App\Core\System\Models\{Role, User};
+use App\Core\System\Queries\RoleList;
 use App\Http\Admin\System\Requests\{RoleIndexRequest, RoleRequest};
 use App\Http\Admin\System\Resources\RoleResource;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 角色管理（设计文档 §6.5、§8.5、§8.6）：列表、详情、新增、修改、删除。
@@ -25,15 +25,9 @@ class RoleController
      * 不在白名单内的筛选、排序参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', Role::class)]
-    public function index(RoleIndexRequest $request): AnonymousResourceCollection
+    public function index(RoleIndexRequest $request, RoleList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $roles = QueryBuilder::for(Role::class, $request)
-            ->allowedFilters(AllowedFilter::partial('name'), AllowedFilter::partial('title'), AllowedFilter::exact('status'))
-            ->allowedSorts('sort', 'id', 'created_at')
-            ->defaultSort('sort', 'id')
-            ->paginate($request->pageSize());
-
-        return RoleResource::collection($roles);
+        return RoleResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

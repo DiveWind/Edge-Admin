@@ -185,8 +185,17 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ### 写操作必须走 Action
 
-- 所有写入（`save()`、`update()`、`delete()`、`create()`、关联的 `attach()` / `sync()` 等）都在模块的 Action 中完成（一个类一个用例，`handle()` 方法），Action 负责事务、业务约束与触发事件。
-- `app/Http` 中调用 Eloquent / 查询构造器的写方法会被 PHPStan 拦截（`phpstan.neon` 的 `disallowedMethodCalls` / `disallowedStaticCalls`），不要绕过。
+- 所有写入（`save()`、`update()`、`delete()`、`create()`、关联的 `attach()` / `sync()`、spatie 的 `syncRoles()` 等）都在模块的 Action 中完成（一个类一个用例，`handle()` 方法），Action 负责事务、业务约束与触发事件。
+- `app/Http` 中调用 Eloquent / 查询构造器 / spatie 授权与通知已读的写方法会被 PHPStan 拦截（`phpstan.neon` 的 `disallowedMethodCalls` / `disallowedStaticCalls`），不要绕过。
+- **Action 的边界**（设计文档 §5.4）：
+  - 写库、并且单独拿出来也是说得通的用例（含被别的 Action 组合的子用例，如 `SyncAttachments`）→ Action；子用例要能独立正确运行（自己开事务、自己校验）。只被一处调用、一两行的写入步骤不单独成类。
+  - Action **只暴露 `handle()`**：没有其他公开方法、公开静态方法与公开常量（Fortify 契约的 `update()` / `reset()` 除外，`tests/Arch` 检查）；依赖构造注入，不 `resolve()`；`Update<X>` 不调用 `Create<X>` 的东西。
+  - 不写库的可复用逻辑按依赖范围放：一条记录自身 → 模型方法（可写入的字段就是 `#[Fillable]`，Action 用 `array_intersect_key($attributes, array_flip($model->getFillable()))`）；一个枚举值 → 枚举方法；跨记录或要注入依赖（含只加锁的守卫）→ `Services/`；输入校验 → `Rules/`；单个 where → scope；组合查询 → `Queries/`；与业务无关 → `app/Support`。
+  - 唯一索引：新增、修改都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存（保存点，冲突 → 422）。
+  - 业务规则违反抛 `App\Support\Exceptions\BusinessRuleViolation`（可带字段，Admin 映射为 422）；字段值不合法抛 `ValidationException`；领域层不抛 Symfony 的 `HttpException`（`tests/Arch`）。
+  - 数据变更审计：模型实现 `App\Core\Monitor\Contracts\Auditable`，Action 在同一事务中调用 `App\Core\Monitor\Actions\LogAudit`。
+- **列表查询**一律放在模块的 `Queries/<Model>List::builder(User $actor, array $parameters)`（嵌套列表以上级记录代替 `$actor`），控制器只 `->paginate($request->pageSize())`；筛选与排序白名单只在 Query 中，列表请求只校验 `filter.*` 的取值（两边一致由 `tests/Arch` 检查）。
+- 跨模块清理用 Core 事件（`App\Core\System\Events\UserDeleting` 等，清单见设计文档 §5.5），不监听 Core 模型的 `eloquent.*` 事件。
 
 ### 后台入口（Admin）的接口约定（设计文档 §6）
 
@@ -201,9 +210,9 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ### 授权（设计文档 §8）
 
-- 菜单与权限节点在模块的 `resources/menus.php` 中声明，在模块 Provider 的 `boot()` 中注册到 `App\Core\System\Contracts\MenuRegistry`，
+- 菜单与权限节点在模块的 `resources/menus.php` 中声明，在模块 Provider 的 `boot()` 中注册到 `App\Core\System\Services\MenuRegistry`，
   由 `php artisan core:sync-permissions` 写入 `permissions` 表；权限码即节点的 `name`（小写点分，如 `system.user.create`）。
-- 判定一律走 `can()` / Gate / Policy：`Gate::before` 对已登记的权限码按 `PermissionRegistry` 判定（停用节点、停用角色不生效），其他 ability 交给 Policy。
+- 判定一律走 `can()` / Gate / Policy：`Gate::before` 对已登记的权限码按 `EffectivePermissions` 判定（停用节点、停用角色不生效），其他 ability 交给 Policy。
   **禁止** spatie 的判定 API（`hasRole()`、`hasPermissionTo()` 等，PHPStan 拦截）与 `role:` / `permission:` 中间件；是否超管用 `isSuperAdmin()`。
 - 控制器方法用 `#[Authorize(...)]` 声明授权；只需登录的路由列在 `tests/Arch/AuthorizationTest.php` 的 `LOGIN_ONLY_ROUTES` 中。代码里用到的权限码必须已声明（`tests/Arch` 检查）。
 
@@ -217,14 +226,14 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   | 入口 `app/Http/<入口>`（登记 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`） | `core:make-app <名称> [--restricted]` |
   | 模块 `app/Modules/<模块>`（`--core`：`app/Core/<模块>`），`--crud=<模型>` 接着生成完整增删改查 | `core:make-module <名称> [--crud=<模型> …]` |
   | **一个模型的完整增删改查**：模型、迁移、工厂、Policy、Action、Query、[导出类]、接口（资源 + 单动作控制器、Request、Resource）、菜单节点、路由、语言包、授权测试、模块 README | `core:make-crud <模型> --module=<模块> [--soft-deletes] [--export] [--audit] [--no-data-scope]` |
-  | 模型 + 迁移 + 工厂 + Policy + 语言包，并登记多态别名 | `core:make-model <名称> --module=<模块> [--soft-deletes] [--no-data-scope]` |
+  | 模型 + 迁移 + 工厂 + Policy + 语言包，并登记多态别名（`--audit`：实现 `Auditable`） | `core:make-model <名称> --module=<模块> [--soft-deletes] [--no-data-scope] [--audit]` |
   | 模块中的类（`--model=` 生成某个模型的标准写法） | `core:make-action` / `make-query` / `make-exporter` / `make-enum [--color]` / `make-policy` / `make-data` / `make-migration` / `make-factory` `<名称> --module=<模块>` |
   | 向受限入口开放的契约（`Contracts` + `Data` + `Services` 实现，绑定到模块 Provider 的 `$bindings`） | `core:make-contract <名称> --module=<模块>` |
   | 入口中的类 `app/Http/<入口>/<模块>/{Controllers,Requests,Resources}` | `core:make-controller [--model=] [--invokable]` / `make-request [--list\|--export] [--model=]` / `make-resource [--model=]` `<名称> --module=<模块> [--app=admin]` |
 
   - 内核模块必须显式加 `--core`；名称自动转为 StudlyCase 并补上后缀（`Article` → `ArticleController`），不能带子目录。
   - 新的列表 + 增删改查一律先用 `core:make-crud` 生成，再按模块 README 中“加字段时要改的地方”补字段与业务规则；字段只有占位字段 `name`，没有字段声明选项。
-  - 模型是依据：其他命令按模型文件的写法（`SoftDeletes`、`HasDataScope`、`creator()`、`name`）生成，不另设选项（设计文档 §10.4）。
+  - 模型是依据：其他命令按模型文件的写法（`SoftDeletes`、`HasDataScope`、`creator()`、`name`、`Auditable`）生成，不另设选项（设计文档 §10.4）。
   - 共享文件的登记是幂等的（Provider、`menus.php`、入口 `routes.php`、模块 README）；文件格式不符合预期时命令失败并打印需手工粘贴的内容，按提示补上即可，不要为了迁就生成器改乱文件结构。
   - 路由：`core:make-crud` 自动写入入口 `routes.php` 的模块分组；单独的 `core:make-controller` 只打印要加的路由（已登记时不打印）。
   - 修改生成器的模板或规则后，除了 `tests/Core/Generator`，还要跑 `composer test:generator-e2e`（在项目副本中生成并跑全部检查，约 1.5 分钟）。
@@ -240,7 +249,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - 存 HTML 的列一律在模型的 `casts()` 中用 `App\Support\Eloquent\Casts\SanitizedHtml`（默认档位 `rich`，`SanitizedHtml::class.':basic'` 不允许图片），不手动净化；
   `app/` 中只有 `App\Support\Html` 使用 symfony/html-sanitizer（`tests/Arch`）。正文中的图片不要引用附件的签名地址（会过期）。
-- 列表要支持导出时：查询放进模块的 Query 类（列表与导出共用），实现 `App\Core\System\Contracts\Exporter` 并登记到 `ExporterRegistry`，
+- 列表要支持导出时：导出类调用该列表的 Query 类（列表与导出共用），实现 `App\Core\System\Contracts\Exporter` 并登记到模块的 `resources/exporters.php`（由 Provider 注册到 `ExporterRegistry`），
   菜单加 `<菜单>.export` 按钮，入口加 `POST /<列表路径>/export`（步骤见 `app/Core/System/README.md` 的“异步导出”）。
 
 ### 常驻内存兼容（设计文档 §10.3）

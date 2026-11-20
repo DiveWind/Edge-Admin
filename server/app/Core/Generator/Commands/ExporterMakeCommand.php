@@ -2,7 +2,7 @@
 
 namespace App\Core\Generator\Commands;
 
-use App\Core\Generator\Editing\ModuleProviderFile;
+use App\Core\Generator\Editing\{ClassMapFile, ModuleProviderFile};
 use App\Core\System\Models\User;
 use Illuminate\Console\Attributes\{Description, Signature};
 use Illuminate\Support\Str;
@@ -12,7 +12,7 @@ use Override;
  * core:make-exporter：模块中某个列表的导出类（Exporters/<模型>Exporter，设计文档 §6.10、§10.4），与 Content 的 ArticleExporter 一致：
  * 查询调用列表的 Query 类 `<模型>List`（缺少时一并生成），列与 map() 按模型文件的写法生成。
  *
- * 在模块的 ServiceProvider 中登记到 ExporterRegistry（对外名称 `<模块>.<模型>`，boot() 注入 ExporterRegistry）；
+ * 登记到模块的 resources/exporters.php（对外名称 `<模块>.<模型>`；文件没有时创建，并在 ServiceProvider 的 boot() 中注册到 ExporterRegistry）；
  * 并提示还需要的：菜单的 `<菜单>.export` 按钮与导出入口（core:make-controller <模型>Export --invokable --model=<模型>）。
  */
 #[Signature('core:make-exporter
@@ -59,7 +59,7 @@ class ExporterMakeCommand extends ModuleGeneratorCommand
     }
 
     /**
-     * 生成缺少的列表查询，登记到 ExporterRegistry，并提示还需要的按钮与入口。
+     * 生成缺少的列表查询，登记到模块的 resources/exporters.php（没有时创建，并在 Provider 中注册到 ExporterRegistry），并提示还需要的按钮与入口。
      */
     protected function afterGenerating(string $class, string $path): int
     {
@@ -73,7 +73,14 @@ class ExporterMakeCommand extends ModuleGeneratorCommand
             '--core' => (bool) $this->option('core'),
         ], $this->modulePath("Queries/{$model}List.php"));
 
-        $this->register($this->moduleProvider()['path'], "导出类 {$name}", fn (string $code): ?string => ModuleProviderFile::registerExporter($code, $name, $class));
+        $declarations = $this->modulePath('resources/exporters.php');
+
+        if (! $this->files->exists($declarations)) {
+            $this->writeFromStub('module.exporters', $declarations, $this->replacements($class), 'Declarations');
+        }
+
+        $this->register($declarations, "导出类 {$name}", fn (string $code): ?string => ClassMapFile::register($code, $name, $class));
+        $this->register($this->moduleProvider()['path'], '导出类声明 resources/exporters.php', fn (string $code): ?string => ModuleProviderFile::registerExporters($code));
 
         if (! in_array("{$name}.export", $this->declaredMenuNames(), true)) {
             $this->components->info('还需要：');

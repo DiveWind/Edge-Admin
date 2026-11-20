@@ -4,9 +4,9 @@ namespace App\Core\Message\Actions;
 
 use App\Core\Message\Models\Announcement;
 use App\Core\System\Actions\SyncAttachments;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 修改公告（PUT /message/announcements/{announcement}，设计文档 §6.9）：只有草稿能修改。
@@ -16,7 +16,10 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class UpdateAnnouncement
 {
-    public function __construct(private readonly SyncAttachments $syncAttachments) {}
+    public function __construct(
+        private readonly SyncAnnouncementRoles $syncRoles,
+        private readonly SyncAttachments $syncAttachments,
+    ) {}
 
     /**
      * Execute the action.
@@ -24,7 +27,7 @@ class UpdateAnnouncement
      * @param  array<string, mixed>  $attributes  已校验的字段（同 CreateAnnouncement）
      *
      * @throws ValidationException
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Announcement $announcement, array $attributes): Announcement
     {
@@ -32,14 +35,17 @@ class UpdateAnnouncement
             $locked = Announcement::query()->lockForUpdate()->findOrFail($announcement->id);
 
             if (! $locked->isDraft()) {
-                throw new UnprocessableEntityHttpException(__('Only draft announcements can be edited.'));
+                throw new BusinessRuleViolation(__('Only draft announcements can be edited.'));
             }
 
-            $locked->fill(array_intersect_key($attributes, array_flip(CreateAnnouncement::ATTRIBUTES)));
+            $locked->fill(array_intersect_key($attributes, array_flip($locked->getFillable())));
             $locked->save();
 
-            CreateAnnouncement::syncTargetRoles($locked, $attributes['roles'] ?? []);
-            CreateAnnouncement::syncFiles($this->syncAttachments, $locked, $attributes);
+            $this->syncRoles->handle($locked, $attributes['roles'] ?? []);
+
+            if (array_key_exists('attachment_ids', $attributes)) {
+                $this->syncAttachments->handle($locked, Announcement::ATTACHMENT_COLLECTION, $attributes['attachment_ids'] ?? [], 'attachment_ids');
+            }
 
             return $locked->refresh();
         });

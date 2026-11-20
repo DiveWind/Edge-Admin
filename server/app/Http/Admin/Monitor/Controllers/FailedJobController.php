@@ -4,12 +4,13 @@ namespace App\Http\Admin\Monitor\Controllers;
 
 use App\Core\Monitor\Actions\ForgetFailedJob;
 use App\Core\Monitor\Models\FailedJob;
+use App\Core\Monitor\Queries\FailedJobList;
+use App\Core\System\Models\User;
 use App\Http\Admin\Monitor\Requests\FailedJobIndexRequest;
 use App\Http\Admin\Monitor\Resources\FailedJobResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
+use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 失败任务（设计文档 §6.6）：列表、详情、删除。重试见 RetryFailedJobController / RetryFailedJobsController，清空见 FlushFailedJobsController。
@@ -23,20 +24,9 @@ class FailedJobController
      * 列表（不含 payload、trace）：筛选 queue、connection（精确），exception（模糊），failed_at（区间）；排序 failed_at，默认 `-failed_at`。
      */
     #[Authorize('viewAny', FailedJob::class)]
-    public function index(FailedJobIndexRequest $request): AnonymousResourceCollection
+    public function index(FailedJobIndexRequest $request, FailedJobList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $jobs = QueryBuilder::for(FailedJob::query()->stored(), $request)
-            ->allowedFilters(
-                AllowedFilter::exact('queue'),
-                AllowedFilter::exact('connection'),
-                AllowedFilter::partial('exception'),
-                DateTimeRangeFilter::allowed('failed_at'),
-            )
-            ->allowedSorts('failed_at')
-            ->defaultSort('-failed_at', '-id')
-            ->paginate($request->pageSize());
-
-        return FailedJobResource::collection($jobs);
+        return FailedJobResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

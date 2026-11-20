@@ -2,8 +2,8 @@
 
 namespace App\Core\System\Actions;
 
-use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Models\Setting;
+use App\Core\System\Services\SettingRegistry;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -40,7 +40,7 @@ class UpdateSettings
 
                 $setting = Setting::query()->where('key', $key)->first() ?? new Setting;
 
-                SyncSettings::fillStructure($setting, $declaration);
+                $setting->fillFromDeclaration($declaration);
                 $setting->value = $value;
                 $setting->save();
             }

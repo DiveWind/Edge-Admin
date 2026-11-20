@@ -12,7 +12,6 @@ use Illuminate\Http\File;
 use Illuminate\Support\Facades\{DB, Storage};
 use Illuminate\Support\{LazyCollection, Str};
 use Illuminate\Support\Traits\Localizable;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -22,21 +21,24 @@ use Throwable;
  * 2. 复核发起人：账号启用、仍有导出类的权限码（按执行时的授权）；否则标记失败（FailExport），不写出任何数据；
  * 3. 按发起时的语言（exports.locale）翻译表头与显示名（withLocale()，执行后恢复，常驻内存安全），用 ExportWriter 流式写入本机临时文件：
  *    查询用 lazy(config('core.exports.chunk_size')) 分块读取，不一次读入全部数据；最后追加主键排序，排序列有重复值时分块也稳定；
- * 4. 文件存到附件盘（core.attachments.disk）的 `exports/<年>/<月>/<日>/<40 位随机串>.<扩展名>`；在一个事务中锁行复核记录仍在，
- *    登记附件（绑定到导出记录的 `file` 用途，created_by 为发起人），标记已完成、row_count、finished_at；
- *    记录在执行期间被删除 → 删除已存的文件。临时文件无论成败都删除；
+ * 4. 在一个事务中锁行复核记录仍在，把文件存为附件（StoreAttachment：附件盘的 `exports/<年>/<月>/<日>/<40 位随机串>.<扩展名>`，
+ *    绑定到导出记录的 `file` 用途，created_by 为发起人），标记已完成、row_count、finished_at；
+ *    记录在执行期间被删除 → 不保存文件；事务回滚 → 删除已存的文件。临时文件无论成败都删除；
  * 5. 派发 ExportFinished（Message 据此通知发起人）。
  *
  * 写出过程中的异常照常抛出：RunExport 的 failed() 调用 FailExport。
  */
 class GenerateExport
 {
-    use Localizable;
+    use Localizable {
+        withLocale as private;
+    }
 
     public function __construct(
         private readonly ExporterRegistry $exporters,
         private readonly ExportWriter $writer,
         private readonly FailExport $fail,
+        private readonly StoreAttachment $storeAttachment,
     ) {}
 
     /**
@@ -146,41 +148,34 @@ class GenerateExport
     }
 
     /**
-     * 保存文件、登记附件并标记已完成；记录已被删除时删除文件并返回 null。
+     * 在一个事务中锁行复核记录仍在，保存文件并登记附件（StoreAttachment，绑定到导出记录的 `file` 用途），标记已完成；
+     * 记录已被删除时不保存文件，返回 null。事务回滚时删除已保存的文件。
      *
      * @throws Throwable
      */
     private function complete(Export $export, User $user, string $temporary, string $title, int $rows): ?Export
     {
-        $disk = config()->string('core.attachments.disk');
-        $extension = $export->format->value;
-        $path = Storage::disk($disk)->putFileAs(Export::DIRECTORY.'/'.now()->format('Y/m/d'), new File($temporary), Str::random(40).'.'.$extension);
-
-        if (! is_string($path)) {
-            throw new RuntimeException("导出文件保存到存储盘 [{$disk}] 失败。");
-        }
+        $attachment = null;
 
         try {
-            $completed = DB::transaction(function () use ($export, $user, $temporary, $title, $rows, $disk, $path, $extension): ?Export {
+            return DB::transaction(function () use ($export, $user, $temporary, $title, $rows, &$attachment): ?Export {
                 $locked = Export::query()->lockForUpdate()->find($export->id);
 
                 if ($locked === null) {
                     return null;
                 }
 
-                $attachment = new Attachment([
-                    'disk' => $disk,
-                    'path' => $path,
-                    'name' => mb_substr(str_replace(['/', '\\'], '-', $title), 0, 200).'-'.now()->format('Ymd-His').'.'.$extension,
-                    'mime_type' => $export->format->mimeType(),
-                    'extension' => $extension,
-                    'size' => (int) filesize($temporary),
-                    'sha256' => (string) hash_file('sha256', $temporary),
-                ]);
-                $attachment->created_by = $user->id;
-                $attachment->collection = Export::FILE_COLLECTION;
-                $attachment->attachable()->associate($locked);
-                $attachment->save();
+                $extension = $export->format->value;
+                $attachment = $this->storeAttachment->handle(
+                    new File($temporary),
+                    $user,
+                    attachable: $locked,
+                    collection: Export::FILE_COLLECTION,
+                    name: mb_substr(str_replace(['/', '\\'], '-', $title), 0, 200).'-'.now()->format('Ymd-His').'.'.$extension,
+                    extension: $extension,
+                    mimeType: $export->format->mimeType(),
+                    directory: Export::DIRECTORY,
+                );
 
                 $locked->status = ExportStatus::Completed;
                 $locked->row_count = max(0, $rows);
@@ -190,15 +185,11 @@ class GenerateExport
                 return $locked;
             });
         } catch (Throwable $e) {
-            Storage::disk($disk)->delete($path);
+            if ($attachment instanceof Attachment) {
+                Storage::disk($attachment->disk)->delete($attachment->path);
+            }
 
             throw $e;
         }
-
-        if ($completed === null) {
-            Storage::disk($disk)->delete($path);
-        }
-
-        return $completed;
     }
 }

@@ -11,7 +11,7 @@ use Override;
  * core:make-crud：一个模型的完整增删改查（设计文档 §10.4），写法与 Content 模块的文章一致，生成后不手改即通过 composer ci。
  *
  * 依次：把菜单节点写入模块的 resources/menus.php（没有时创建）→ 把路由写入入口的 routes.php（模块分组）→ 调用 core:make-model、
- * core:make-action（Create / Update / Delete，软删除另有 Restore / ForceDelete，--audit 另有 Log<模型>Activity）、core:make-query、
+ * core:make-action（Create / Update / Delete，软删除另有 Restore / ForceDelete；--audit 时模型实现 Auditable，写操作调用 LogAudit）、core:make-query、
  * core:make-exporter（--export）、core:make-request（列表、表单、导出）、core:make-resource、core:make-controller（资源 + 单动作）
  * → 生成授权测试 → 在模块 README 中加入该模型一节。共享文件的修改都是幂等的。
  *
@@ -21,7 +21,7 @@ use Override;
     {name : 模型名（单数），如 Article}
     {--soft-deletes : 软删除整套：恢复、彻底删除、“已删除”筛选（设计文档 §10.1）}
     {--export : 异步导出：导出类、export 按钮、导出请求与入口（设计文档 §6.10）}
-    {--audit : 审计日志：写操作在同一事务中写入（日志名为模块名，设计文档 §6.11）}
+    {--audit : 审计日志：模型实现 Monitor 的 Auditable，写操作在同一事务中调用 LogAudit（日志名为模块名，设计文档 §5.5、§6.11）}
     {--no-data-scope : 不使用数据范围（默认使用 HasDataScope，按 created_by，设计文档 §8.4）}
     '.self::ENTRY_OPTIONS.'
     '.self::MODULE_OPTIONS)]
@@ -100,7 +100,7 @@ class CrudMakeCommand extends EntryGeneratorCommand
         $this->registerMenu($model);
         $this->registerRoutes($model);
 
-        if ($this->generate('core:make-model', [...$this->moduleArguments($model), '--soft-deletes' => (bool) $this->option('soft-deletes'), '--no-data-scope' => (bool) $this->option('no-data-scope')]) !== self::SUCCESS) {
+        if ($this->generate('core:make-model', [...$this->moduleArguments($model), '--soft-deletes' => (bool) $this->option('soft-deletes'), '--no-data-scope' => (bool) $this->option('no-data-scope'), '--audit' => (bool) $this->option('audit')]) !== self::SUCCESS) {
             return $this->markFailed();
         }
 
@@ -216,7 +216,7 @@ class CrudMakeCommand extends EntryGeneratorCommand
         $actions = ['Create', 'Update', 'Delete', ...($this->option('soft-deletes') ? ['Restore', 'ForceDelete'] : [])];
 
         return [
-            ...array_map(fn (string $verb): array => ['core:make-action', [...$withModel, 'name' => $verb.$model, '--audit' => (bool) $this->option('audit')]], $actions),
+            ...array_map(fn (string $verb): array => ['core:make-action', [...$withModel, 'name' => $verb.$model]], $actions),
             ['core:make-query', [...$withModel, 'name' => "{$model}List"]],
             ...($this->option('export') ? [['core:make-exporter', $module]] : []),
             ['core:make-request', [...$entry, 'name' => "{$model}Index", '--list' => true, '--model' => $model]],
@@ -281,7 +281,6 @@ class CrudMakeCommand extends EntryGeneratorCommand
             'routeName' => "{$this->appKey()}.{$prefix}.{$uri}",
             'menuPath' => "/{$prefix}/".Str::kebab($model),
             'routesFile' => $this->relativePath($this->entryPath('routes.php')),
-            'log' => "Log{$model}Activity",
             'kindDir' => $this->moduleKind(),
             'table' => Str::snake(Str::pluralStudly($model)),
             'modelSnake' => Str::snake($model),

@@ -3,8 +3,8 @@
 use App\Modules\Content\Actions\PublishArticle;
 use App\Modules\Content\Enums\ArticleStatus;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\Date;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -61,7 +61,7 @@ it('returns 422 when the article was published meanwhile (the lock rechecks the 
     Article::query()->whereKey($article->id)->update(['status' => ArticleStatus::Published]);
 
     expect(fn () => resolve(PublishArticle::class)->handle($stale, superAdminActor()))
-        ->toThrow(UnprocessableEntityHttpException::class, 'Only draft articles can be published.');
+        ->toThrow(BusinessRuleViolation::class, 'Only draft articles can be published.');
 });
 
 it('returns 404 for a deleted article', function (): void {

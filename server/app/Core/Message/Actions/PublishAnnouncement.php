@@ -6,8 +6,8 @@ use App\Core\Message\Enums\AnnouncementStatus;
 use App\Core\Message\Jobs\SendAnnouncement;
 use App\Core\Message\Models\Announcement;
 use App\Core\System\Models\User;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 发布公告（POST /message/announcements/{announcement}/publish，设计文档 §6.9）：立即返回，站内通知由队列分批发送。
@@ -21,7 +21,7 @@ class PublishAnnouncement
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Announcement $announcement, User $actor): Announcement
     {
@@ -29,7 +29,7 @@ class PublishAnnouncement
             $locked = Announcement::query()->lockForUpdate()->findOrFail($announcement->id);
 
             if (! $locked->isDraft()) {
-                throw new UnprocessableEntityHttpException(__('Only draft announcements can be published.'));
+                throw new BusinessRuleViolation(__('Only draft announcements can be published.'));
             }
 
             $locked->status = AnnouncementStatus::Published;

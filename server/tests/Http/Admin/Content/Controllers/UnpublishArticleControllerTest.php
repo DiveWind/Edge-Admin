@@ -3,7 +3,7 @@
 use App\Modules\Content\Actions\UnpublishArticle;
 use App\Modules\Content\Enums\ArticleStatus;
 use App\Modules\Content\Models\Article;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,5 +58,5 @@ it('returns 422 when the article was unpublished meanwhile', function (): void {
     Article::query()->whereKey($article->id)->update(['status' => ArticleStatus::Draft]);
 
     expect(fn () => resolve(UnpublishArticle::class)->handle($stale, superAdminActor()))
-        ->toThrow(UnprocessableEntityHttpException::class, 'Only published articles can be unpublished.');
+        ->toThrow(BusinessRuleViolation::class, 'Only published articles can be unpublished.');
 });

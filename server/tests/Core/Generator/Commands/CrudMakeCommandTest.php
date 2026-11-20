@@ -29,7 +29,7 @@ it('generates every file of the CRUD with all options', function (): void {
     expect($this->project->files('app/Modules/Blog'))->toContain(
         'app/Modules/Blog/Models/Post.php', 'app/Modules/Blog/Policies/PostPolicy.php',
         'app/Modules/Blog/Actions/CreatePost.php', 'app/Modules/Blog/Actions/UpdatePost.php', 'app/Modules/Blog/Actions/DeletePost.php',
-        'app/Modules/Blog/Actions/RestorePost.php', 'app/Modules/Blog/Actions/ForceDeletePost.php', 'app/Modules/Blog/Actions/LogPostActivity.php',
+        'app/Modules/Blog/Actions/RestorePost.php', 'app/Modules/Blog/Actions/ForceDeletePost.php', 'app/Modules/Blog/resources/exporters.php',
         'app/Modules/Blog/Queries/PostList.php', 'app/Modules/Blog/Exporters/PostExporter.php',
         'app/Modules/Blog/resources/lang/en/post.php', 'app/Modules/Blog/resources/lang/zh_CN/post.php',
     )
@@ -44,8 +44,10 @@ it('generates every file of the CRUD with all options', function (): void {
             'tests/Http/Admin/Blog/Controllers/PostExportControllerTest.php', 'tests/Http/Admin/Blog/Controllers/RestorePostControllerTest.php',
             'tests/Modules/Blog/Actions/PostActivityTest.php',
         ])
-        ->and($this->project->read('app/Modules/Blog/Actions/CreatePost.php'))->toContain('LogPostActivity::CREATED')
-        ->and($this->project->read('app/Modules/Blog/BlogServiceProvider.php'))->toContain("'blog.post' => Post::class,", "'blog.post' => PostExporter::class,")
+        ->and($this->project->read('app/Modules/Blog/Actions/CreatePost.php'))->toContain("\$this->audit->handle(\$actor, \$post, 'created');")
+        ->and($this->project->read('app/Modules/Blog/Models/Post.php'))->toContain('implements Auditable')
+        ->and($this->project->read('app/Modules/Blog/BlogServiceProvider.php'))->toContain("'blog.post' => Post::class,", "\$exporters->register(require __DIR__.'/resources/exporters.php');")
+        ->and($this->project->read('app/Modules/Blog/resources/exporters.php'))->toContain("'blog.post' => PostExporter::class,")
         ->and($this->project->read('app/Modules/Blog/README.md'))->toContain('## Post（完整增删改查）', '`POST /blog/posts/{post}/restore`', '**加字段时要改的地方**')
         ->and($this->project->read('tests/Http/Admin/Blog/Controllers/PostControllerTest.php'))->toContain("route('admin.blog.posts.index')", 'only lists the posts within the data scope (self)');
 

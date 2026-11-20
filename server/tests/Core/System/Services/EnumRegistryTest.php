@@ -29,13 +29,15 @@ it('returns the options in case order with the labels of the current locale', fu
         ->and(fn (): array => $registry->options('missing'))->toThrow(InvalidArgumentException::class, '枚举 missing 未登记');
 });
 
-it('rejects invalid registrations', function (array $enums, string $message): void {
+it('rejects invalid registrations', function (mixed $enums, string $message): void {
     $registry = new EnumRegistry;
     $registry->register(['status' => Status::class]);
 
     expect(fn () => $registry->register($enums))->toThrow(InvalidArgumentException::class, $message)
         ->and($registry->names())->toBe(['status']);
 })->with([
+    'not an array' => [Status::class, '必须是'],
+    'not a class name' => [['other' => 42], '必须是实现'],
     'invalid name' => [['Status' => Status::class], '不合法'],
     'duplicate name' => [['status' => Status::class], '重复登记'],
     'not an enum' => [['user' => stdClass::class], '必须是实现'],

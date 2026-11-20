@@ -1,6 +1,6 @@
 <?php
 
-use App\Core\System\Contracts\MenuRegistry;
+use App\Core\System\Services\MenuRegistry;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route as RouteDefinition;

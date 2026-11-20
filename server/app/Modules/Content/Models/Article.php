@@ -2,6 +2,7 @@
 
 namespace App\Modules\Content\Models;
 
+use App\Core\Monitor\Contracts\Auditable;
 use App\Core\System\Models\{Attachment, User};
 use App\Core\System\Models\Concerns\{HasAttachments, HasDataScope};
 use App\Modules\Content\Enums\ArticleStatus;
@@ -37,7 +38,7 @@ use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphOne};
  * @property CarbonInterface|null $deleted_at
  */
 #[Fillable(['title', 'summary', 'content', 'category'])]
-class Article extends Model
+class Article extends Model implements Auditable
 {
     /** @use HasFactory<ArticleFactory> */
     use HasAttachments, HasDataScope, HasFactory, SoftDeletes, UsesAppTimezone;
@@ -80,6 +81,37 @@ class Article extends Model
     public function cover(): MorphOne
     {
         return $this->attachmentIn(self::COVER_COLLECTION);
+    }
+
+    /**
+     * 审计的字段（已保存的值，LogAudit，§6.11）：title、summary、category、status、published_at（ISO 8601）、cover_id（封面附件的 id）、
+     * content（净化后的 HTML，日志中只记摘要）。
+     *
+     * @return array{title: string, summary: string|null, category: string, status: string, published_at: string|null, cover_id: int|null, content: string}
+     */
+    public function auditSnapshot(): array
+    {
+        $coverId = $this->cover()->value('id');
+
+        return [
+            'title' => $this->title,
+            'summary' => $this->summary,
+            'category' => $this->category,
+            'status' => $this->status->value,
+            'published_at' => $this->published_at?->toIso8601String(),
+            'cover_id' => is_numeric($coverId) ? (int) $coverId : null,
+            'content' => $this->content,
+        ];
+    }
+
+    /**
+     * 只记摘要的大字段：正文。
+     *
+     * @return list<string>
+     */
+    public function auditDigestedFields(): array
+    {
+        return ['content'];
     }
 
     public function isDraft(): bool

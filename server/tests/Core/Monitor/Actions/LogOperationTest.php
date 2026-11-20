@@ -1,7 +1,7 @@
 <?php
 
 use App\Core\Monitor\Actions\LogOperation;
-use App\Core\Monitor\Models\OperationLog;
+use App\Core\Monitor\Models\{Activity, OperationLog};
 use App\Core\System\Models\User;
 
 /*
@@ -18,7 +18,14 @@ use App\Core\System\Models\User;
  */
 function maskPayload(array $data): array
 {
-    return resolve(LogOperation::class)->mask($data);
+    resolve(LogOperation::class)->handle(User::factory()->create(), 'admin.demo.store', [
+        'method' => 'POST', 'path' => '/', 'route_parameters' => [], 'payload' => $data, 'status' => 201,
+        'duration_ms' => 0, 'ip_address' => null, 'user_agent' => null, 'request_id' => null,
+    ]);
+
+    $payload = OperationLog::query()->latest('id')->firstOrFail()->getProperty('payload');
+
+    return is_array($payload) ? $payload : [];
 }
 
 it('masks the sensitive keys at any depth, including lists', function (): void {
@@ -77,7 +84,7 @@ it('replaces a payload that is still too large with its original size', function
 });
 
 it('keeps a payload within the size limit', function (): void {
-    expect(resolve(LogOperation::class)->limitSize(['name' => 'Alice'], ['name' => 'Alice']))->toBe(['name' => 'Alice']);
+    expect(maskPayload(['name' => 'Alice']))->toBe(['name' => 'Alice']);
 });
 
 it('writes the operation log with the masked payload and route parameters', function (): void {
@@ -104,7 +111,7 @@ it('writes the operation log with the masked payload and route parameters', func
         ->and($log->getProperty('route_parameters'))->toBe(['token' => '******'])
         ->and($log->getProperty('payload'))->toBe(['password' => '******'])
         ->and($log->getProperty('request_id'))->toBe('request-0001')
-        ->and($log->stringProperty('user_agent'))->toHaveLength(LogOperation::USER_AGENT_LENGTH);
+        ->and($log->stringProperty('user_agent'))->toHaveLength(Activity::USER_AGENT_LENGTH);
 });
 
 it('writes nothing while activitylog is disabled', function (): void {

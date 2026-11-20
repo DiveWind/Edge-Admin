@@ -48,7 +48,7 @@ function roleWithCodes(string $name, string ...$codes): Role
  */
 function registerVipScope(): void
 {
-    resolve(DataScopeRegistry::class)->register(new class implements DataScopeProvider
+    resolve(DataScopeRegistry::class)->register([new class implements DataScopeProvider
     {
         public function key(): string
         {
@@ -69,7 +69,7 @@ function registerVipScope(): void
         {
             return str_starts_with((string) $record->getAttribute('name'), 'VIP ');
         }
-    });
+    }]);
 }
 
 describe('index', function (): void {

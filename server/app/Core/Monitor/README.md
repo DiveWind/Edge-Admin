@@ -7,7 +7,7 @@
 - 日志的存储：操作日志、登录日志与各模块的数据变更审计统一存在 spatie/laravel-activitylog 的 `activity_log` 表中，按日志名区分；
 - 操作日志（`operation`）：写入用例 `LogOperation`（含脱敏）；记录写请求的中间件在后台入口（`App\Http\Admin\Middleware\RecordOperationLog`）；
 - 登录日志（`login`）：监听认证事件（`Listeners/RecordLoginActivity`），写入用例 `LogLogin`；
-- 在线会话与强制下线：database 会话驱动的会话表（`Models/Session`）与 Sanctum 的 token（`Queries/ActiveTokens`）；
+- 在线会话与强制下线：database 会话驱动的会话表（`Models/Session`）与 Sanctum 的 token（`Queries/OnlineTokenList`）；
 - 日志与在线会话的授权与数据范围；
 - 定时任务：spatie/laravel-schedule-monitor 同步、记录的任务与执行记录（`Models/ScheduledTask`、`ScheduledTaskLog`），立即执行（`Actions/RunScheduledTask` → `Jobs/ExecuteScheduledTask`）；
 - 失败任务：框架的 `failed_jobs`（`Models/FailedJob`，只读），重试、删除、清空走官方能力；
@@ -24,16 +24,22 @@
 |---|---|
 | `Models/Activity` | activitylog 的模型（`config('activitylog.activity_model')`，多态别名 `activity`）：写入时自动在 `properties.request_id` 中记下 Context 的请求 ID；`visibleTo($actor)` / `isVisibleTo($actor)`：数据范围委托给 causer 用户 |
 | `Models/OperationLog`、`Models/LoginLog` | 继承 `Activity`，各带日志名（`LOG_NAME`）的全局作用域；只读 |
+| `Queries/LoginLogList`、`Queries/OperationLogList` | 登录日志、操作日志的列表查询（`visibleTo`，筛选与排序白名单） |
 | `Models/Session` | 会话表的一行（表名、连接取自 `config('session.*')`）：`online()`（已登录、未过期；非 database 驱动时为空）、`visibleTo()`、`publicId()`（会话 ID 的前 16 位，路由绑定按它查找）、`isCurrent()` |
-| `Queries/ActiveTokens` | 有效的后台用户 token（与 Sanctum 的过期校验一致，按所属用户的数据范围过滤）；`isCurrent()`：是否为本次请求使用的 token |
-| `Actions/LogOperation` | 写入操作日志；`mask()`：按 `masked_keys` 递归脱敏，并按 `max_value_length` 截断过长的字符串值（`DataMasker`）；`limitSize()`：请求体超过 `max_payload_bytes` 时整体替换为截断标记 |
+| `Queries/OnlineSessionList` | 在线会话的列表查询（`online()`、`visibleTo`，筛选与排序白名单） |
+| `Queries/OnlineTokenList` | 有效的后台用户 token 列表（与 Sanctum 的过期校验一致，按所属用户的数据范围过滤，筛选与排序白名单） |
+| `Services/CurrentAccessToken` | 是否为本次请求使用的 token（Policy 与 token 列表的 `is_current` 共用） |
+| `Actions/LogOperation` | 写入操作日志：按 `masked_keys` 递归脱敏，并按 `max_value_length` 截断过长的字符串值（`DataMasker`）；请求体超过 `max_payload_bytes` 时整体替换为截断标记；`user_agent` 最长 `Activity::USER_AGENT_LENGTH` |
+| `Contracts/Auditable`、`Actions/LogAudit` | 扩展点“日志”（§5.5）：模型实现 `Auditable`（`auditSnapshot()`、`auditDigestedFields()`），模块的 Action 在同一事务中调用 `LogAudit` 写数据变更审计（日志名为多态别名的模块段；新增记 attributes、修改类事件只记变化、彻底删除记 old、删除与恢复只记事件；大字段记 `{ sha256, length }`） |
 | `Services/DataMasker` | 脱敏与截断：`maskArray()`（键名规则，递归）、`maskText()`（文本中 `键=值`、`键: 值`、`"键":"值"` 形式）、`truncate()`；键名取自 `core.monitor.masked_keys` |
 | `Models/ScheduledTask`、`Models/ScheduledTaskLog` | 继承 schedule-monitor 的模型（`config/schedule-monitor.php` 的 `models`），包写入、接口只读；`nextRunAt()`、`isRunning()`、`scheduleTimezone()`；`metaValue()` |
+| `Queries/ScheduledTaskList`、`Queries/ScheduledTaskLogList` | 定时任务、某个任务的执行记录的列表查询（筛选与排序白名单） |
 | `Actions/RunScheduledTask`、`Jobs/ExecuteScheduledTask` | 立即执行：只派发任务名；队列任务在 `Schedule::events()` 中按同步规则查找同名事件，与 `schedule:run` 相同地派发 `ScheduledTask*` 事件后执行；找不到即失败。`ShouldBeUnique`（按任务名）、`Tries(1)` |
 | `Models/FailedJob` | 失败任务表的一行（表名、连接取自 `config('queue.failed.*')`，路由键 `uuid`）：`stored()`（驱动不是 `database-uuids` 时为空）、`payloadSummary()`（去掉 `data.command`，脱敏、截断）、`exceptionMessage()`、`exceptionTrace()`（脱敏、去掉项目根目录、限制行数） |
+| `Queries/FailedJobList` | 失败任务的列表查询（`stored()`，筛选与排序白名单） |
 | `Actions/RetryFailedJob`、`RetryFailedJobs` | 重试：`queue:retry <uuid>`；全部重试：`queue:retry all` 或 `--queue=` |
 | `Actions/ForgetFailedJob`、`FlushFailedJobs` | 删除、清空：`FailedJobProviderInterface::forget()` / `flush()` |
-| `Actions/RunHealthChecks`、`Queries/LatestHealthResults` | 立即检查（`health:check --no-notification`）；最近一次结果（包的结果存储，本项目为缓存） |
+| `Actions/RunHealthChecks`、`Queries/LatestHealthResults` | 立即检查（`health:check --no-notification`，不返回结果）；最近一次结果（包的结果存储，本项目为缓存；入口先调前者再调后者） |
 | `Queries/SystemInfo` | 系统信息：版本、运行方式、驱动、磁盘；不输出密钥、密码、主机、路径与环境变量 |
 | `Actions/LogLogin` | 写入登录日志（只接收用户名，不接收密码） |
 | `Actions/LogoutSession`、`Actions/RevokeToken` | 强制下线：删除会话、吊销 token |
@@ -46,7 +52,9 @@
 
 定时任务、失败任务、健康状态与系统信息属于系统本身，**不按数据范围过滤**，只由权限码决定；健康检查与系统信息没有模型，接口直接声明权限码 `monitor.health`、`monitor.health.check`。
 
-- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/Monitor`。
+- 内部实现（不对外）：`Listeners/RecordLoginActivity`。
+- 会话表与 token 表归 System 所有（System 的 `RevokeUserSessions` 按用户整体删除），本模块只做单条强制下线（`LogoutSession`、`RevokeToken`）。
+- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；列表的查询调用 `Queries/<模型>List`；接口放在各受信任入口的同名目录：`app/Http/Admin/Monitor`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 
 ## 日志名

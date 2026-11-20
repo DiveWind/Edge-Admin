@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphOne};
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
@@ -29,8 +30,11 @@ use Spatie\Permission\Traits\HasRoles;
  * - HasDataScope：数据权限，`User::query()->visibleTo($actor)` 与 `$user->isVisibleTo($actor)`（用户管理的列表、详情、Policy 使用）；
  *   “仅本人”范围下，自己创建的用户与本人都可见（dataScopeOwnerColumns()）。可见不等于可操作：删除、停用自己仍由 UserPolicy 拒绝；
  * - HasAttachments：头像是 `avatar` 用途上绑定的附件（avatar()，设计文档 §6.8），由本人在个人资料中设置；用户删除时一并删除。
+ *
+ * `#[Fillable]` 即新增、修改用户时可由输入写入的字段（Action 只取输入中的这些键）；
+ * 密码、created_by 只由 Action 显式 forceFill（新增、重置密码、修改密码）。
  */
-#[Fillable(['username', 'name', 'email', 'password', 'status'])]
+#[Fillable(['username', 'name', 'email', 'status'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
 {
@@ -53,6 +57,14 @@ class User extends Authenticatable
     public function guardName(): string
     {
         return self::GUARD;
+    }
+
+    /**
+     * 用户名的规范形式：统一存为小写（与 Fortify 登录时的 lowercase_usernames 一致，设计文档 §7.2）。
+     */
+    public static function normalizeUsername(string $username): string
+    {
+        return Str::lower($username);
     }
 
     /**

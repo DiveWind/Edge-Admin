@@ -14,6 +14,7 @@ use Illuminate\Validation\ValidationException;
  * resolve(SyncAttachments::class)->handle($article, 'files', $validated['files'] ?? [], 'files');
  * ```
  *
+ * - $ids：附件 id 的数组，或单个 id（单附件用途，如封面、头像），null 表示一个都不要（去掉）；其他值忽略；
  * - 绑定：$ids 中的附件写入 attachable（多态别名，§4.5）与 collection；
  * - 替换、移除：该用途下原有、但不在 $ids 中的附件删除（连同文件，事务提交后，DeleteAttachment）；
  * - 并发：在一个事务中先对提交的附件 lockForUpdate()，再复核“未绑定，或已绑定在这里”；被别的记录抢先绑定、不存在 → 422（$attribute），
@@ -28,14 +29,15 @@ class SyncAttachments
     /**
      * Execute the action.
      *
-     * @param  array<array-key, int|string>  $ids  附件 id（已校验归属）
+     * @param  mixed  $ids  附件 id 的数组或单个 id（已校验归属），null 去掉全部
      * @param  string  $attribute  校验错误挂的字段
      * @return Collection<int, Attachment>
      *
      * @throws ValidationException
      */
-    public function handle(Model $record, string $collection, array $ids, string $attribute = 'attachments'): Collection
+    public function handle(Model $record, string $collection, mixed $ids, string $attribute = 'attachments'): Collection
     {
+        $ids = array_filter(is_array($ids) ? $ids : [$ids], fn (mixed $id): bool => is_int($id) || (is_string($id) && $id !== ''));
         $ids = array_values(array_unique(array_map(intval(...), $ids)));
 
         return DB::transaction(function () use ($record, $collection, $ids, $attribute): Collection {

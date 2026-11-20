@@ -3,14 +3,13 @@
 namespace App\Http\Admin\Message\Controllers;
 
 use App\Core\Message\Models\Announcement;
+use App\Core\Message\Queries\ReceivedAnnouncementList;
 use App\Core\System\Models\User;
 use App\Http\Admin\Message\Requests\ReceivedAnnouncementIndexRequest;
 use App\Http\Admin\Message\Resources\ReceivedAnnouncementResource;
-use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 我收到的公告（设计文档 §6.9）：已发布、且目标包含当前用户（全部用户，或当前拥有任一启用的目标角色）的公告。
@@ -23,19 +22,9 @@ class ReceivedAnnouncementController
     /**
      * 列表：筛选 title（模糊）、level（精确）、published_at（区间）；排序 published_at，默认 `-published_at`。
      */
-    public function index(ReceivedAnnouncementIndexRequest $request, #[CurrentUser] User $actor): AnonymousResourceCollection
+    public function index(ReceivedAnnouncementIndexRequest $request, ReceivedAnnouncementList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
-        $announcements = QueryBuilder::for(Announcement::query()->receivedBy($actor)->with('publisher'), $request)
-            ->allowedFilters(
-                AllowedFilter::partial('title'),
-                AllowedFilter::exact('level'),
-                DateTimeRangeFilter::allowed('published_at'),
-            )
-            ->allowedSorts('published_at')
-            ->defaultSort('-published_at')
-            ->paginate($request->pageSize());
-
-        return ReceivedAnnouncementResource::collection($announcements);
+        return ReceivedAnnouncementResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

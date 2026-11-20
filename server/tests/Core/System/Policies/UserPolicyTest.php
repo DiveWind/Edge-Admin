@@ -2,7 +2,7 @@
 
 use App\Core\System\Models\User;
 use App\Core\System\Policies\UserPolicy;
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\EffectivePermissions;
 use Illuminate\Support\Facades\Gate;
 
 /*
@@ -42,7 +42,7 @@ dataset('record abilities', [
 
 it('allows each ability only with its permission code', function (string $ability, bool $onRecord, string $code): void {
     $others = array_filter(
-        resolve(PermissionRegistry::class)->registeredCodes(),
+        resolve(EffectivePermissions::class)->registeredCodes(),
         fn (string $other): bool => $other !== $code && ! str_starts_with($other, "{$code}."),
     );
     $arguments = $onRecord ? $this->target : User::class;

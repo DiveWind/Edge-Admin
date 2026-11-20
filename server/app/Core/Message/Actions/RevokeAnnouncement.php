@@ -4,8 +4,8 @@ namespace App\Core\Message\Actions;
 
 use App\Core\Message\Enums\AnnouncementStatus;
 use App\Core\Message\Models\{Announcement, Notification};
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 撤回公告（POST /message/announcements/{announcement}/revoke，设计文档 §6.9）：撤回是终态（不能再发布、修改，只能删除）。
@@ -19,7 +19,7 @@ class RevokeAnnouncement
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Announcement $announcement): Announcement
     {
@@ -27,7 +27,7 @@ class RevokeAnnouncement
             $locked = Announcement::query()->lockForUpdate()->findOrFail($announcement->id);
 
             if (! $locked->isPublished()) {
-                throw new UnprocessableEntityHttpException(__('Only published announcements can be revoked.'));
+                throw new BusinessRuleViolation(__('Only published announcements can be revoked.'));
             }
 
             $locked->status = AnnouncementStatus::Revoked;

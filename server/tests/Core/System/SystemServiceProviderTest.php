@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\{Cache, DB, Gate};
 
 /*
 |--------------------------------------------------------------------------
-| Gate::before：权限码由 PermissionRegistry 判定，其他 ability 交给 Policy（设计文档 §8.1）
+| Gate::before：权限码由 EffectivePermissions 判定，其他 ability 交给 Policy（设计文档 §8.1）
 |--------------------------------------------------------------------------
 */
 

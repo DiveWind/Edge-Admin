@@ -1,9 +1,9 @@
 <?php
 
-use App\Core\System\Contracts\{Exporter, MenuRegistry};
+use App\Core\System\Contracts\Exporter;
 use App\Core\System\Exporters\UserExporter;
 use App\Core\System\Models\User;
-use App\Core\System\Services\ExporterRegistry;
+use App\Core\System\Services\{ExporterRegistry, MenuRegistry};
 
 /*
 |--------------------------------------------------------------------------
@@ -17,17 +17,19 @@ it('is a singleton that holds the user list export', function (): void {
         ->and(resolve(ExporterRegistry::class)->get('system.user'))->toBeInstanceOf(UserExporter::class);
 });
 
-it('rejects invalid registrations', function (array $exporters, string $message): void {
+it('rejects invalid registrations', function (mixed $exporters, string $message): void {
     $registry = new ExporterRegistry;
     $registry->register(['system.user' => UserExporter::class]);
 
     expect(fn () => $registry->register($exporters))->toThrow(InvalidArgumentException::class, $message)
         ->and($registry->names())->toBe(['system.user']);
 })->with([
+    'not an array' => [UserExporter::class, '必须是'],
     'a name without the module' => [['users' => UserExporter::class], '不合法'],
     'an upper-case name' => [['System.User' => UserExporter::class], '不合法'],
     'duplicate name' => [['system.user' => UserExporter::class], '重复登记'],
     'not an exporter' => [['system.other' => User::class], '必须实现'],
+    'not a class name' => [['system.other' => 42], '必须实现'],
 ]);
 
 it('fails for an unregistered name', function (): void {

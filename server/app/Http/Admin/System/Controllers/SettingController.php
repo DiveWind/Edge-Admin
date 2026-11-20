@@ -3,10 +3,9 @@
 namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\UpdateSettings;
-use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Data\{SettingData, SettingGroupData};
 use App\Core\System\Models\Setting;
-use App\Core\System\Services\Settings;
+use App\Core\System\Services\{SettingRegistry, Settings};
 use App\Http\Admin\System\Requests\SettingRequest;
 use App\Http\Admin\System\Resources\{SettingGroupResource, SettingResource};
 use Illuminate\Routing\Attributes\Controllers\Authorize;

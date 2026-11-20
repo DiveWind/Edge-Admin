@@ -3,7 +3,7 @@
 namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Models\User;
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\EffectivePermissions;
 use App\Http\Admin\System\Resources\MenuRouteResource;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,7 +19,7 @@ class MenuAllController
     /**
      * Handle the incoming request.
      */
-    public function __invoke(#[CurrentUser] User $user, PermissionRegistry $permissions): AnonymousResourceCollection
+    public function __invoke(#[CurrentUser] User $user, EffectivePermissions $permissions): AnonymousResourceCollection
     {
         return MenuRouteResource::collection($permissions->menuTreeFor($user));
     }

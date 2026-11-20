@@ -3,6 +3,7 @@
 namespace App\Http\Admin\Monitor\Controllers;
 
 use App\Core\Monitor\Actions\RunHealthChecks;
+use App\Core\Monitor\Queries\LatestHealthResults;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
@@ -16,8 +17,10 @@ class RunHealthChecksController
      * @return array{finished_at: string|null, checks: list<array<string, mixed>>}
      */
     #[Authorize('monitor.health.check')]
-    public function __invoke(RunHealthChecks $action): array
+    public function __invoke(RunHealthChecks $action, LatestHealthResults $results): array
     {
-        return $action->handle();
+        $action->handle();
+
+        return $results->get();
     }
 }

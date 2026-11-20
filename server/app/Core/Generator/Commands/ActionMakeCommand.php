@@ -16,15 +16,14 @@ use Override;
  * - `Update<模型>`：`handle(<模型>, array $attributes, User $actor)`，事务中锁行后修改；
  * - `Delete<模型>`：锁行后删除（软删除的模型为软删除）；
  * - `Restore<模型>`、`ForceDelete<模型>`：软删除的模型才有，`withTrashed()->lockForUpdate()` 复核“已删除”，并发时 422；
- * - `Log<模型>Activity`：审计日志（日志名为模块名，§6.11 的结构）；
  * - 其他名称：`handle(<模型>, User $actor)`，锁行 → 复核 → 修改 → 返回的骨架。
  *
- * `--audit`：写操作在同一事务中调用 `Log<模型>Activity`（缺少时一并生成）。不带模型时生成带 `User $actor` 的骨架。
+ * 模型实现了 Monitor 的 Auditable（`core:make-model --audit`）时，写操作在同一事务中调用 Monitor 的 LogAudit 写审计日志（§5.5）。
+ * 不带模型时生成带 `User $actor` 的骨架。
  */
 #[Signature('core:make-action
     {name : Action 的类名，如 PublishArticle}
     {--model= : 用例针对的模型（模块中的模型名）}
-    {--audit : 写操作在同一事务中写审计日志（Log<模型>Activity，缺少时一并生成）}
     '.self::MODULE_OPTIONS)]
 #[Description('在模块中生成 Action（写操作用例：一个类一个用例，handle() 方法；--model 生成标准用例）')]
 class ActionMakeCommand extends ModuleGeneratorCommand
@@ -60,10 +59,6 @@ class ActionMakeCommand extends ModuleGeneratorCommand
 
         $name = $this->getNameInput();
 
-        if ($name === "Log{$model}Activity") {
-            return 'action.audit';
-        }
-
         return array_find(self::VERBS, fn (string $stub, string $verb): bool => $name === $verb.$model) ?? 'action.model';
     }
 
@@ -98,34 +93,11 @@ class ActionMakeCommand extends ModuleGeneratorCommand
             return "模型 [app/{$this->moduleKind()}/{$this->moduleName()}/Models/".Str::studly($explicit).'.php] 不存在，请先执行 php artisan core:make-model '.Str::studly($explicit)." --module={$this->moduleName()}".($this->option('core') ? ' --core' : '').'。';
         }
 
-        if ($this->option('audit') && $model === null) {
-            return '--audit 需要模型：请用 --model= 指定。';
-        }
-
         if ($model !== null && in_array($this->stubName(), ['action.restore', 'action.force-delete'], true) && ! $this->modelFeatures($model)['softDeletes']) {
             return "模型 {$model} 没有软删除（SoftDeletes），不能生成 {$this->getNameInput()}。";
         }
 
         return null;
-    }
-
-    /**
-     * --audit 时生成缺少的审计日志 Action。
-     */
-    protected function afterGenerating(string $class, string $path): int
-    {
-        $model = $this->model();
-
-        if ($model === null || ! $this->option('audit') || $this->stubName() === 'action.audit') {
-            return self::SUCCESS;
-        }
-
-        return $this->generateUnlessExists('core:make-action', [
-            'name' => "Log{$model}Activity",
-            '--model' => $model,
-            '--module' => $this->moduleName(),
-            '--core' => (bool) $this->option('core'),
-        ], $this->modulePath("Actions/Log{$model}Activity.php"));
     }
 
     /**
@@ -139,8 +111,6 @@ class ActionMakeCommand extends ModuleGeneratorCommand
         return [
             ...parent::replacements($class),
             ...($model === null ? [] : $this->modelReplacements($model)),
-            'log' => $model === null ? '' : "Log{$model}Activity",
-            'attributes' => $model !== null && $this->modelFeatures($model)['name'] ? "'name'" : '',
             'userModel' => class_basename($user),
             'namespacedUserModel' => $user,
         ];
@@ -153,13 +123,12 @@ class ActionMakeCommand extends ModuleGeneratorCommand
     {
         $model = $this->model();
         $features = $model === null ? [] : $this->modelFeatures($model);
-        $audit = (bool) $this->option('audit');
 
-        return [...$features, 'audit' => $audit, 'needsActor' => $audit || ($features['createdBy'] ?? false)];
+        return [...$features, 'needsActor' => ($features['audit'] ?? false) || ($features['createdBy'] ?? false)];
     }
 
     /**
-     * 用例针对的模型：--model，或名称为“标准用例前缀 + 已有的模型”（如 CreateArticle）、`Log<模型>Activity`；都没有时为 null。
+     * 用例针对的模型：--model，或名称为“标准用例前缀 + 已有的模型”（如 CreateArticle）；都没有时为 null。
      */
     private function model(): ?string
     {
@@ -168,10 +137,7 @@ class ActionMakeCommand extends ModuleGeneratorCommand
         }
 
         $name = $this->getNameInput();
-        $candidates = [
-            ...array_map(fn (string $verb): ?string => str_starts_with($name, $verb) ? substr($name, strlen($verb)) : null, array_keys(self::VERBS)),
-            preg_match('/^Log(?<model>[A-Z]\w*)Activity$/', $name, $match) === 1 ? $match['model'] : null,
-        ];
+        $candidates = array_map(fn (string $verb): ?string => str_starts_with($name, $verb) ? substr($name, strlen($verb)) : null, array_keys(self::VERBS));
 
         return array_find($candidates, fn (?string $candidate): bool => $candidate !== null && $candidate !== '' && $this->moduleModel($candidate) !== null);
     }

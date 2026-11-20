@@ -3,7 +3,7 @@
 use App\Core\System\Models\Attachment;
 use App\Modules\Content\Actions\RestoreArticle;
 use App\Modules\Content\Models\Article;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 
 /*
 |--------------------------------------------------------------------------
@@ -59,7 +59,7 @@ it('returns 422 when the article was restored meanwhile', function (): void {
     Article::query()->withTrashed()->whereKey($article->id)->update(['deleted_at' => null]);
 
     expect(fn () => resolve(RestoreArticle::class)->handle($stale, superAdminActor()))
-        ->toThrow(UnprocessableEntityHttpException::class, 'Only deleted articles can be restored.');
+        ->toThrow(BusinessRuleViolation::class, 'Only deleted articles can be restored.');
 });
 
 it('returns 404 for unknown ids', function (): void {

@@ -19,12 +19,12 @@ use Spatie\Permission\Models\Permission as SpatiePermission;
  * - status：停用向子孙级联，停用的节点及其子孙对所有人（含超管）失效；
  * - is_builtin：内置节点（模块在 MenuRegistry 中声明的），由 core:sync-permissions 维护。
  *
- * 写入只在 System 模块的 Action 与同步命令中进行（设计文档 §5.2）；权限判定一律走 Gate（PermissionRegistry），
+ * 写入只在 System 模块的 Action 与同步命令中进行（设计文档 §5.2）；权限判定一律走 Gate（EffectivePermissions），
  * 不使用 spatie 的判定 API（§8.1）。
  *
  * @property int $id
  */
-#[Fillable(['parent_id', 'type', 'name', 'guard_name', 'title', 'path', 'component', 'icon', 'sort', 'status', 'meta', 'is_builtin'])]
+#[Fillable(['parent_id', 'type', 'name', 'guard_name', 'title', 'path', 'component', 'icon', 'sort', 'status', 'meta'])]
 class Permission extends SpatiePermission
 {
     /** @use HasFactory<PermissionFactory> */
@@ -84,7 +84,7 @@ class Permission extends SpatiePermission
     }
 
     /**
-     * 节点自身是否启用（不看祖先；祖先停用时是否生效见 PermissionRegistry）。
+     * 节点自身是否启用（不看祖先；祖先停用时是否生效见 EffectivePermissions）。
      */
     public function isEnabled(): bool
     {

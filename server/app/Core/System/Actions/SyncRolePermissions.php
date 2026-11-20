@@ -3,7 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\{Manageability, PermissionRegistry};
+use App\Core\System\Services\{EffectivePermissions, Manageability};
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -20,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 class SyncRolePermissions
 {
     public function __construct(
-        private readonly PermissionRegistry $permissions,
+        private readonly EffectivePermissions $permissions,
         private readonly Manageability $manageability,
     ) {}
 

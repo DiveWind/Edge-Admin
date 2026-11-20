@@ -1,9 +1,8 @@
 <?php
 
-use App\Core\System\Contracts\DictRegistry;
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{DictItem, DictType};
-use App\Core\System\Services\{DictRegistryService, Dictionary};
+use App\Core\System\Services\{DictRegistry, Dictionary};
 
 /*
 |--------------------------------------------------------------------------
@@ -18,7 +17,7 @@ use App\Core\System\Services\{DictRegistryService, Dictionary};
  */
 function declareDicts(array $types): void
 {
-    $registry = new DictRegistryService;
+    $registry = new DictRegistry;
     $registry->register($types);
     app()->instance(DictRegistry::class, $registry);
 }

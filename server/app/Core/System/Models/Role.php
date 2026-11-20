@@ -17,7 +17,7 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * - data_scope：数据范围（§8.4，新建角色默认 self）；remark：备注；sort：排序。
  *
  * 写入只在 System 模块的 Action 与同步命令中进行（设计文档 §5.2）；分配权限用 syncPermissions()，
- * 判定一律走 Gate（PermissionRegistry），不使用 spatie 的判定 API（§8.1）。
+ * 判定一律走 Gate（EffectivePermissions），不使用 spatie 的判定 API（§8.1）。
  *
  * @property int $id
  */

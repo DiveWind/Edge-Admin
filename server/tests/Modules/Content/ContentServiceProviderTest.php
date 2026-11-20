@@ -1,6 +1,6 @@
 <?php
 
-use App\Core\System\Contracts\{DictRegistry, MenuRegistry};
+use App\Core\System\Services\{DictRegistry, MenuRegistry};
 use App\Core\System\Services\{EnumRegistry, ExporterRegistry};
 use App\Modules\Content\Enums\ArticleStatus;
 use App\Modules\Content\Exporters\ArticleExporter;

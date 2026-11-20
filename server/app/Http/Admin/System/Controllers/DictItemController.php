@@ -4,11 +4,11 @@ namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{CreateDictItem, DeleteDictItem, UpdateDictItem};
 use App\Core\System\Models\{DictItem, DictType};
+use App\Core\System\Queries\DictItemList;
 use App\Http\Admin\System\Requests\{DictItemIndexRequest, DictItemRequest};
 use App\Http\Admin\System\Resources\DictItemResource;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use Spatie\QueryBuilder\{AllowedFilter, QueryBuilder};
 
 /**
  * 字典项管理（设计文档 §6.7、§8.6）：某个类型的字典项列表与新增（/system/dict-types/{dict_type}/items），
@@ -23,15 +23,9 @@ class DictItemController
      * 该类型的字典项列表（含停用项）：筛选 value、label（模糊）、status（精确）；排序 sort、id、value，默认 `sort,id`。
      */
     #[Authorize('viewAny', DictItem::class)]
-    public function index(DictItemIndexRequest $request, DictType $dictType): AnonymousResourceCollection
+    public function index(DictItemIndexRequest $request, DictType $dictType, DictItemList $list): AnonymousResourceCollection
     {
-        $items = QueryBuilder::for($dictType->items(), $request)
-            ->allowedFilters(AllowedFilter::partial('value'), AllowedFilter::partial('label'), AllowedFilter::exact('status'))
-            ->allowedSorts('sort', 'id', 'value')
-            ->defaultSort('sort', 'id')
-            ->paginate($request->pageSize());
-
-        return DictItemResource::collection($items);
+        return DictItemResource::collection($list->builder($dictType, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**

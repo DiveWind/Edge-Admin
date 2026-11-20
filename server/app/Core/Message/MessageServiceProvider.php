@@ -2,13 +2,10 @@
 
 namespace App\Core\Message;
 
-use App\Core\Message\Enums\{AnnouncementStatus, AnnouncementTarget, NotificationLevel};
-use App\Core\Message\Listeners\{DeleteNotificationsOfDeletedUser, NotifyExportFinished};
+use App\Core\Message\Listeners\{DeleteNotificationsOfUser, NotifyExportFinished};
 use App\Core\Message\Models\{Announcement, Notification};
-use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Events\ExportFinished;
-use App\Core\System\Models\User;
-use App\Core\System\Services\EnumRegistry;
+use App\Core\System\Events\{ExportFinished, UserDeleting};
+use App\Core\System\Services\{EnumRegistry, MenuRegistry};
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -20,7 +17,7 @@ use Illuminate\Support\ServiceProvider;
  * 多态别名与契约绑定由 core:make-model、core:make-contract 自动登记。
  *
  * - 菜单与权限节点（resources/menus.php，公告管理）注册到 System 的 MenuRegistry；通知级别与公告的枚举登记到 EnumRegistry（§6.7）；
- * - 用户被删除时删除他的通知（监听 User 的 deleted 模型事件；System 不依赖 Message）；
+ * - 用户被删除时删除他的通知（监听 System 的 Core 事件 UserDeleting，同一事务；System 不依赖 Message）；
  * - System 的导出完成或失败时通知发起人（监听 ExportFinished，设计文档 §6.10）。
  *
  * 已读通知的清理在 routes/console.php 中调度（model:prune）。
@@ -46,13 +43,9 @@ class MessageServiceProvider extends ServiceProvider
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
-        $enums->register([
-            'notification_level' => NotificationLevel::class,
-            'announcement_status' => AnnouncementStatus::class,
-            'announcement_target' => AnnouncementTarget::class,
-        ]);
+        $enums->register(require __DIR__.'/resources/enums.php');
 
-        Event::listen('eloquent.deleted: '.User::class, DeleteNotificationsOfDeletedUser::class);
+        Event::listen(UserDeleting::class, DeleteNotificationsOfUser::class);
         Event::listen(ExportFinished::class, NotifyExportFinished::class);
     }
 }

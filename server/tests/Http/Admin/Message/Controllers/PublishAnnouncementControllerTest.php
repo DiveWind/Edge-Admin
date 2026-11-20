@@ -4,8 +4,8 @@ use App\Core\Message\Actions\PublishAnnouncement;
 use App\Core\Message\Jobs\SendAnnouncement;
 use App\Core\Message\Models\{Announcement, Notification};
 use App\Core\System\Models\User;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\Bus;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -100,7 +100,7 @@ it('returns 422 when the announcement was published by someone else in the meant
     resolve(PublishAnnouncement::class)->handle($announcement, $actor);
 
     expect(fn () => resolve(PublishAnnouncement::class)->handle($stale, $actor))
-        ->toThrow(UnprocessableEntityHttpException::class, 'Only draft announcements can be published.');
+        ->toThrow(BusinessRuleViolation::class, 'Only draft announcements can be published.');
 
     Bus::assertDispatchedTimes(SendAnnouncement::class, 1);
 });

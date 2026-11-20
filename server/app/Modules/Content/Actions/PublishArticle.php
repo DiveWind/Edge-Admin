@@ -2,11 +2,12 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Models\User;
 use App\Modules\Content\Enums\ArticleStatus;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 发布文章（POST /content/articles/{article}/publish，设计文档 §6.11）：草稿 → 已发布，published_at 为当前时间。
@@ -16,12 +17,12 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class PublishArticle
 {
-    public function __construct(private readonly LogArticleActivity $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Article $article, User $actor): Article
     {
@@ -29,16 +30,16 @@ class PublishArticle
             $locked = Article::query()->lockForUpdate()->findOrFail($article->id);
 
             if (! $locked->isDraft()) {
-                throw new UnprocessableEntityHttpException(__('content::article.messages.publish_draft_only'));
+                throw new BusinessRuleViolation(__('content::article.messages.publish_draft_only'));
             }
 
-            $before = $this->log->snapshot($locked);
+            $before = $locked->auditSnapshot();
 
             $locked->status = ArticleStatus::Published;
             $locked->published_at = now();
             $locked->save();
 
-            $this->log->handle($actor, $locked, LogArticleActivity::PUBLISHED, $before);
+            $this->audit->handle($actor, $locked, 'published', $before);
 
             return $locked;
         });

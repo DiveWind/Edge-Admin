@@ -2,7 +2,7 @@
 
 use {{ moduleNamespace }}\Actions\ForceDelete{{ model }};
 use {{ namespacedModel }};
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,7 +62,7 @@ it('returns 422 when the {{ modelWords }} was restored meanwhile', function (): 
     {{ model }}::query()->withTrashed()->whereKey(${{ modelVariable }}->id)->update(['deleted_at' => null]);
 
     expect(fn () => resolve(ForceDelete{{ model }}::class)->handle($stale, superAdminActor()))
-        ->toThrow(UnprocessableEntityHttpException::class);
+        ->toThrow(BusinessRuleViolation::class);
 
     expect({{ model }}::query()->find(${{ modelVariable }}->id))->not->toBeNull();
 });

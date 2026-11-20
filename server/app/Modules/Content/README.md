@@ -9,7 +9,7 @@
 ## 职责
 
 - 文章（`Models/Article`，多态别名 `content.article`）：标题、摘要、正文（富文本）、分类（字典）、状态（草稿 / 已发布）、发布时间、封面（图片附件）、创建人；
-- 写操作（`Actions/`）：新增、修改、删除（软删除）、恢复、彻底删除、发布、取消发布；每个写操作在同一事务中写审计日志（`LogArticleActivity`）；
+- 写操作（`Actions/`）：新增、修改、删除（软删除）、恢复、彻底删除、发布、取消发布；每个写操作在同一事务中写审计日志（Monitor 的 `LogAudit`，文章实现 `Auditable` 提供快照）；
 - 授权（`Policies/ArticlePolicy`）：权限码 + 业务保护（只有草稿能发布等）+ 数据范围（按 `created_by`）；
 - 列表查询（`Queries/ArticleList`）与导出（`Exporters/ArticleExporter`）共用同一份白名单与数据范围。
 
@@ -19,12 +19,11 @@
 
 | 类 | 用途 |
 |---|---|
-| `Models/Article` | 文章：`COVER_COLLECTION`（封面的附件用途）、`CATEGORY_DICT`（分类的字典类型）、`cover()`、`creator()`、`isDraft()`、`isPublished()` |
+| `Models/Article` | 文章：`COVER_COLLECTION`（封面的附件用途）、`CATEGORY_DICT`（分类的字典类型）、`cover()`、`creator()`、`isDraft()`、`isPublished()`；实现 Monitor 的 `Auditable`：`auditSnapshot()`（审计的字段）、`auditDigestedFields()`（正文只记摘要） |
 | `Enums/ArticleStatus` | 状态 `draft` / `published`（`HasLabel`、`HasColor`，`/options/enums` 的 `content.article_status`） |
-| `Actions/CreateArticle`、`UpdateArticle` | 新增（草稿）、修改；封面用 `SyncAttachments` 绑定 |
+| `Actions/CreateArticle`、`UpdateArticle` | 新增（草稿）、修改；可写入的字段为 `#[Fillable]`；封面用 `SyncAttachments` 绑定（单个 id 或 null） |
 | `Actions/PublishArticle`、`UnpublishArticle` | 发布、取消发布（锁行复核状态，并发 422） |
 | `Actions/DeleteArticle`、`RestoreArticle`、`ForceDeleteArticle` | 软删除、恢复、彻底删除（软删除整套，§10.1） |
-| `Actions/LogArticleActivity` | 审计日志（日志名 `content`），由上面的 Action 在同一事务中调用 |
 | `Policies/ArticlePolicy` | 标准方法 + `publish`、`unpublish`、`viewTrashed` |
 | `Queries/ArticleList` | 列表查询（query-builder 白名单 + `visibleTo` + `trashed` 的授权） |
 | `Exporters/ArticleExporter` | 列表的导出（`content.article`，权限码 `content.article.export`） |
@@ -39,15 +38,16 @@
 
 | Core 的能力 | 本模块怎么用 |
 |---|---|
+| 业务规则异常（`BusinessRuleViolation`，§5.4） | 状态不允许（只有草稿能发布、并发时已被删除等）抛出它，后台入口映射为 422 |
 | 菜单与权限节点（`MenuRegistry`，§8.2） | `resources/menus.php`：目录 `content`、菜单 `content.article` 与按钮 `create`、`update`、`delete`、`publish`、`restore`、`force-delete`、`export` |
 | 权限判定（`Gate::before`、Policy，§8.1、§8.3） | `ArticlePolicy`（按 `\Models\` → `\Policies\` 自动发现），控制器 `#[Authorize]` |
 | 数据权限（`HasDataScope`，§8.4） | `Article` 使用它，归属列为默认的 `created_by`；列表、详情、写操作、导出都经过它 |
 | 字典（`DictRegistry`、`InDict`，§6.7） | `resources/dicts.php` 声明 `content.article_category` 与初始项；`category` 用 `InDict` 校验：只接受启用项，修改时文章当前的分类即使已停用也可原样提交（`allowing()`，保持原值不拦） |
-| 枚举选项（`EnumRegistry`，§6.7） | 登记 `content.article_status` |
+| 枚举选项（`EnumRegistry`，§6.7） | `resources/enums.php` 登记 `content.article_status` |
 | 富文本净化（`SanitizedHtml`，§9） | `content` 列的 cast（默认档位 `rich`） |
 | 附件（`HasAttachments`、`OwnedAttachment`、`SyncAttachments`，§6.8） | 封面：`cover` 用途的图片附件；归属校验、绑定、彻底删除时连同文件删除；访问权委托给 `ArticlePolicy::view` |
-| 异步导出（`Exporter`、`ExporterRegistry`、`CreateExport`，§6.10） | 登记 `content.article`；入口 `POST /content/articles/export` |
-| 审计日志（activitylog，§5.5、§6.6） | 日志名 `content`；`request_id` 由 Monitor 的 `Activity` 自动写入。审计与业务写入在**同一个事务**中，失败一起回滚；这与操作日志不同（操作日志在响应后写入、失败只 `report()`），审计记录的是数据变更本身，必须与数据一致 |
+| 异步导出（`Exporter`、`ExporterRegistry`、`CreateExport`，§6.10） | `resources/exporters.php` 登记 `content.article`；入口 `POST /content/articles/export` |
+| 审计日志（Monitor 的 `Auditable`、`LogAudit`，§5.5、§6.6） | 日志名 `content`（多态别名的模块段）；差异、大字段摘要、`description` 由 `LogAudit` 统一处理；`request_id` 由 Monitor 的 `Activity` 自动写入。审计与业务写入在**同一个事务**中，失败一起回滚；这与操作日志不同（操作日志在响应后写入、失败只 `report()`），审计记录的是数据变更本身，必须与数据一致 |
 | 多态别名（§4.5） | `content.article`（附件的 `attachable_type`、日志的 `subject_type`） |
 | 语言包（§4.5） | `resources/lang`，命名空间 `content::`（枚举显示名、提示文案、导出表头） |
 

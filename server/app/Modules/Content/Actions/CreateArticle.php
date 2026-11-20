@@ -2,6 +2,7 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Actions\SyncAttachments;
 use App\Core\System\Models\User;
 use App\Modules\Content\Enums\ArticleStatus;
@@ -14,60 +15,38 @@ use Illuminate\Validation\ValidationException;
  *
  * - content 在写入属性时净化（模型的 SanitizedHtml）；category 已由 InDict 校验（启用的字典项）；
  * - 封面（cover_id，已由 OwnedAttachment 校验归属与 MIME）：绑定到 `cover` 用途（SyncAttachments，加锁复核，422 挂在 cover_id）；
- * - 审计日志 `content.article.created`（LogArticleActivity，同一事务）。
+ * - 审计日志 `content.article.created`（Monitor 的 LogAudit，同一事务）。
  */
 class CreateArticle
 {
-    /**
-     * 可写入的字段（其余键忽略）。
-     *
-     * @var list<string>
-     */
-    public const array ATTRIBUTES = ['title', 'summary', 'content', 'category'];
-
     public function __construct(
         private readonly SyncAttachments $syncAttachments,
-        private readonly LogArticleActivity $log,
+        private readonly LogAudit $audit,
     ) {}
 
     /**
      * Execute the action.
      *
-     * @param  array<string, mixed>  $attributes  已校验的字段：ATTRIBUTES 与 cover_id（附件 id 或 null，可省略）
+     * @param  array<string, mixed>  $attributes  已校验的字段：Article 的 `#[Fillable]` 与 cover_id（附件 id 或 null，可省略），其余键忽略
      *
      * @throws ValidationException
      */
     public function handle(array $attributes, User $actor): Article
     {
         return DB::transaction(function () use ($attributes, $actor): Article {
-            $article = new Article(array_intersect_key($attributes, array_flip(self::ATTRIBUTES)));
+            $article = new Article;
+            $article->fill(array_intersect_key($attributes, array_flip($article->getFillable())));
             $article->status = ArticleStatus::Draft;
             $article->created_by = $actor->id;
             $article->save();
 
-            self::syncCover($this->syncAttachments, $article, $attributes);
+            if (array_key_exists('cover_id', $attributes)) {
+                $this->syncAttachments->handle($article, Article::COVER_COLLECTION, $attributes['cover_id'], 'cover_id');
+            }
 
-            $this->log->handle($actor, $article, LogArticleActivity::CREATED);
+            $this->audit->handle($actor, $article, 'created');
 
             return $article->refresh();
         });
-    }
-
-    /**
-     * 提交了 cover_id 时绑定封面（未提交表示不变；null 去掉封面；被替换、去掉的原封面连同文件删除）。
-     *
-     * @param  array<string, mixed>  $attributes
-     *
-     * @throws ValidationException
-     */
-    public static function syncCover(SyncAttachments $syncAttachments, Article $article, array $attributes): void
-    {
-        if (! array_key_exists('cover_id', $attributes)) {
-            return;
-        }
-
-        $cover = $attributes['cover_id'];
-
-        $syncAttachments->handle($article, Article::COVER_COLLECTION, is_int($cover) || is_string($cover) ? [$cover] : [], 'cover_id');
     }
 }

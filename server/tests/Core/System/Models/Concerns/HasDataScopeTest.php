@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
  */
 function registerTeamScope(): void
 {
-    resolve(DataScopeRegistry::class)->register(new class implements DataScopeProvider
+    resolve(DataScopeRegistry::class)->register([new class implements DataScopeProvider
     {
         public function key(): string
         {
@@ -38,7 +38,7 @@ function registerTeamScope(): void
         {
             return str_starts_with((string) $record->getAttribute('name'), 'Team ');
         }
-    });
+    }]);
 }
 
 /**

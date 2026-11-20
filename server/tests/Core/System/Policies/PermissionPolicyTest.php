@@ -2,7 +2,7 @@
 
 use App\Core\System\Models\Permission;
 use App\Core\System\Policies\PermissionPolicy;
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\EffectivePermissions;
 use Illuminate\Support\Facades\Gate;
 
 /*
@@ -30,7 +30,7 @@ dataset('abilities', [
 it('allows each ability only with its permission code', function (string $ability, bool $onRecord, string $code): void {
     // 其余全部权限码（不含这个码的子孙：授予子孙会补齐祖先）
     $others = array_filter(
-        resolve(PermissionRegistry::class)->registeredCodes(),
+        resolve(EffectivePermissions::class)->registeredCodes(),
         fn (string $other): bool => $other !== $code && ! str_starts_with($other, "{$code}.") && $other !== $this->node->name,
     );
     $arguments = $onRecord ? $this->node : Permission::class;

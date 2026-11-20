@@ -21,17 +21,21 @@
 | `Models/Notification` | 通知（继承框架的 `DatabaseNotification`，同一张表，多态别名 `notification`）：`ownedBy($user)` / `isOwnedBy($user)`、`about($record)`（按 `data->subject` 查找关于某条记录的通知）、`isRead()`；`MassPrunable`（已读且超过 `core.message.notifications.read_ttl` 天） |
 | `Policies/NotificationPolicy` | 只有本人能查看、标记已读、删除（不需要权限码，管理员也不能操作他人的通知） |
 | `Actions/MarkNotificationAsRead`、`MarkAllNotificationsAsRead`、`DeleteNotification` | 标记已读（幂等）、本人全部已读、删除 |
-| `Actions/DeleteUserNotifications`、`Listeners/DeleteNotificationsOfDeletedUser` | 用户被删除时删除他的通知（监听 `User` 的 `deleted` 模型事件） |
+| `Queries/NotificationList`、`Queries/UnreadNotificationCount` | 我的通知列表（只含本人的，筛选与排序白名单）、未读数 |
+| `Actions/DeleteUserNotifications`、`Listeners/DeleteNotificationsOfUser` | 用户被删除时删除他的通知（监听 System 的 Core 事件 `UserDeleting`，与删除在同一事务中） |
 | `Models/Announcement` | 公告（多态别名 `announcement`）：`content` 写入时净化（`App\Support\Eloquent\Casts\SanitizedHtml`）；`HasDataScope`（`created_by`）、`HasAttachments`（用途 `attachments`，`files()`）；`recipients()`（接收人）、`receivedBy($user)` / `isReceivedBy($user)`（是否发给了某人）、`excerpt()`（正文的纯文本摘要） |
 | `Enums/AnnouncementStatus`、`Enums/AnnouncementTarget` | 状态 `draft` / `published` / `revoked`（`HasColor`）；目标 `all` / `roles` |
-| `Actions/CreateAnnouncement`、`UpdateAnnouncement`、`DeleteAnnouncement` | 新增草稿、修改草稿、删除草稿或已撤回的公告；目标角色按 `target` 整体替换，附件经 `SyncAttachments` 绑定 |
+| `Actions/CreateAnnouncement`、`UpdateAnnouncement`、`DeleteAnnouncement` | 新增草稿、修改草稿、删除草稿或已撤回的公告；目标角色按 `target` 整体替换（`SyncAnnouncementRoles`），附件经 `SyncAttachments` 绑定 |
+| `Actions/SyncAnnouncementRoles` | 按 `target` 保存公告的目标角色（`roles` 时必须至少一个且都存在 → 否则 422），由新增、修改调用 |
+| `Queries/AnnouncementList`、`Queries/ReceivedAnnouncementList` | 公告管理的列表（`visibleTo`）、我收到的公告（`receivedBy`），筛选与排序白名单 |
 | `Actions/PublishAnnouncement` | 发布：锁行复核草稿 → `published` → 派发 `Jobs/SendAnnouncement`（事务提交后入队） |
 | `Jobs/SendAnnouncement`、`Jobs/SendAnnouncementChunk` | 分批发送：按 `core.message.announcements.batch_size` 个接收人一批派发 `Bus::batch`（`announcement:<id>`，`allowFailures()`）；每批锁住公告行复核仍已发布、重新筛选用户后 `sendNow()`，整批一个事务 |
 | `Notifications/AnnouncementPublished` | 公告的通知（类型 `message.announcement`，`subject` 为公告，`link` 为 `core.message.announcements.link`） |
 | `Actions/RevokeAnnouncement` | 撤回：锁行复核已发布 → `revoked`，同一事务中删除已发出的通知；撤回是终态 |
 | `Policies/AnnouncementPolicy` | 公告管理（`message.announcement.*`、状态规则、数据范围）与 `read`（我收到的公告：已发布且目标包含操作者） |
 
-- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；接口放在各受信任入口的同名目录：`app/Http/Admin/Message`。
+- 内部实现（不对外）：`Listeners/NotifyExportFinished`（监听 System 的 `ExportFinished`）与 `Notifications/ExportFinished`（导出完成的通知）。
+- 受信任的入口直接读取本模块的模型，写入调用 `Actions`；列表的查询调用 `Queries/<模型>List`；接口放在各受信任入口的同名目录：`app/Http/Admin/Message`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 
 ## 模块怎么接入通知中心（扩展点，设计文档 §5.5）

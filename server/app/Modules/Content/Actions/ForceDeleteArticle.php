@@ -2,10 +2,11 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Models\User;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 彻底删除已删除的文章（DELETE /content/articles/{article}/force-delete，设计文档 §6.11、§10.1）。
@@ -17,12 +18,12 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 class ForceDeleteArticle
 {
-    public function __construct(private readonly LogArticleActivity $log) {}
+    public function __construct(private readonly LogAudit $audit) {}
 
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      */
     public function handle(Article $article, User $actor): void
     {
@@ -30,14 +31,14 @@ class ForceDeleteArticle
             $locked = Article::query()->withTrashed()->lockForUpdate()->findOrFail($article->id);
 
             if (! $locked->trashed()) {
-                throw new UnprocessableEntityHttpException(__('content::article.messages.force_delete_trashed_only'));
+                throw new BusinessRuleViolation(__('content::article.messages.force_delete_trashed_only'));
             }
 
-            $before = $this->log->snapshot($locked);
+            $before = $locked->auditSnapshot();
 
             $locked->forceDelete();
 
-            $this->log->handle($actor, $locked, LogArticleActivity::FORCE_DELETED, $before);
+            $this->audit->handle($actor, $locked, 'force_deleted', $before);
         });
     }
 }

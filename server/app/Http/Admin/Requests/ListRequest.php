@@ -11,9 +11,10 @@ use Illuminate\Foundation\Http\FormRequest;
  * - 排序：`sort`，多个字段逗号分隔，降序加 `-`，如 `sort=-created_at,id`；
  * - 筛选：`filter[字段]`，如 `filter[status]=active`。
  *
- * 允许的排序、筛选字段由 spatie/laravel-query-builder 显式白名单控制；这里只校验参数格式。
- * 控制器：`ArticleResource::collection($query->paginate($request->pageSize()))`，响应由 FormatResponse 转为 `{ items, total }`。
- * 需要导出的列表（§6.10）把查询放在模块的 Query 类中，以 listParameters() 为参数，列表与导出共用同一份白名单与数据范围。
+ * 允许的排序、筛选字段由模块 Query 类（`<模型>List::builder($actor, $parameters)`，§5.4）中 spatie/laravel-query-builder 的显式白名单控制；
+ * 这里只校验参数格式（子类为每个筛选字段校验取值，与 Query 的白名单一致，tests/Arch 检查）。
+ * 控制器：`ArticleResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()))`，
+ * 响应由 FormatResponse 转为 `{ items, total }`；导出（§6.10）复用同一个 Query 类，列表与导出共用同一份白名单与数据范围。
  */
 class ListRequest extends FormRequest
 {

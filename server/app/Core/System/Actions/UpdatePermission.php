@@ -5,6 +5,8 @@ namespace App\Core\System\Actions;
 use App\Core\System\Data\MenuNodeData;
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, User};
+use App\Core\System\Services\PermissionHierarchy;
+use App\Support\Database\UniqueConstraint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,7 +24,9 @@ use Illuminate\Validation\ValidationException;
  * - 生效规则（§8.6）：非超管不能让任何当前不生效的节点（本身或某个祖先停用）变为生效——启用节点、把节点移出停用的祖先，
  *   都可能让仍保留在角色上的授权重新生效（停用不删授权），等于给自己恢复被收回的权限 → 422（启用挂 status，移动挂 parent_id）；
  *   超管不受限；
- * - 权限码、path 唯一 → 422（name / path，见 CreatePermission::save()）。
+ * - 权限码、path 唯一 → 422（name / path，UniqueConstraint，含并发冲突）。
+ *
+ * 树的遍历、防环与“节点及全部祖先都启用才生效”的判断在 PermissionHierarchy（与有效权限码同一份实现），这里只取数据、调规则、写入。
  *
  * 保存后 spatie 自动清除权限缓存，`/menu/all`、`/auth/codes` 随即按新数据计算。删除内置节点的 403 见 PermissionPolicy。
  */
@@ -31,14 +35,14 @@ class UpdatePermission
     /**
      * Execute the action.
      *
-     * @param  array<string, mixed>  $attributes  已校验的字段（CreatePermission::ATTRIBUTES；parent_id、status 未提交时保持不变）
+     * @param  array<string, mixed>  $attributes  已校验的字段（同新增；parent_id、status 未提交时保持不变）
      *
      * @throws ValidationException
      */
     public function handle(Permission $permission, array $attributes, User $actor): Permission
     {
         return DB::transaction(function () use ($permission, $attributes, $actor): Permission {
-            $permission->fill(CreatePermission::only($attributes));
+            $permission->fill(array_intersect_key($attributes, array_flip(array_diff($permission->getFillable(), ['guard_name']))));
 
             // 内置节点的结构性字段错误优先（同一字段上不再给出层级等次要提示）
             $errors = [...$this->checkTree($permission, $actor), ...($permission->is_builtin ? $this->protectBuiltin($permission) : [])];
@@ -47,7 +51,7 @@ class UpdatePermission
                 throw ValidationException::withMessages($errors);
             }
 
-            CreatePermission::save($permission);
+            UniqueConstraint::save($permission, ['name' => __('Permission code'), 'path' => __('Path')]);
 
             return $permission->refresh();
         });
@@ -88,55 +92,49 @@ class UpdatePermission
     }
 
     /**
-     * 树结构的规则：成环、类型层级、容纳现有子节点、生命线、生效规则。全部节点一次查出（节点数量有限）。
+     * 树结构的规则：成环、类型层级、容纳现有子节点、生命线、生效规则（遍历与“节点及全部祖先”的判断见 PermissionHierarchy）。
+     * 全部节点一次查出（节点数量有限）。
      *
      * @return array<string, list<string>>
      */
     private function checkTree(Permission $permission, User $actor): array
     {
-        $nodes = [];
-
-        foreach (Permission::query()->get(['id', 'parent_id', 'type', 'name', 'status']) as $node) {
-            $nodes[$node->id] = $node;
-        }
-
+        $before = PermissionHierarchy::from(Permission::query()->get(['id', 'parent_id', 'type', 'name', 'status']));
         $moved = $permission->isDirty('parent_id');
 
-        if ($moved && $permission->parent_id !== null && $this->isSelfOrDescendant($permission->parent_id, $permission->id, $nodes)) {
+        if ($moved && $permission->parent_id !== null && $before->isSelfOrDescendant($permission->parent_id, $permission->id)) {
             return ['parent_id' => [__('A node cannot be placed under itself or its descendants.')]];
         }
 
         $errors = [];
-        $parent = $permission->parent_id === null ? null : ($nodes[$permission->parent_id] ?? null);
+        $parent = $before->find($permission->parent_id);
 
         if (($moved || $permission->isDirty('type')) && ! $permission->type->canBeChildOf($parent?->type)) {
-            $errors[$moved ? 'parent_id' : 'type'] = [CreatePermission::hierarchyMessage($permission->type)];
+            $errors[$moved ? 'parent_id' : 'type'] = [$permission->type->hierarchyMessage()];
         }
 
-        if ($permission->isDirty('type') && array_any($nodes, fn (Permission $node): bool => $node->parent_id === $permission->id && ! $permission->type->canContain($node->type))) {
+        if ($permission->isDirty('type') && array_any($before->nodes(), fn (Permission $node): bool => $node->parent_id === $permission->id && ! $permission->type->canContain($node->type))) {
             $errors['type'] = [__('The new type cannot contain the existing child nodes.')];
         }
 
-        return [...$errors, ...$this->protectLifeline($permission, $nodes), ...($actor->isSuperAdmin() ? [] : $this->protectActivation($permission, $nodes))];
+        if (! $permission->isDirty(['status', 'parent_id'])) {
+            return $errors;
+        }
+
+        $after = $before->with($permission);
+
+        return [...$errors, ...$this->protectLifeline($permission, $before, $after), ...($actor->isSuperAdmin() ? [] : $this->protectActivation($permission, $before, $after))];
     }
 
     /**
      * 非超管不能让当前不生效的节点（本身或某个祖先停用）变为生效（§8.6）：比较修改前后每个节点的生效状态。
      *
-     * @param  array<int, Permission>  $nodes  修改前的全部节点
      * @return array<string, list<string>>
      */
-    private function protectActivation(Permission $permission, array $nodes): array
+    private function protectActivation(Permission $permission, PermissionHierarchy $before, PermissionHierarchy $after): array
     {
-        if (! $permission->isDirty(['status', 'parent_id'])) {
-            return [];
-        }
-
-        $after = $nodes;
-        $after[$permission->id] = $permission;
-
-        foreach (array_keys($nodes) as $id) {
-            if ($this->isBroken($this->chain($id, $nodes)) && ! $this->isBroken($this->chain($id, $after))) {
+        foreach (array_keys($before->nodes()) as $id) {
+            if (! $before->isEffective($id) && $after->isEffective($id)) {
                 $field = $permission->isDirty('status') && $permission->isEnabled() ? 'status' : 'parent_id';
 
                 return [$field => [__('Only super admins can make disabled menu nodes take effect again.')]];
@@ -147,83 +145,22 @@ class UpdatePermission
     }
 
     /**
-     * $id 是否为 $ancestorId 本身或其子孙（沿上级向上查找，遇到成环的脏数据时停下）。
+     * 生命线节点及其全部祖先在修改后必须仍然生效；只拦截由本次修改造成的失效。
      *
-     * @param  array<int, Permission>  $nodes
-     */
-    private function isSelfOrDescendant(int $id, int $ancestorId, array $nodes): bool
-    {
-        $visited = [];
-
-        for ($current = $id; $current !== null && ! isset($visited[$current]); $current = $nodes[$current]->parent_id ?? null) {
-            if ($current === $ancestorId) {
-                return true;
-            }
-
-            $visited[$current] = true;
-        }
-
-        return false;
-    }
-
-    /**
-     * 生命线节点及其全部祖先在修改后必须仍然启用；只拦截由本次修改造成的失效。
-     *
-     * @param  array<int, Permission>  $nodes  修改前的全部节点
      * @return array<string, list<string>>
      */
-    private function protectLifeline(Permission $permission, array $nodes): array
+    private function protectLifeline(Permission $permission, PermissionHierarchy $before, PermissionHierarchy $after): array
     {
-        if (! $permission->isDirty(['status', 'parent_id'])) {
-            return [];
-        }
-
-        $after = $nodes;
-        $after[$permission->id] = $permission;
-
-        foreach ($nodes as $node) {
-            if (! in_array($node->name, Permission::LIFELINE_NAMES, true)) {
+        foreach ($before->nodes() as $node) {
+            if (! in_array($node->name, Permission::LIFELINE_NAMES, true) || $after->isEffective($node->id) || ! $before->isEffective($node->id)) {
                 continue;
             }
 
-            $chain = $this->chain($node->id, $after);
-
-            if (! $this->isBroken($chain) || $this->isBroken($this->chain($node->id, $nodes))) {
-                continue;
-            }
-
-            return $permission->isDirty('status') && $permission->status === Status::Disabled && in_array($permission->id, array_keys($chain), true)
+            return $permission->isDirty('status') && $permission->status === Status::Disabled && isset($after->chain($node->id)[$permission->id])
                 ? ['status' => [__('The menu management nodes and their ancestors cannot be disabled.')]]
                 : ['parent_id' => [__('The menu management nodes cannot be moved under a disabled node.')]];
         }
 
         return [];
-    }
-
-    /**
-     * 节点及其全部祖先（id => 节点），遇到成环的脏数据时停下。
-     *
-     * @param  array<int, Permission>  $nodes
-     * @return array<int, Permission>
-     */
-    private function chain(int $id, array $nodes): array
-    {
-        $chain = [];
-
-        for ($current = $nodes[$id] ?? null; $current !== null && ! isset($chain[$current->id]); $current = $current->parent_id === null ? null : ($nodes[$current->parent_id] ?? null)) {
-            $chain[$current->id] = $current;
-        }
-
-        return $chain;
-    }
-
-    /**
-     * 链上是否有停用的节点。
-     *
-     * @param  array<int, Permission>  $chain
-     */
-    private function isBroken(array $chain): bool
-    {
-        return array_any($chain, fn (Permission $node): bool => ! $node->isEnabled());
     }
 }

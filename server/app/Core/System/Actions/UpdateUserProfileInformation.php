@@ -4,6 +4,7 @@ namespace App\Core\System\Actions;
 
 use App\Core\System\Models\{Attachment, User};
 use App\Core\System\Rules\OwnedAttachment;
+use App\Support\Database\UniqueConstraint;
 use Illuminate\Support\Facades\{DB, Validator};
 use Illuminate\Validation\{Rule, ValidationException};
 use Laravel\Fortify\Contracts\UpdatesUserProfileInformation;
@@ -60,11 +61,10 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
             }
 
             // 邮箱唯一：表单已校验，并发写入撞上唯一索引时同样返回 422（email），而不是 500
-            CreateUser::save($user);
+            UniqueConstraint::save($user, ['email' => __('Email')]);
 
             if (array_key_exists('avatar_id', $attributes)) {
-                $avatar = $attributes['avatar_id'];
-                $this->syncAttachments->handle($user, User::AVATAR_COLLECTION, $avatar === null ? [] : [$avatar], 'avatar_id');
+                $this->syncAttachments->handle($user, User::AVATAR_COLLECTION, $attributes['avatar_id'], 'avatar_id');
             }
 
             return $emailChanged;

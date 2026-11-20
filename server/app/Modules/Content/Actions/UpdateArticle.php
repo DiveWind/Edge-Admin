@@ -2,6 +2,7 @@
 
 namespace App\Modules\Content\Actions;
 
+use App\Core\Monitor\Actions\LogAudit;
 use App\Core\System\Actions\SyncAttachments;
 use App\Core\System\Models\User;
 use App\Modules\Content\Models\Article;
@@ -13,13 +14,13 @@ use Illuminate\Validation\ValidationException;
  *
  * - 字段同 CreateArticle；未提交 cover_id 表示封面不变，null 去掉封面，另一个附件即替换（原封面连同文件删除）；
  * - 在事务中锁行后写入（文章在请求期间被删除 → 404）；
- * - 审计日志 `content.article.updated`：只记变化了的字段，没有变化时不写（LogArticleActivity）。
+ * - 审计日志 `content.article.updated`：只记变化了的字段，没有变化时不写（Monitor 的 LogAudit）。
  */
 class UpdateArticle
 {
     public function __construct(
         private readonly SyncAttachments $syncAttachments,
-        private readonly LogArticleActivity $log,
+        private readonly LogAudit $audit,
     ) {}
 
     /**
@@ -33,14 +34,16 @@ class UpdateArticle
     {
         return DB::transaction(function () use ($article, $attributes, $actor): Article {
             $locked = Article::query()->lockForUpdate()->findOrFail($article->id);
-            $before = $this->log->snapshot($locked);
+            $before = $locked->auditSnapshot();
 
-            $locked->fill(array_intersect_key($attributes, array_flip(CreateArticle::ATTRIBUTES)));
+            $locked->fill(array_intersect_key($attributes, array_flip($locked->getFillable())));
             $locked->save();
 
-            CreateArticle::syncCover($this->syncAttachments, $locked, $attributes);
+            if (array_key_exists('cover_id', $attributes)) {
+                $this->syncAttachments->handle($locked, Article::COVER_COLLECTION, $attributes['cover_id'], 'cover_id');
+            }
 
-            $this->log->handle($actor, $locked, LogArticleActivity::UPDATED, $before);
+            $this->audit->handle($actor, $locked, 'updated', $before);
 
             return $locked->refresh();
         });

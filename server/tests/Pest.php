@@ -1,9 +1,8 @@
 <?php
 
 use App\Core\System\Actions\SyncPermissions;
-use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\{PermissionRegistry, SettingRegistryService};
+use App\Core\System\Services\{EffectivePermissions, SettingRegistry};
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -66,7 +65,7 @@ function userWithPermissions(string ...$codes): User
 function userWithDataScope(string $scope, string ...$codes): User
 {
     $role = Role::factory()->create(['data_scope' => $scope]);
-    $role->givePermissionTo(resolve(PermissionRegistry::class)->withAncestors($codes));
+    $role->givePermissionTo(resolve(EffectivePermissions::class)->withAncestors($codes));
 
     return User::factory()->create()->assignRole($role);
 }
@@ -132,9 +131,9 @@ function coreTreeNames(mixed $names, array $own = []): array
  *
  * @param  array<string, mixed>  $groups
  */
-function declareSettings(array $groups): SettingRegistryService
+function declareSettings(array $groups): SettingRegistry
 {
-    $registry = new SettingRegistryService;
+    $registry = new SettingRegistry;
     $registry->register($groups);
     app()->instance(SettingRegistry::class, $registry);
 

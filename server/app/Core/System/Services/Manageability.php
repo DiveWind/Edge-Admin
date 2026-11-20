@@ -4,6 +4,7 @@ namespace App\Core\System\Services;
 
 use App\Core\System\Models\{Role, User};
 use Illuminate\Container\Attributes\Scoped;
+use Illuminate\Validation\ValidationException;
 
 /**
  * “管得到”的统一判定（设计文档 §8.5）：非超管只能管理权限码与数据范围都不超过自己的角色和用户。
@@ -16,15 +17,15 @@ use Illuminate\Container\Attributes\Scoped;
  *
  * 使用方：RolePolicy（update、delete、changeStatus）、UserPolicy（update、delete、changeStatus、resetPassword）、
  * SessionPolicy、PersonalAccessTokenPolicy（强制下线）返回 403；SyncRolePermissions（可授予的权限码）、
- * SyncUserRoles（分配、移除角色）、CreateRole::ensureGrantableDataScope()（可授予的数据范围）返回 422。
+ * SyncUserRoles（分配、移除角色）、CreateRole / UpdateRole（可授予的数据范围，ensureGrantableDataScope()）返回 422。
  *
- * 纯判定，不写入任何数据；`#[Scoped]`：依赖每个请求（队列任务）一个实例的 PermissionRegistry，常驻内存下不跨请求保存数据（§10.3）。
+ * 纯判定，不写入任何数据（ensureGrantableDataScope() 只是把判定结果转为 422）；`#[Scoped]`：依赖每个请求（队列任务）一个实例的 EffectivePermissions，常驻内存下不跨请求保存数据（§10.3）。
  */
 #[Scoped]
 class Manageability
 {
     public function __construct(
-        private readonly PermissionRegistry $permissions,
+        private readonly EffectivePermissions $permissions,
         private readonly DataScopeRegistry $scopes,
     ) {}
 
@@ -44,6 +45,23 @@ class Manageability
     public function canGrantDataScope(User $actor, string $key): bool
     {
         return $this->scopes->canGrant($actor, $key);
+    }
+
+    /**
+     * 数据范围防提权（§8.5）：$role 的 data_scope 被提交（改动）时，它必须在操作者可授予的范围内，否则 → 422（data_scope）。
+     * 未提交或保持原值时不检查，与权限码“管不到的保持不变”同一思路。由 CreateRole、UpdateRole 在保存前调用。
+     *
+     * @throws ValidationException
+     */
+    public function ensureGrantableDataScope(Role $role, User $actor): void
+    {
+        if (! $role->isDirty('data_scope') || $this->canGrantDataScope($actor, $role->data_scope)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'data_scope' => [__('You cannot grant a data scope you do not have.')],
+        ]);
     }
 
     /**

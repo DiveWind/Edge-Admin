@@ -2,7 +2,7 @@
 
 use App\Core\Monitor\Models\Activity;
 use App\Core\System\Models\{Attachment, User};
-use App\Modules\Content\Actions\{CreateArticle, DeleteArticle, ForceDeleteArticle, LogArticleActivity, PublishArticle, RestoreArticle, UnpublishArticle, UpdateArticle};
+use App\Modules\Content\Actions\{CreateArticle, DeleteArticle, ForceDeleteArticle, PublishArticle, RestoreArticle, UnpublishArticle, UpdateArticle};
 use App\Modules\Content\Models\Article;
 use Illuminate\Support\Facades\{DB, Storage};
 
@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\{DB, Storage};
 | 文章的审计日志（日志名 content，设计文档 §5.5、§6.11）
 |--------------------------------------------------------------------------
 |
-| 每个写操作的 Action 在同一事务中调用 LogArticleActivity：event / description 为稳定的标识，字段变化用 old / attributes，
-| 大字段 content 只记 { sha256, length }。
+| 每个写操作的 Action 在同一事务中调用 Monitor 的 LogAudit（文章实现 Auditable 提供快照）：event / description 为稳定的标识，
+| 字段变化用 old / attributes，大字段 content 只记 { sha256, length }。
 |
 */
 
@@ -25,7 +25,7 @@ beforeEach(function (): void {
  */
 function lastArticleActivity(): Activity
 {
-    return Activity::query()->where('log_name', LogArticleActivity::LOG_NAME)->latest('id')->firstOrFail();
+    return Activity::query()->where('log_name', 'content')->latest('id')->firstOrFail();
 }
 
 /**

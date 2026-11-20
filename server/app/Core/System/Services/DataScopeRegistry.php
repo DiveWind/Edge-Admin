@@ -11,7 +11,14 @@ use NoDiscard;
 /**
  * 已登记的数据范围提供者（设计文档 §8.4）：单例，只保存启动时注册的提供者（无状态的声明），不保存请求数据（§10.3）。
  *
- * SystemServiceProvider 注册 Core 默认的 `all`、`self`；业务模块在自己 Provider 的 boot() 中注册新的范围。
+ * SystemServiceProvider 注册 Core 默认的 `all`、`self`；业务模块在自己 Provider 的 boot() 中注册新的范围：
+ *
+ * ```php
+ * public function boot(DataScopeRegistry $scopes): void
+ * {
+ *     $scopes->register(require __DIR__.'/resources/data-scopes.php');   // [DepartmentDataScope::class, …]
+ * }
+ * ```
  * 角色的 data_scope 只能是已登记的 key（角色表单校验）；库中残留的未登记 key 在判定时按“拒绝”处理（HasDataScope）。
  *
  * 数据范围的防提权（§8.5）：grantableKeysFor() 是操作者“可授予的数据范围”，角色管理（CreateRole、UpdateRole）、
@@ -38,13 +45,26 @@ class DataScopeRegistry
     private array $providers = [];
 
     /**
-     * 登记提供者。key 为空、不是小写标识或与已登记的重复时抛出异常：这是开发期错误。
+     * 登记提供者：提供者类（由容器解析）或实例的列表，key 由提供者给出。不是列表、类没有实现 DataScopeProvider、
+     * key 不是小写标识或与已登记的重复时抛出异常：这是开发期错误。
+     *
+     * @param  mixed  $providers  list<class-string<DataScopeProvider>|DataScopeProvider>
      *
      * @throws InvalidArgumentException
      */
-    public function register(DataScopeProvider ...$providers): void
+    public function register(mixed $providers): void
     {
+        if (! is_array($providers) || ! array_is_list($providers)) {
+            throw new InvalidArgumentException('数据范围的声明必须是提供者类的列表。');
+        }
+
         foreach ($providers as $provider) {
+            $provider = is_string($provider) && is_subclass_of($provider, DataScopeProvider::class) ? resolve($provider) : $provider;
+
+            if (! $provider instanceof DataScopeProvider) {
+                throw new InvalidArgumentException('数据范围 ['.get_debug_type($provider).'] 必须实现 '.DataScopeProvider::class.'。');
+            }
+
             $key = $provider->key();
 
             if (preg_match('/^[a-z0-9_-]{1,64}$/', $key) !== 1) {

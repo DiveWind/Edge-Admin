@@ -3,7 +3,7 @@
 use App\Core\Message\Actions\RevokeAnnouncement;
 use App\Core\Message\Models\{Announcement, Notification};
 use App\Core\System\Models\User;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Tests\Core\Message\Fixtures\DemoNotification;
 
 /*
@@ -86,5 +86,5 @@ it('returns 422 when the announcement was revoked by someone else in the meantim
     resolve(RevokeAnnouncement::class)->handle($announcement);
 
     expect(fn () => resolve(RevokeAnnouncement::class)->handle($stale))
-        ->toThrow(UnprocessableEntityHttpException::class, 'Only published announcements can be revoked.');
+        ->toThrow(BusinessRuleViolation::class, 'Only published announcements can be revoked.');
 });

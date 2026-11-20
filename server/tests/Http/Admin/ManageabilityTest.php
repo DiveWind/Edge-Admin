@@ -3,7 +3,7 @@
 use App\Core\Monitor\Models\Session;
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, Role, User};
-use App\Core\System\Services\PermissionRegistry;
+use App\Core\System\Services\EffectivePermissions;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -34,7 +34,7 @@ beforeEach(function (): void {
 function manageabilityRole(array $attributes, string ...$codes): Role
 {
     $role = Role::factory()->create($attributes);
-    $role->givePermissionTo(resolve(PermissionRegistry::class)->withAncestors($codes));
+    $role->givePermissionTo(resolve(EffectivePermissions::class)->withAncestors($codes));
 
     return $role;
 }

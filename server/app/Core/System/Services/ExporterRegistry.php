@@ -14,7 +14,7 @@ use InvalidArgumentException;
  * ```php
  * public function boot(ExporterRegistry $exporters): void
  * {
- *     $exporters->register(['content.article' => ArticleExporter::class]);
+ *     $exporters->register(require __DIR__.'/resources/exporters.php');   // ['content.article' => ArticleExporter::class]
  * }
  * ```
  *
@@ -39,12 +39,16 @@ class ExporterRegistry
     /**
      * 登记导出类。名称不合法或重复、类没有实现 Exporter 时抛出异常：这是开发期错误。
      *
-     * @param  array<string, class-string>  $exporters  对外名称 => 导出类
+     * @param  mixed  $exporters  array<string, class-string>：对外名称 => 导出类
      *
      * @throws InvalidArgumentException
      */
-    public function register(array $exporters): void
+    public function register(mixed $exporters): void
     {
+        if (! is_array($exporters)) {
+            throw new InvalidArgumentException('导出的声明必须是“对外名称 => 类”的数组。');
+        }
+
         $declared = [];
 
         foreach ($exporters as $name => $exporter) {
@@ -58,8 +62,8 @@ class ExporterRegistry
                 throw new InvalidArgumentException("导出的对外名称“{$name}”重复登记。");
             }
 
-            if (! is_subclass_of($exporter, Exporter::class)) {
-                throw new InvalidArgumentException("导出 {$name} 的类 [{$exporter}] 必须实现 ".Exporter::class.'。');
+            if (! is_string($exporter) || ! is_subclass_of($exporter, Exporter::class)) {
+                throw new InvalidArgumentException("导出 {$name} 的类 [".(is_string($exporter) ? $exporter : get_debug_type($exporter)).'] 必须实现 '.Exporter::class.'。');
             }
 
             $declared[$name] = $exporter;

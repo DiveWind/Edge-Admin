@@ -2,7 +2,7 @@
 
 namespace App\Http\Admin\Message\Controllers;
 
-use App\Core\Message\Models\Notification;
+use App\Core\Message\Queries\UnreadNotificationCount;
 use App\Core\System\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
 
@@ -17,8 +17,8 @@ class UnreadNotificationCountController
      *
      * @return array{count: int}
      */
-    public function __invoke(#[CurrentUser] User $actor): array
+    public function __invoke(UnreadNotificationCount $count, #[CurrentUser] User $actor): array
     {
-        return ['count' => Notification::query()->ownedBy($actor)->whereNull('read_at')->count()];
+        return ['count' => $count->get($actor)];
     }
 }

@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
  * 启用 / 停用角色（PUT /system/roles/{role}/status，设计文档 §6.5、§8.6）。
  *
  * - super-admin 角色不能停用 → 422（status）；
- * - 停用的角色，其权限与数据范围立即不生效（PermissionRegistry、HasDataScope 只看启用角色；spatie 随保存清除权限缓存）。
+ * - 停用的角色，其权限与数据范围立即不生效（EffectivePermissions、HasDataScope 只看启用角色；spatie 随保存清除权限缓存）。
  */
 class ChangeRoleStatus
 {

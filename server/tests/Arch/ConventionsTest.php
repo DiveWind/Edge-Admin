@@ -1,8 +1,9 @@
 <?php
 
 use App\Core\Message\Notifications\InboxNotification;
-use App\Core\System\Contracts\HasLabel;
+use App\Core\System\Contracts\{Exporter, HasLabel};
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
+use Illuminate\Container\Attributes\{Scoped, Singleton};
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ require_once __DIR__.'/helpers.php';
 | - laravel：它按默认目录（App\Models、App\Http\Requests、App\Providers……）检查，与设计文档 §4.2 的目录冲突，
 |   因此排除 Core、业务模块与各入口的命名空间，只检查仍按默认目录组织的部分（App\Providers、App\Http\Middleware、App\Support）；
 |   被排除部分的等价规则见下方“目录约定”，调试函数与 env() 的禁用见“常驻内存兼容”（扫描全部文件）。
+|   领域层的业务异常放在 App\Support\Exceptions（Core、Modules 都要用，不属于 App\Exceptions 的应用级异常处理），也排除。
 | - strict（要求 final 类与 declare(strict_types=1)）、relaxed（禁止 private 方法）与 Laravel 的写法冲突，不使用。
 |
 */
@@ -32,7 +34,7 @@ arch('安全预设')->preset()->security();
 arch('Laravel 预设（默认目录部分）')
     ->preset()
     ->laravel()
-    ->ignoring([...archModules(), ...array_map(fn (string $entry): string => "App\\Http\\{$entry}", archEntries())]);
+    ->ignoring([...archModules(), ...array_map(fn (string $entry): string => "App\\Http\\{$entry}", archEntries()), 'App\\Support\\Exceptions']);
 
 /*
 |--------------------------------------------------------------------------
@@ -139,6 +141,52 @@ if (($actions = archNamespaces('Core/*/Actions', 'Modules/*/Actions')) !== []) {
         ->not->toUse(['App\Http', Request::class, FormRequest::class]);
 }
 
+test('Action 只暴露 handle()：没有其他公开方法、公开静态方法与公开常量（设计文档 §5.4 的 Action 边界）', function (): void {
+    $violations = [];
+
+    foreach (archClasses() as $class) {
+        if (preg_match('/^App\\\\(Core|Modules)\\\\[^\\\\]+\\\\Actions\\\\[^\\\\]+$/', $class) !== 1 || ! class_exists($class)) {
+            continue;
+        }
+
+        $reflection = new ReflectionClass($class);
+
+        // 实现框架契约所需的方法（如 Fortify 的 UpdatesUserPasswords::update()）不算：它们是调用方约定的入口，内部转给 handle()
+        // （Fortify 的契约只用 @method 声明方法）
+        $contractMethods = [];
+
+        foreach ($reflection->getInterfaces() as $interface) {
+            $contractMethods = [...$contractMethods, ...array_map(fn (ReflectionMethod $method): string => $method->getName(), $interface->getMethods())];
+
+            if (preg_match_all('/@method\s+(?:static\s+)?\S+\s+(\w+)\(/', (string) $interface->getDocComment(), $matches) > 0) {
+                $contractMethods = [...$contractMethods, ...$matches[1]];
+            }
+        }
+
+        foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            $name = $method->getName();
+
+            if ($method->getDeclaringClass()->getName() !== $class || in_array($name, ['handle', '__construct'], true)) {
+                continue;
+            }
+
+            if ($method->isStatic()) {
+                $violations[] = "{$class}::{$name}() 是公开静态方法";
+            } elseif (! in_array($name, $contractMethods, true)) {
+                $violations[] = "{$class}::{$name}() 是 handle() 以外的公开方法";
+            }
+        }
+
+        foreach ($reflection->getReflectionConstants(ReflectionClassConstant::IS_PUBLIC) as $constant) {
+            if ($constant->getDeclaringClass()->getName() === $class) {
+                $violations[] = "{$class}::{$constant->getName()} 是公开常量";
+            }
+        }
+    }
+
+    expect($violations)->toBe([], '共享的字段白名单、判断、查询与技术性重复不挂在 Action 上：按 §5.4 放到模型、枚举、Service、Rule、Query 或 Support；常量需要共享时放模型或枚举，否则改为 private');
+});
+
 if (($policies = archNamespaces('Core/*/Policies', 'Modules/*/Policies')) !== []) {
     arch('Policy 以 Policy 结尾')
         ->expect($policies)
@@ -152,6 +200,54 @@ if (($enums = archNamespaces('Core/*/Enums', 'Modules/*/Enums')) !== []) {
         ->toBeEnums()
         ->toImplement(HasLabel::class);
 }
+
+if (($data = archNamespaces('Core/*/Data', 'Modules/*/Data')) !== []) {
+    arch('Data 目录中都是只读类（readonly，修改用 clone with，设计文档 §4.3、§10.2）')
+        ->expect($data)
+        ->classes()
+        ->toBeReadonly()
+        ->toHaveSuffix('Data');
+}
+
+if (($exporters = archNamespaces('Core/*/Exporters', 'Modules/*/Exporters')) !== []) {
+    arch('Exporters 目录中都是实现 Exporter 的导出类（设计文档 §6.10）')
+        ->expect($exporters)
+        ->classes()
+        ->toImplement(Exporter::class)
+        ->toHaveSuffix('Exporter');
+}
+
+test('注册表都是 #[Singleton] 的具体类，单例不注入 #[Scoped] 的请求级服务（设计文档 §5.5、§10.3）', function (): void {
+    $violations = [];
+
+    foreach (archClasses() as $class) {
+        if (! class_exists($class) || ! str_starts_with($class, 'App\\')) {
+            continue;
+        }
+
+        $reflection = new ReflectionClass($class);
+        $singleton = $reflection->getAttributes(Singleton::class) !== [];
+
+        if (str_ends_with($class, 'Registry') && str_contains($class, '\\Services\\') && ! $singleton) {
+            $violations[] = "{$class} 是注册表，应为 #[Singleton] 的具体类";
+        }
+
+        if (! $singleton) {
+            continue;
+        }
+
+        foreach ($reflection->getConstructor()?->getParameters() ?? [] as $parameter) {
+            $type = $parameter->getType();
+            $dependency = $type instanceof ReflectionNamedType ? $type->getName() : null;
+
+            if ($dependency !== null && class_exists($dependency) && new ReflectionClass($dependency)->getAttributes(Scoped::class) !== []) {
+                $violations[] = "单例 {$class} 注入了 #[Scoped] 的 {$dependency}（常驻内存下会跨请求保存数据）";
+            }
+        }
+    }
+
+    expect($violations)->toBe([]);
+});
 
 if (($contracts = archNamespaces('Core/*/Contracts', 'Modules/*/Contracts')) !== []) {
     arch('Contracts 目录中都是接口')
@@ -251,4 +347,52 @@ test('env() 只在 config/ 中使用（配置缓存后 env() 返回 null，代�
     }
 
     expect($violations)->toBe([]);
+});
+
+test('列表的筛选字段只有一份：列表请求校验的 filter.* 与 Query 的 query-builder 白名单一致（设计文档 §5.4）', function (): void {
+    $mismatches = [];
+    $checked = 0;
+
+    foreach (archClasses() as $query) {
+        if (preg_match('/^App\\\\(?:Core|Modules)\\\\(?<module>[^\\\\]+)\\\\Queries\\\\(?<name>[^\\\\]+)List$/', $query, $match) !== 1) {
+            continue;
+        }
+
+        $requests = array_values(array_filter(
+            array_map(fn (string $entry): string => "App\\Http\\{$entry}\\{$match['module']}\\Requests\\{$match['name']}IndexRequest", archEntries()),
+            class_exists(...),
+        ));
+
+        if ($requests === []) {
+            $mismatches[] = "{$query} 没有对应的列表请求 {$match['name']}IndexRequest";
+
+            continue;
+        }
+
+        // 按 builder() 的参数类型构造未保存的模型（只构造查询，不执行）
+        $arguments = array_map(function (ReflectionParameter $parameter): mixed {
+            $type = $parameter->getType();
+            $class = $type instanceof ReflectionNamedType ? $type->getName() : null;
+
+            return $class === 'array' ? [] : ($class !== null && class_exists($class) ? new $class : null);
+        }, new ReflectionMethod($query, 'builder')->getParameters());
+
+        $builder = resolve($query)->builder(...$arguments);
+        $allowed = new ReflectionProperty($builder, 'allowedFilters')->getValue($builder);
+        $allowed = collect($allowed)->map(fn (object $filter): string => method_exists($filter, 'getName') ? (string) $filter->getName() : '')->sort()->values()->all();
+
+        foreach ($requests as $request) {
+            $rules = array_keys(new $request()->rules());
+            $validated = collect($rules)->filter(fn (string $key): bool => str_starts_with($key, 'filter.'))->map(fn (string $key): string => substr($key, 7))->sort()->values()->all();
+
+            if ($validated !== $allowed) {
+                $mismatches[] = "{$request} 校验的筛选 [".implode(', ', $validated)."] 与 {$query} 的白名单 [".implode(', ', $allowed).'] 不一致';
+            }
+        }
+
+        $checked++;
+    }
+
+    expect($mismatches)->toBe([], '每个可筛选的字段：Query 中登记（白名单），列表请求中校验取值；两边要同时加减')
+        ->and($checked)->toBeGreaterThan(0);
 });

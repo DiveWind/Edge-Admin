@@ -1,11 +1,12 @@
 <?php
 
 use App\Core\System\Models\User;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\{Log, Route};
 
 /*
 |--------------------------------------------------------------------------
@@ -72,6 +73,8 @@ describe('exceptions', function (): void {
             Route::get('csrf', fn (): never => throw new TokenMismatchException('CSRF token mismatch.'));
             Route::post('validate', fn (Request $request) => $request->validate(['name' => ['required', 'string'], 'email' => ['required', 'email']]));
             Route::get('boom', fn (): never => throw new RuntimeException('Secret database password'));
+            Route::post('business-rule', fn (): never => throw new BusinessRuleViolation('Only drafts can be published.'));
+            Route::post('business-rule-field', fn (): never => throw new BusinessRuleViolation('The code is taken.', 'code'));
             Route::get('http-response', fn (): never => throw new HttpResponseException(response()->json(['message' => 'Custom', 'reason' => 'locked'], 423)));
         });
     });
@@ -134,6 +137,20 @@ describe('exceptions', function (): void {
                 'message' => 'The email field must be a valid email address.',
                 'errors' => ['email' => ['The email field must be a valid email address.']],
             ]);
+    });
+
+    it('maps business rule violations from the domain to 422, with the field when given', function (): void {
+        Log::spy();
+
+        $this->postJson('/api/admin/_test/business-rule')
+            ->assertUnprocessable()
+            ->assertExactJson(['code' => 422, 'data' => null, 'message' => 'Only drafts can be published.']);
+
+        $this->postJson('/api/admin/_test/business-rule-field')
+            ->assertUnprocessable()
+            ->assertExactJson(['code' => 422, 'data' => null, 'message' => 'The code is taken.', 'errors' => ['code' => ['The code is taken.']]]);
+
+        Log::shouldNotHaveReceived('error');
     });
 
     it('keeps the message of HTTP exceptions other than 404 and 405', function (): void {

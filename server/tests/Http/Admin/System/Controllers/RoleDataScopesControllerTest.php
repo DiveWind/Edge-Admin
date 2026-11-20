@@ -8,7 +8,7 @@ use App\Core\System\Services\{DataScopeRegistry, SelfDataScope};
  */
 function registerDepartmentScope(): void
 {
-    resolve(DataScopeRegistry::class)->register(new class extends SelfDataScope
+    resolve(DataScopeRegistry::class)->register([new class extends SelfDataScope
     {
         public function key(): string
         {
@@ -19,7 +19,7 @@ function registerDepartmentScope(): void
         {
             return 'Department';
         }
-    });
+    }]);
 }
 
 /*

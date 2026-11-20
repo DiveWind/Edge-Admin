@@ -3,8 +3,8 @@
 use App\Core\System\Models\User;
 use App\Modules\Content\Actions\DeleteArticle;
 use App\Modules\Content\Models\Article;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -18,7 +18,7 @@ it('returns 422 when the article was deleted by someone else meanwhile', functio
     resolve(DeleteArticle::class)->handle($article, User::factory()->create());
 
     expect(fn () => resolve(DeleteArticle::class)->handle($stale, User::factory()->create()))
-        ->toThrow(UnprocessableEntityHttpException::class, 'The article has already been deleted.');
+        ->toThrow(BusinessRuleViolation::class, 'The article has already been deleted.');
 });
 
 it('returns 404 when the article was permanently deleted meanwhile', function (): void {

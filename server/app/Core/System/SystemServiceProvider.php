@@ -4,12 +4,10 @@ namespace App\Core\System;
 
 use App\Core\System\Actions\{AuthenticateUser, ResetUserPassword, UpdateUserPassword, UpdateUserProfileInformation};
 use App\Core\System\Commands\{SyncCommand, SyncDictsCommand, SyncPermissionsCommand, SyncSettingsCommand};
-use App\Core\System\Contracts\{DictRegistry, MenuRegistry, SettingRegistry};
-use App\Core\System\Enums\{ExportFormat, ExportStatus, PermissionType, SettingType, Status};
-use App\Core\System\Exporters\UserExporter;
-use App\Core\System\Listeners\DeleteExportsOfDeletingUser;
+use App\Core\System\Events\UserDeleting;
+use App\Core\System\Listeners\DeleteExportsOfUser;
 use App\Core\System\Models\{Attachment, DictItem, DictType, Export, Permission, Role, Setting, User};
-use App\Core\System\Services\{AllDataScope, DataScopeRegistry, DictRegistryService, EnumRegistry, ExporterRegistry, MenuRegistryService, PermissionRegistry, SelfDataScope, SettingRegistryService, Settings};
+use App\Core\System\Services\{DataScopeRegistry, DictRegistry, EffectivePermissions, EnumRegistry, ExporterRegistry, MenuRegistry, SettingRegistry, Settings};
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -32,7 +30,7 @@ use Spatie\Permission\PermissionRegistrar;
  * Fortify 的路由挂在后台入口下（config/fortify.php，由 AdminServiceProvider 决定是否注册）。
  *
  * 菜单与权限（设计文档 §8.1、§8.2）：MenuRegistry 扩展点（本模块的节点见 resources/menus.php）、同步命令 core:sync-permissions、
- * 基于 PermissionRegistry 的 Gate::before。
+ * 基于 EffectivePermissions 的 Gate::before。
  *
  * 数据权限（设计文档 §8.4）：DataScopeRegistry 扩展点，本模块注册默认的 `all`、`self` 两个范围。
  *
@@ -44,17 +42,6 @@ use Spatie\Permission\PermissionRegistrar;
  */
 class SystemServiceProvider extends ServiceProvider
 {
-    /**
-     * 单例：只保存启动时注册的静态声明（菜单与权限节点、字典类型、系统参数分组），不保存请求数据。
-     *
-     * @var array<class-string, class-string>
-     */
-    public array $singletons = [
-        MenuRegistry::class => MenuRegistryService::class,
-        DictRegistry::class => DictRegistryService::class,
-        SettingRegistry::class => SettingRegistryService::class,
-    ];
-
     /**
      * Register any application services.
      */
@@ -79,20 +66,12 @@ class SystemServiceProvider extends ServiceProvider
         ]);
 
         $menus->register(require __DIR__.'/resources/menus.php');
-        $scopes->register(new AllDataScope, new SelfDataScope);
+        $scopes->register(require __DIR__.'/resources/data-scopes.php');
         $settings->register(require __DIR__.'/resources/settings.php');
-        $enums->register([
-            'status' => Status::class,
-            'permission_type' => PermissionType::class,
-            'setting_type' => SettingType::class,
-            'export_status' => ExportStatus::class,
-            'export_format' => ExportFormat::class,
-        ]);
-        $exporters->register([
-            'system.user' => UserExporter::class,
-        ]);
+        $enums->register(require __DIR__.'/resources/enums.php');
+        $exporters->register(require __DIR__.'/resources/exporters.php');
 
-        Event::listen('eloquent.deleting: '.User::class, DeleteExportsOfDeletingUser::class);
+        Event::listen(UserDeleting::class, DeleteExportsOfUser::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([SyncCommand::class, SyncPermissionsCommand::class, SyncDictsCommand::class, SyncSettingsCommand::class]);
@@ -123,9 +102,9 @@ class SystemServiceProvider extends ServiceProvider
                 return null;
             }
 
-            $registry = resolve(PermissionRegistry::class);
+            $permissions = resolve(EffectivePermissions::class);
 
-            return $registry->isRegistered($ability) ? $registry->allows($user, $ability) : null;
+            return $permissions->isRegistered($ability) ? $permissions->allows($user, $ability) : null;
         });
     }
 
@@ -133,7 +112,7 @@ class SystemServiceProvider extends ServiceProvider
      * 常驻的队列 worker（设计文档 §10.3）：每个任务开始前清掉 spatie PermissionRegistrar（单例）在内存中的节点与授权集合
      * （不清共享的缓存存储），下次读取时从缓存重新载入，任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。
      * Web 端改动授权时 spatie 只能清掉本进程的内存副本与缓存存储，worker 中的副本不会随之更新；
-     * #[Scoped] 的 PermissionRegistry、Cache::memo() 由框架在任务之间重置，不需要额外处理。Octane 由 spatie 的 reset 监听处理。
+     * #[Scoped] 的 EffectivePermissions、Cache::memo() 由框架在任务之间重置，不需要额外处理。Octane 由 spatie 的 reset 监听处理。
      */
     protected function configureQueueWorkers(): void
     {

@@ -6,11 +6,11 @@ use App\Core\System\Enums\{ExportFormat, ExportStatus};
 use App\Core\System\Jobs\RunExport;
 use App\Core\System\Models\{Export, User};
 use App\Core\System\Services\ExporterRegistry;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\{App, DB};
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Spatie\QueryBuilder\Exceptions\InvalidQuery;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 发起导出（POST /<列表路径>/export，设计文档 §6.10）：创建导出记录并入队 RunExport，立即返回。
@@ -36,7 +36,7 @@ class CreateExport
      *
      * @throws InvalidQuery
      * @throws ValidationException
-     * @throws UnprocessableEntityHttpException 并发上限
+     * @throws BusinessRuleViolation 并发上限
      * @throws InvalidArgumentException 导出类未登记（开发期错误）
      */
     public function handle(User $actor, string $exporter, ExportFormat $format, array $parameters): Export
@@ -47,7 +47,7 @@ class CreateExport
             User::query()->whereKey($actor->id)->lockForUpdate()->first();
 
             if (Export::query()->ownedBy($actor)->active()->count() >= config()->integer('core.exports.max_active')) {
-                throw new UnprocessableEntityHttpException(__('You can have at most :count exports in progress. Please wait for them to finish.', [
+                throw new BusinessRuleViolation(__('You can have at most :count exports in progress. Please wait for them to finish.', [
                     'count' => config()->integer('core.exports.max_active'),
                 ]));
             }

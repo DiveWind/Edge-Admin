@@ -22,18 +22,34 @@ it('is a singleton', function (): void {
     expect(resolve(DataScopeRegistry::class))->toBe(resolve(DataScopeRegistry::class));
 });
 
+it('resolves provider classes from the container, as declared in resources/data-scopes.php', function (): void {
+    $registry = new DataScopeRegistry;
+    $registry->register([SelfDataScope::class]);
+
+    expect($registry->keys())->toBe(['self'])
+        ->and($registry->get('self'))->toBeInstanceOf(SelfDataScope::class);
+});
+
+it('rejects declarations that are not a list of providers', function (mixed $providers): void {
+    expect(fn () => new DataScopeRegistry()->register($providers))->toThrow(InvalidArgumentException::class);
+})->with([
+    'not an array' => ['all'],
+    'keyed' => [['all' => AllDataScope::class]],
+    'not a provider' => [[User::class]],
+]);
+
 it('rejects a duplicate key', function (): void {
-    resolve(DataScopeRegistry::class)->register(new AllDataScope);
+    resolve(DataScopeRegistry::class)->register([new AllDataScope]);
 })->throws(InvalidArgumentException::class, '数据范围 key “all”重复');
 
 it('rejects an invalid key', function (): void {
-    resolve(DataScopeRegistry::class)->register(new class extends SelfDataScope
+    resolve(DataScopeRegistry::class)->register([new class extends SelfDataScope
     {
         public function key(): string
         {
             return 'Own Data';
         }
-    });
+    }]);
 })->throws(InvalidArgumentException::class, '不合法');
 
 it('lets super admins and the all scope grant every registered scope', function (array $roles): void {

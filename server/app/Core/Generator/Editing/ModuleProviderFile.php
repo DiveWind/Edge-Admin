@@ -2,8 +2,7 @@
 
 namespace App\Core\Generator\Editing;
 
-use App\Core\System\Contracts\MenuRegistry;
-use App\Core\System\Services\ExporterRegistry;
+use App\Core\System\Services\{ExporterRegistry, MenuRegistry};
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
@@ -13,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * - 契约绑定：追加到 `public array $bindings = [` … `];`（框架注册 Provider 时自动绑定）；还没有时插在第一个方法之前；
  * - 语言包：`$this->loadTranslationsFrom(__DIR__.'/resources/lang', '<命名空间>');`，追加到 boot() 的末尾；
  * - 菜单与权限节点：boot() 注入 MenuRegistry，`$menus->register(require __DIR__.'/resources/menus.php');`；
- * - 导出类：boot() 注入 ExporterRegistry，追加到 `$exporters->register([` … `]);`，还没有时新增这条语句。
+ * - 导出类：boot() 注入 ExporterRegistry，`$exporters->register(require __DIR__.'/resources/exporters.php');`（条目在 resources/exporters.php，ClassMapFile）。
  *
  * 预期的格式与 core.module.provider.stub 生成的一致；找不到上述位置时抛出 UnexpectedFormatException，不猜测位置。
  */
@@ -131,35 +130,21 @@ class ModuleProviderFile
     }
 
     /**
-     * 登记导出类 $name => $exporter；已登记时返回 null，名称已被其他导出类使用时抛出异常。
+     * 登记模块的导出类声明（resources/exporters.php，条目由 ClassMapFile 写入）；已登记时返回 null。
      *
      * @throws UnexpectedFormatException
      */
-    public static function registerExporter(string $code, string $name, string $exporter): ?string
+    public static function registerExporters(string $code): ?string
     {
-        $snippet = "public function boot(ExporterRegistry \$exporters): void\n{\n    \$exporters->register([\n        '{$name}' => ".class_basename($exporter)."::class,\n    ]);\n}";
+        $snippet = "public function boot(ExporterRegistry \$exporters): void\n{\n    \$exporters->register(require __DIR__.'/resources/exporters.php');\n}";
+
+        if (str_contains($code, "/resources/exporters.php'")) {
+            return null;
+        }
+
         [$code, $variable] = self::bootParameter($code, ExporterRegistry::class, 'exporters', $snippet);
-        $imports = self::imports($code, $snippet);
 
-        if (preg_match_all('/\$'.$variable.'->register\(\[(?<entries>.*?)\]\);/s', $code, $calls) > 0
-            && preg_match('/\''.preg_quote($name, '/').'\' => (?<class>[A-Za-z0-9_\\\\]+)::class/', implode("\n", $calls['entries']), $existing) === 1) {
-            return $imports->resolve($existing['class']) === $exporter
-                ? null
-                : throw new UnexpectedFormatException("导出的对外名称 {$name} 已被 {$imports->resolve($existing['class'])} 使用", $snippet);
-        }
-
-        $class = self::import($imports, $exporter, $snippet);
-        $code = $imports->render();
-        $entry = "'{$name}' => {$class}::class,";
-
-        if (preg_match('/^(?<indent>[ ]*)\$'.$variable.'->register\(\[\n(?<body>(?:.*\n)*?)\k<indent>\]\);$/m', $code, $match, PREG_OFFSET_CAPTURE) === 1) {
-            [$body, $offset] = $match['body'];
-            $code = substr_replace($code, $body.$match['indent'][0].'    '.$entry."\n", $offset, strlen($body));
-        } else {
-            $code = self::appendToBoot($code, "\${$variable}->register([\n    {$entry}\n]);", $snippet);
-        }
-
-        return self::withImports($code, [ExporterRegistry::class, $exporter], $snippet);
+        return self::withImports(self::appendToBoot($code, "\${$variable}->register(require __DIR__.'/resources/exporters.php');", $snippet), [ExporterRegistry::class], $snippet);
     }
 
     /**

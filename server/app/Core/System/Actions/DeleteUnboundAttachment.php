@@ -3,9 +3,9 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\Attachment;
+use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * 删除未绑定的附件（设计文档 §6.8）：附件管理的删除（DELETE /system/attachments/{attachment}）与清理（model:prune，Attachment::prune()）。
@@ -26,7 +26,7 @@ class DeleteUnboundAttachment
     /**
      * Execute the action.
      *
-     * @throws UnprocessableEntityHttpException
+     * @throws BusinessRuleViolation
      * @throws ModelNotFoundException<Attachment>
      */
     public function handle(Attachment $attachment, bool $skipIfBound = false): bool
@@ -36,7 +36,7 @@ class DeleteUnboundAttachment
             $locked = $skipIfBound ? $query->first() : $query->firstOrFail();
 
             if ($locked === null || $locked->isBound()) {
-                return $skipIfBound ? false : throw new UnprocessableEntityHttpException(__('Attachments in use cannot be deleted.'));
+                return $skipIfBound ? false : throw new BusinessRuleViolation(__('Attachments in use cannot be deleted.'));
             }
 
             $this->deleteAttachment->handle($locked);
