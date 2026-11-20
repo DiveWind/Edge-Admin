@@ -49,7 +49,7 @@ return [
                 'type' => 'int',
                 'name' => 'system.setting.auth.loginRateLimit',
                 'remark' => 'system.setting.auth.loginRateLimitRemark',
-                'config' => 'core.auth.login_rate_limit',
+                'config' => 'core.system.auth.login_rate_limit',
                 'rules' => ['min:1', 'max:1000'],
             ],
         ],

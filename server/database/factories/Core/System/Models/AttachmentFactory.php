@@ -23,7 +23,7 @@ class AttachmentFactory extends Factory
     public function definition(): array
     {
         return [
-            'disk' => config()->string('core.attachments.disk'),
+            'disk' => config()->string('core.system.attachment.disk'),
             'path' => Attachment::DIRECTORY.'/'.now()->format('Y/m/d').'/'.Str::random(40).'.png',
             'name' => fake()->word().'.png',
             'mime_type' => 'image/png',

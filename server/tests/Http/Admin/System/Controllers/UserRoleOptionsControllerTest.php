@@ -4,7 +4,7 @@ use App\Core\System\Models\{Role, User};
 
 /*
 |--------------------------------------------------------------------------
-| GET /system/roles/options：用户表单的角色下拉（设计文档 §6.5）
+| GET /system/users/role-options：用户表单的角色下拉（设计文档 §6.5）
 |--------------------------------------------------------------------------
 */
 
@@ -13,12 +13,12 @@ beforeEach(function (): void {
 });
 
 it('returns 401 for guests', function (): void {
-    $this->getJson('/api/admin/system/roles/options')->assertUnauthorized();
+    $this->getJson('/api/admin/system/users/role-options')->assertUnauthorized();
 });
 
 it('returns 403 without the user create or update code', function (): void {
     $this->actingAs(userWithPermissions('system.user', 'system.role.create', 'system.role.update'))
-        ->getJson('/api/admin/system/roles/options')
+        ->getJson('/api/admin/system/users/role-options')
         ->assertForbidden();
 });
 
@@ -31,7 +31,7 @@ it('lists the enabled roles ordered by sort and id', function (string $code): vo
     Role::factory()->disabled()->create(['name' => 'auditor', 'sort' => 1]);
 
     $this->actingAs(User::factory()->create()->assignRole($own))
-        ->getJson('/api/admin/system/roles/options')
+        ->getJson('/api/admin/system/users/role-options')
         ->assertOk()
         ->assertExactJson(['code' => 0, 'message' => 'ok', 'data' => [
             ['value' => 'viewer', 'label' => 'Viewer'],

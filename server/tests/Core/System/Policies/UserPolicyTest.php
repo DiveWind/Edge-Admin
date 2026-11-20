@@ -51,6 +51,17 @@ it('allows each ability only with its permission code', function (string $abilit
         ->and(Gate::forUser(userWithDataScope('all', $code))->allows($ability, $arguments))->toBeTrue();
 })->with('user abilities');
 
+it('allows the form options (role dropdown) with the create or update code', function (): void {
+    $others = array_filter(
+        resolve(EffectivePermissions::class)->registeredCodes(),
+        fn (string $other): bool => ! in_array($other, ['system.user.create', 'system.user.update'], true),
+    );
+
+    expect(Gate::forUser(userWithPermissions(...$others))->allows('viewFormOptions', User::class))->toBeFalse()
+        ->and(Gate::forUser(userWithPermissions('system.user.create'))->allows('viewFormOptions', User::class))->toBeTrue()
+        ->and(Gate::forUser(userWithPermissions('system.user.update'))->allows('viewFormOptions', User::class))->toBeTrue();
+});
+
 it('denies records outside the data scope', function (string $ability, string $code): void {
     $actor = userWithPermissions($code);
     $own = User::factory()->create(['created_by' => $actor->id]);

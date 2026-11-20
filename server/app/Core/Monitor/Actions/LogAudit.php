@@ -5,7 +5,9 @@ namespace App\Core\Monitor\Actions;
 use App\Core\Monitor\Contracts\Auditable;
 use App\Core\System\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Str;
+use LogicException;
 use Spatie\Activitylog\Contracts\Activity;
 
 /**
@@ -14,9 +16,12 @@ use Spatie\Activitylog\Contracts\Activity;
  * 由模块的 Action 在**同一个事务**中调用：写入失败与业务写入一起回滚，审计与数据一致。不用 activitylog 的 LogsActivity trait：
  * 它只有模型事件（created / updated / deleted / restored），分不出发布、取消发布与彻底删除，也无法改写大字段。
  *
- * - 日志名：subject 多态别名的第一段（业务模块的别名为 `<模块>.<模型>`，即模块名，如 `content`；`operation`、`login` 是 Monitor 保留的）；
+ * - 日志名 = 模型所属模块的标识（设计文档 §4.4）：模块目录名的 snake_case——Core 为 `system`、`monitor`、`message`，
+ *   业务模块为模块名（如 `content`）。模块按多态别名登记的模型类的命名空间（`App\Core\<模块>`、`App\Modules\<模块>`）确定；
+ *   `operation`、`login` 是 Monitor 保留给操作日志、登录日志的日志名，不是模块标识；
  * - subject 为记录，causer 为操作者；event 为事件名（snake_case 过去分词，如 created、published、force_deleted）；
- *   description 为 `<多态别名>.<event>`（如 `content.article.published`：稳定的标识，由前端翻译，后端不存翻译后的文案）；
+ *   description 为 `<日志名>.<模型标识>.<event>`，模型标识是多态别名去掉模块前缀（如 `content.article.published`、
+ *   `system.user.disabled`：稳定的标识，由前端翻译，后端不存翻译后的文案）；
  *   properties.username 是操作者的快照，properties.request_id 由 Activity 模型自动写入；
  * - 字段变化用 spatie 的 `attributes` / `old` 结构：
  *   - `created`：attributes 为新增后的快照；
@@ -53,13 +58,30 @@ class LogAudit
         }
 
         $alias = $subject->getMorphClass();
+        $logName = $this->moduleOf($alias, $subject);
 
-        return activity(Str::before($alias, '.'))
+        return activity($logName)
             ->performedOn($subject)
             ->causedBy($actor)
             ->event($event)
             ->withProperties(['username' => $actor->username, ...$properties])
-            ->log("{$alias}.{$event}");
+            ->log("{$logName}.".Str::after($alias, '.').".{$event}");
+    }
+
+    /**
+     * 模型所属模块的标识：多态别名登记的模型类（没有登记时为 subject 的类）所在的 `App\Core\<模块>` / `App\Modules\<模块>`，转为 snake_case。
+     *
+     * @throws LogicException 模型不在 Core 或业务模块中
+     */
+    private function moduleOf(string $alias, Model $subject): string
+    {
+        $class = Relation::getMorphedModel($alias) ?? $subject::class;
+
+        if (preg_match('/^App\\\\(?:Core|Modules)\\\\(?<module>[^\\\\]+)\\\\/', $class, $match) !== 1) {
+            throw new LogicException("无法确定 [{$class}] 所属的模块：审计的模型须在 App\\Core\\<模块> 或 App\\Modules\\<模块> 中。");
+        }
+
+        return Str::snake($match['module']);
     }
 
     /**

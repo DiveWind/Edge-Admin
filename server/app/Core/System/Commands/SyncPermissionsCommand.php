@@ -9,12 +9,12 @@ use Illuminate\Console\Attributes\{Description, Signature};
 use Illuminate\Console\Command;
 
 /**
- * core:sync-permissions：把各模块在 MenuRegistry 中声明的菜单与权限节点同步到 permissions 表（设计文档 §8.2）。
+ * core:sync-permissions：把各模块在 MenuRegistry 中声明的节点同步到 permissions 表（设计文档 §8.2）。
  * 由 core:sync 依次调用（DatabaseSeeder 与部署时在 `php artisan optimize` 之后执行，§11.4），也可单独执行。规则见 SyncPermissions。
  * 声明节点的 path 被已有的其他节点占用时，列出冲突并以退出码 1 结束，不写入任何数据。
  */
 #[Signature('core:sync-permissions')]
-#[Description('同步各模块声明的菜单与权限节点（幂等：新增、收编同名自定义节点、修正结构性字段，不覆盖管理员的调整，不删除任何节点）')]
+#[Description('同步各模块声明的节点（幂等：新增、收编同名自定义节点、修正结构性字段，不覆盖管理员的调整，不删除任何节点）')]
 class SyncPermissionsCommand extends Command
 {
     /**
@@ -38,7 +38,7 @@ class SyncPermissionsCommand extends Command
         $changes = count($result['created']) + count($result['updated']) + count($result['adopted']) + count($result['released']);
 
         if ($changes === 0 && ! $result['super_admin_created']) {
-            $this->components->info('菜单与权限节点已是最新，没有变更');
+            $this->components->info('节点已是最新，没有变更');
 
             return self::SUCCESS;
         }

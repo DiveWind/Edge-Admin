@@ -34,15 +34,15 @@ it('generates every file of the CRUD with all options', function (): void {
         'app/Modules/Blog/resources/lang/en/post.php', 'app/Modules/Blog/resources/lang/zh_CN/post.php',
     )
         ->and($this->project->files('app/Http/Admin/Blog'))->toBe([
-            'app/Http/Admin/Blog/Controllers/ForceDeletePostController.php', 'app/Http/Admin/Blog/Controllers/PostController.php',
-            'app/Http/Admin/Blog/Controllers/PostExportController.php', 'app/Http/Admin/Blog/Controllers/RestorePostController.php',
-            'app/Http/Admin/Blog/Requests/PostExportRequest.php', 'app/Http/Admin/Blog/Requests/PostIndexRequest.php', 'app/Http/Admin/Blog/Requests/PostRequest.php',
+            'app/Http/Admin/Blog/Controllers/ExportPostsController.php', 'app/Http/Admin/Blog/Controllers/ForceDeletePostController.php',
+            'app/Http/Admin/Blog/Controllers/PostController.php', 'app/Http/Admin/Blog/Controllers/RestorePostController.php',
+            'app/Http/Admin/Blog/Requests/ExportPostsRequest.php', 'app/Http/Admin/Blog/Requests/PostIndexRequest.php', 'app/Http/Admin/Blog/Requests/PostRequest.php',
             'app/Http/Admin/Blog/Resources/PostResource.php',
         ])
         ->and($this->project->files('tests'))->toBe([
-            'tests/Http/Admin/Blog/Controllers/ForceDeletePostControllerTest.php', 'tests/Http/Admin/Blog/Controllers/PostControllerTest.php',
-            'tests/Http/Admin/Blog/Controllers/PostExportControllerTest.php', 'tests/Http/Admin/Blog/Controllers/RestorePostControllerTest.php',
-            'tests/Modules/Blog/Actions/PostActivityTest.php',
+            'tests/Http/Admin/Blog/Controllers/ExportPostsControllerTest.php', 'tests/Http/Admin/Blog/Controllers/ForceDeletePostControllerTest.php',
+            'tests/Http/Admin/Blog/Controllers/PostControllerTest.php', 'tests/Http/Admin/Blog/Controllers/RestorePostControllerTest.php',
+            'tests/Modules/Blog/Actions/PostAuditTest.php',
         ])
         ->and($this->project->read('app/Modules/Blog/Actions/CreatePost.php'))->toContain("\$this->audit->handle(\$actor, \$post, 'created');")
         ->and($this->project->read('app/Modules/Blog/Models/Post.php'))->toContain('implements Auditable')
@@ -57,8 +57,8 @@ it('generates every file of the CRUD with all options', function (): void {
         ->and($menus[0]['children'][0])->toMatchArray(['name' => 'blog.post', 'type' => 'menu', 'path' => '/blog/post', 'component' => '/blog/post/list'])
         ->and(array_keys($menus[0]['children'][0]['buttons']))->toBe(['create', 'update', 'delete', 'restore', 'force-delete', 'export'])
         ->and($this->project->read('app/Http/Admin/routes.php'))->toContain(
-            "use App\\Http\\Admin\\AdminServiceProvider;\nuse App\\Http\\Admin\\Blog\\Controllers\\{ForceDeletePostController, PostController, PostExportController, RestorePostController};",
-            "    // Blog（app/Modules/Blog，接口见模块 README）\n    Route::prefix('blog')->name('blog.')->group(function (): void {\n        Route::post('posts/export', PostExportController::class)",
+            "use App\\Http\\Admin\\AdminServiceProvider;\nuse App\\Http\\Admin\\Blog\\Controllers\\{ExportPostsController, ForceDeletePostController, PostController, RestorePostController};",
+            "    // Blog（app/Modules/Blog，接口见模块 README）\n    Route::prefix('blog')->name('blog.')->group(function (): void {\n        Route::post('posts/export', ExportPostsController::class)",
             "        Route::apiResource('posts', PostController::class)->whereNumber('post');\n    });\n});",
         )
         ->and($this->project->pintFailures())->toBeNull();

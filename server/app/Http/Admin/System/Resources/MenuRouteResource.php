@@ -2,6 +2,7 @@
 
 namespace App\Http\Admin\System\Resources;
 
+use App\Core\System\Enums\PermissionType;
 use App\Core\System\Models\Permission;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -10,7 +11,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * `/menu/all` 中的一个节点，结构与 Vben 的路由一致（设计文档 §6.2）。节点的选取、剔除与排序由 EffectivePermissions::menuTreeFor() 完成：
  *
  * - name：权限码（Vben 的路由 name）；path：路由路径；
- * - component：目录不输出；菜单为相对 src/views 的路径；内嵌页与外链为 IFrameView（PermissionType::routeComponent()）；
+ * - component：目录不输出；菜单为相对 src/views 的路径；内嵌页与外链为 Vben 的 IFrameView（routeComponent()：这是 Vben 路由的输出格式，属于本入口）；
  * - meta：title（i18n key，前端翻译）、icon（有时）、order，以及节点 meta 列中的白名单键（含 iframeSrc、link、hideInMenu 等）；
  * - children：有子节点时输出；不输出 redirect（Vben 自动重定向到第一个子节点）。
  *
@@ -19,13 +20,18 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class MenuRouteResource extends JsonResource
 {
     /**
+     * Vben 内嵌页与外链使用的前端组件。
+     */
+    public const string IFRAME_COMPONENT = 'IFrameView';
+
+    /**
      * Transform the resource into an array.
      *
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
-        $component = $this->type->routeComponent($this->component);
+        $component = $this->routeComponent($this->type, $this->component);
         $children = $this->relationLoaded('children') ? $this->children : null;
 
         return [
@@ -40,5 +46,17 @@ class MenuRouteResource extends JsonResource
             ],
             ...($children === null || $children->isEmpty() ? [] : ['children' => self::collection($children)]),
         ];
+    }
+
+    /**
+     * 输出的 component：目录、按钮不输出（null），菜单为节点的 component，内嵌页与外链为 IFrameView。
+     */
+    private function routeComponent(PermissionType $type, ?string $component): ?string
+    {
+        return match ($type) {
+            PermissionType::Menu => $component,
+            PermissionType::Embedded, PermissionType::Link => self::IFRAME_COMPONENT,
+            PermissionType::Catalog, PermissionType::Button => null,
+        };
     }
 }

@@ -14,7 +14,7 @@ use Throwable;
  * 保存文件并登记为附件（设计文档 §6.8）：附件元数据的规则只有这一份，上传（POST /attachments，文件已由 AllowedUpload 校验类型与大小）
  * 与导出文件（GenerateExport）都经过它。
  *
- * - 存到 config('core.attachments.disk')（默认私有的 local 盘），路径 `<目录>/<年>/<月>/<日>/<40 位随机串>.<扩展名>`（目录默认 `attachments`）：
+ * - 存到 config('core.system.attachment.disk')（默认私有的 local 盘），路径 `<目录>/<年>/<月>/<日>/<40 位随机串>.<扩展名>`（目录默认 `attachments`）：
  *   随机串由服务端生成；未指定扩展名时由服务端探测的 MIME 推断（框架的 hashName()）。不使用客户端的文件名，没有路径穿越；
  * - mime_type 未指定时为服务端探测的结果（不信任客户端的 Content-Type 与扩展名）；extension 取自保存的路径；另记 size、sha256；
  * - 显示名 name（最长 255 字符）：未指定时为上传的原始文件名，用于显示与下载时的文件名；
@@ -44,7 +44,7 @@ class StoreAttachment
         ?string $mimeType = null,
         string $directory = Attachment::DIRECTORY,
     ): Attachment {
-        $disk = config()->string('core.attachments.disk');
+        $disk = config()->string('core.system.attachment.disk');
         $directory .= '/'.now()->format('Y/m/d');
         $path = $extension === null
             ? Storage::disk($disk)->putFile($directory, $file)

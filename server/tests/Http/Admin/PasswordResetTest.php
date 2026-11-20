@@ -38,7 +38,7 @@ it('emails a reset link that points to the frontend page', function (): void {
 
 it('uses the configured frontend address', function (): void {
     Notification::fake();
-    config(['core.auth.frontend_url' => 'https://admin.example.com/', 'core.auth.reset_password_path' => '/reset']);
+    config(['core.system.auth.frontend_url' => 'https://admin.example.com/', 'core.system.auth.reset_password_path' => '/reset']);
 
     $this->client->post('/api/admin/forgot-password', ['email' => 'alice@example.com'])->assertOk();
 

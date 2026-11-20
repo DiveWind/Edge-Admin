@@ -2,12 +2,12 @@
 
 namespace App\Core\System\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 导出任务的状态（设计文档 §6.10）：queued（排队中）→ running（进行中）→ completed（已完成）或 failed（失败）。
  *
- * 排队中与进行中的导出计入同一用户的并发上限（config('core.exports.max_active')）。
+ * 排队中与进行中的导出计入同一用户的并发上限（config('core.system.export.max_active')）。
  * 实现 HasLabel、HasColor：显示名称与语义色由后端统一下发给前端（设计文档 §5.5、§10.1）。
  */
 enum ExportStatus: string implements HasColor, HasLabel

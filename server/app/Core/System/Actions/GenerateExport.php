@@ -20,7 +20,7 @@ use Throwable;
  * 1. 锁行复核：记录已删除（被取消）或已不是排队中 → 直接结束（重复投递时幂等）；否则标记进行中；
  * 2. 复核发起人：账号启用、仍有导出类的权限码（按执行时的授权）；否则标记失败（FailExport），不写出任何数据；
  * 3. 按发起时的语言（exports.locale）翻译表头与显示名（withLocale()，执行后恢复，常驻内存安全），用 ExportWriter 流式写入本机临时文件：
- *    查询用 lazy(config('core.exports.chunk_size')) 分块读取，不一次读入全部数据；最后追加主键排序，排序列有重复值时分块也稳定；
+ *    查询用 lazy(config('core.system.export.chunk_size')) 分块读取，不一次读入全部数据；最后追加主键排序，排序列有重复值时分块也稳定；
  * 4. 在一个事务中锁行复核记录仍在，把文件存为附件（StoreAttachment：附件盘的 `exports/<年>/<月>/<日>/<40 位随机串>.<扩展名>`，
  *    绑定到导出记录的 `file` 用途，created_by 为发起人），标记已完成、row_count、finished_at；
  *    记录在执行期间被删除 → 不保存文件；事务回滚 → 删除已存的文件。临时文件无论成败都删除；
@@ -126,7 +126,7 @@ class GenerateExport
         $keys = array_keys($exporter->columns());
 
         return $this->withStableOrder($query)
-            ->lazy(max(1, config()->integer('core.exports.chunk_size')))
+            ->lazy(max(1, config()->integer('core.system.export.chunk_size')))
             ->map(function (Model $row) use ($exporter, $keys): array {
                 $values = $exporter->map($row);
 

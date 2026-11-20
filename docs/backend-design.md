@@ -110,13 +110,16 @@ server/
 │   │   │   │   ├── Controllers/
 │   │   │   │   ├── Requests/
 │   │   │   │   └── Resources/
-│   │   │   ├── Middleware/           本入口专用的中间件（Vben 响应包装等）
+│   │   │   ├── Middleware/           本入口专用的中间件（Vben 响应包装、操作日志等）
+│   │   │   ├── Requests/ListRequest.php   本入口列表请求的基类（分页、排序、筛选参数，§6.3）
+│   │   │   ├── Responses/            本入口的响应格式（VbenResponse）与替换 Fortify 的响应
 │   │   │   ├── routes.php
 │   │   │   └── AdminServiceProvider.php
 │   │   ├── Device/                   设备接入 API（受限，以后加）
 │   │   └── Middleware/               多个入口共用的中间件（Laravel 默认位置）
 │   │
-│   └── Support/                      共享基础件（基类、通用工具）
+│   └── Support/                      共享基础件（与业务无关，只依赖框架）：Cache、Database、Eloquent、Enums（HasLabel / HasColor）、
+│                                     Exceptions（BusinessRuleViolation）、Html、QueryBuilder
 │
 ├── bootstrap/  config/  database/  lang/  public/  storage/
 ├── routes/console.php                只放调度定义
@@ -139,18 +142,18 @@ app/Modules/Content/
 ├── Actions/           写操作用例（一个类一个用例，只暴露 handle()；边界见 §5.4）
 ├── Policies/          授权规则（每个模型一个，标准方法齐全，§8.3）
 ├── Queries/           列表（<Model>List::builder()，筛选白名单与数据范围）、复杂查询、统计指标（只读）
-├── Enums/             枚举（实现统一的 HasLabel / HasColor 接口）
+├── Enums/             枚举（实现 App\Support\Enums 的 HasLabel / HasColor 接口）
 ├── Exporters/         导出类（实现 Core/System 的 Exporter，调用列表的 Query 类，§6.10）
 ├── Commands/          Artisan 命令（在模块 Provider 中 $this->commands([...]) 登记，§4.5）
 ├── Events/  Listeners/  Observers/  Jobs/  Notifications/
-├── Rules/  Casts/
+├── Rules/  Casts/  Checks/   Checks 为健康检查项（如 Core/Monitor 的 BackupsCheck）
 ├── Contracts/  Data/  Services/   接口、只读数据对象（`<Name>Data`）与服务：向受限入口开放的契约（§5.2）；
 │                                  Core 提供的扩展点（注册表是 Services 中的具体类，如 Core/System 的 MenuRegistry；
 │                                  由模块实现的接口在 Contracts，如 DataScopeProvider，§5.5）；不写库的领域规则（Services，§5.4）
 ├── resources/
 │   ├── lang/          模块自己的语言包（命名空间 content::）
 │   ├── views/         邮件、PDF、导出模板（不对外访问）
-│   ├── menus.php      本模块的菜单与权限节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
+│   ├── menus.php      本模块的节点声明（§8.2）：返回节点数组，在 Provider 的 boot() 中
 │   │                  `$menus->register(require __DIR__.'/resources/menus.php')`，由 core:sync-permissions 写入数据库
 │   ├── dicts.php      本模块用到的字典类型与初始字典项（§6.7），注册到 DictRegistry，由 core:sync-dicts 写入
 │   ├── settings.php   本模块的系统参数分组（§6.7），注册到 SettingRegistry，由 core:sync-settings 写入
@@ -166,10 +169,87 @@ app/Modules/Content/
 ### 4.4 命名约定
 
 - **入口按“给谁用”命名**：后台（`Admin`）、设备（`Device`）、用户端（`Portal`）、开放平台（`Open`）……
-- **Core 的模块**：`System`、`Monitor`、`Message`。**业务模块**用业务名（`Content`、`Device`、`Order`……）。
+- **Core 的模块**：`System`、`Monitor`、`Message`。**业务模块**用业务名（`Content`、`Device`、`Order`……）。模块的**标识**是目录名的 snake_case（`system`、`content`、`order_center`），用于对外标识的前缀、日志名、语言包命名空间。
 - 入口内部的目录与模块**同名一一对应**。删除一个业务 = 删除 `Modules/<模块>` + 各入口里的同名目录 + 前端对应页面，Core 不受影响。
 - `App\Modules\Device`（设备业务）与 `App\Http\Device`（设备接入入口）同名，但命名空间不同、职责不同。
 - 同一入口内，业务模块的目录可以使用内核模块目录的 API Resource（如 `Http/Admin/Content` 使用 `Http/Admin/System/Resources/AttachmentResource`）：方向是业务 → 内核，与 §5.1 一致；反过来不行。
+- **Http 层按 URL 资源命名，领域层按模型命名**：控制器、Request、Resource、路由参数跟着 URL（`/menus`、`/schedules`），模型、Policy、Action、Query 跟着模型（`Permission`、`ScheduledTask`）。两者不同时在模块 README 中列出“URL 资源 ↔ 模型”对照（如 `menus` ↔ `Permission`、`schedules` ↔ `ScheduledTask`、`online/sessions` ↔ `Session`、`online/tokens` ↔ `PersonalAccessToken`）。
+
+下面三张表是全项目的命名规则：新代码、生成器（§10.4）与代码审查都照它执行，能机器检查的写在 `tests/Arch`。
+
+**表一：类名与文件名**
+
+| 类别 | 位置 | 命名 | 例子 |
+|---|---|---|---|
+| Action | `<模块>/Actions` | 动词开头 + 宾语，`handle()` 是唯一的公开方法（§5.4） | `CreateUser`、`ChangeRoleStatus`、`ForceDeleteArticle`、`SyncUserRoles`、`LogAudit` |
+| Query | `<模块>/Queries` | 名词，不带后缀；列表为 `<Model>List::builder(User $actor, array $parameters)`，其他用 `get()` | `UserList`、`PermissionTree`、`RoleOptions`、`SystemInfo` |
+| Service | `<模块>/Services` | 名词，**不带 `Service` 后缀**；无状态或 `#[Scoped]` | `Dictionary`、`Settings`、`DataMasker`、`Manageability`、`PermissionHierarchy`、`SuperAdminGuard` |
+| 注册表 | `<模块>/Services` | `<领域>Registry`，`#[Singleton]`，只保存启动时登记的声明（§5.5） | `MenuRegistry`、`EnumRegistry` |
+| 请求级计算 | `<模块>/Services` | 不叫 Registry，`#[Scoped]` | `EffectivePermissions` |
+| 扩展点的实现 | `<模块>/Services` | `<范围名><接口词根>` | `AllDataScope`、`SelfDataScope` |
+| Data | `<模块>/Data` | `<Name>Data`，`readonly` | `MenuNodeData`、`NotificationContentData` |
+| Contract | `<模块>/Contracts` | 不带 `Interface`；能力接口以 `Has` / `Can` 开头 | `Exporter`、`DataScopeProvider`、`Auditable`、`PrivateAttachable` |
+| 枚举能力接口 | `app/Support/Enums` | 与业务无关的通用契约，全部模块的枚举都实现 | `HasLabel`、`HasColor` |
+| Enum | `<模块>/Enums` | 单数名词，TitleCase 的 case | `ArticleStatus`、`LoginFailureReason` |
+| Event | `<模块>/Events` | 名词 + 过去分词（或进行时，表示“之前”） | `ExportFinished`、`UserDeleting`、`UserDeleted` |
+| Listener | `<模块>/Listeners` | 动词开头，描述做了什么 | `NotifyExportFinished`、`DeleteNotificationsOfUser` |
+| Job | `<模块>/Jobs` | 动词开头，不带后缀；不与 Action 同名 | `SendAnnouncement`、`RunExport`、`ExecuteScheduledTask` |
+| Notification | `<模块>/Notifications` | `<事物><过去分词>Notification`，继承 `InboxNotification`；`type()` 为去掉 `Notification` 后的 snake_case（表二，`tests/Arch` 检查） | `AnnouncementPublishedNotification`、`ExportFinishedNotification` |
+| Observer | `<模块>/Observers` | `<Model>Observer`；一个观察者服务多个模型时用它们共同的领域名 | `SettingObserver`、`DictionaryObserver`（`DictType` 与 `DictItem`，清 `Dictionary` 的缓存） |
+| Policy | `<模块>/Policies` | `<Model>Policy`；自定义方法用动词（`publish`、`revoke`、`run`），批量用 `<动词>Any`，表单的选项用 `viewFormOptions`，“看自己的 / 发给自己的”用 `view<视角>`（`viewReceived`），查看已删除的用 `viewTrashed` | `publish`、`retryAny`、`viewFormOptions`、`viewReceived` |
+| Rule | `<模块>/Rules` | 形容词或名词短语 | `InDict`、`OwnedAttachment`、`AllowedUpload` |
+| Exporter | `<模块>/Exporters` | `<Model>Exporter` | `UserExporter`、`ArticleExporter` |
+| Check | `<模块>/Checks` | `<Name>Check`（spatie/laravel-health） | `BackupsCheck` |
+| Command | `<模块>/Commands` | `<Verb><Noun>Command`，签名 `core:<verb>-<noun>` | `SyncDictsCommand` → `core:sync-dicts` |
+| 资源控制器 | `Http/<入口>/<模块>/Controllers` | `<URL 资源单数 Studly>Controller`；嵌套资源也是子资源的资源控制器（`index` / `store`，路由 `Route::apiResource('<父>.<子>', …)`） | `MenuController`（`/menus`）、`ScheduleController`（`/schedules`）、`ScheduleLogController`（`/schedules/{schedule}/logs`）、`DictItemController` |
+| 单动作控制器（动作） | 同上 | 路径末段是**动词**（`POST|PUT|DELETE /{id}/<verb>` 或 `/<verb>`）：`<Verb><宾语>Controller`，Verb 为末段的 StudlyCase，宾语为资源名——作用于一条记录或新建一份用单数，作用于整个列表用复数 | `PublishArticleController`、`RunScheduleController`、`RunBackupController`、`CheckHealthController`、`ExportUsersController`、`RetryAllFailedJobsController`、`FlushFailedJobsController`、`ReadAllNotificationsController` |
+| 单动作控制器（子资源） | 同上 | 路径末段是**名词**（子资源、选项、只读信息，`GET|PUT`）：`<名词短语>Controller`，资源名 + 末段，按英文语序 | `UserStatusController`、`UserPasswordController`、`UserRoleOptionsController`、`RoleDataScopesController`、`UnreadNotificationCountController`、`BackupDestinationsController`、`HealthController`、`SystemInfoController` |
+| 个人端与管理端 | 同上 | 同一资源同时有个人功能（根路径）与管理功能（`<模块>/` 前缀下）时拆成两个控制器：管理端 `<Resource>Controller`，个人端加视角前缀（`Received`：发给我的；`My`：我上传的、我能访问的） | `AnnouncementController` / `ReceivedAnnouncementController`、`AttachmentController` / `MyAttachmentController` |
+| Request | `Http/<入口>/<模块>/Requests` | 新增 / 修改共用 `<Resource>Request`；列表 `<Resource>IndexRequest`（继承 `ListRequest`）；单动作控制器为控制器名去掉 `Controller` 加 `Request` | `ArticleRequest`、`ArticleIndexRequest`、`MyAttachmentRequest`、`UserStatusRequest`、`ExportUsersRequest`、`RetryAllFailedJobsRequest` |
+| Resource | `Http/<入口>/<模块>/Resources` | `<URL 资源>Resource`；同一模型的不同视图加前缀；同一入口内可以复用（见上文） | `ScheduleResource`、`ReceivedAnnouncementResource`、`MenuRouteResource` |
+| 迁移 | `database/migrations` | 官方格式 `create_<表>_table`，中间表按字母序取单数 | `create_announcement_role_table` |
+| 工厂 | `database/factories/<与模型相同的路径>` | `<Model>Factory` | `Modules/Content/Models/ArticleFactory` |
+| 测试 | `tests/<与 app 相同的路径>` | 一个类一个文件 `<类名>Test`；覆盖一组类时：同一模型的一组 Action `<Model>ActionsTest`、一组 Policy `<主题>PoliciesTest`、一个模型全部写操作的审计 `<Model>AuditTest`；测试用的类放在同目录的 `Fixtures/` | `HealthControllerTest`、`UserActionsTest`、`LogPoliciesTest`、`ArticleAuditTest` |
+
+**表二：对外标识**（会出现在接口、数据库或前端代码中的名字）
+
+规则：**Core 的对外标识不带前缀，业务模块写成 `<模块标识>.<snake_case>`**（全部小写，段内用下划线），格式 `^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$`；名字表达“是什么 / 发生了什么”，与哪个模块在发送、读取无关。登记时校验格式，前缀由 `tests/Arch/ConventionsTest.php` 检查。权限码、路由名、路由路径、配置键、翻译键有各自的格式（表的后半部分）。
+
+| 标识 | 格式 | Core | 业务模块 | 落库 |
+|---|---|---|---|---|
+| 多态别名（§4.5） | 对外标识：`<模型 snake>` | `user`、`permission`、`scheduled_task` | `content.article` | 是：`*_type` 列 |
+| 枚举对外名（§6.7） | 对外标识：`<枚举 snake>` | `status`、`login_event`、`notification_level` | `content.article_status` | 否（前端按名字取选项） |
+| 导出名（§6.10） | 对外标识：`<模型 snake>`（与多态别名相同） | `user` | `content.article` | 是：`exports.exporter` |
+| 通知 type（§6.9） | 对外标识：`<事物>_<过去分词>`，即通知类名去掉 `Notification` 的 snake_case | `announcement_published`、`export_finished` | `content.article_approved` | 是：`notifications.type` |
+| 字典类型 code（§6.7） | 对外标识（声明的类型；管理员自建的类型只校验格式） | 目前没有 | `content.article_category` | 是 |
+| 数据范围 key（§8.4） | 对外标识，最长 64 | `all`、`self` | `organization.department` | 是：`roles.data_scope` |
+| 参数分组（§6.7） | 一段 snake_case（参数键为 `<分组>.<参数名>`）：Core 用功能名，业务模块用模块标识或 `<模块>_<功能>` | `site`、`auth`、`attachment` | `device`（`device.heartbeat_interval`） | 是：`settings.key` |
+| 日志名（`activity_log.log_name`） | **模块标识**（审计日志由 `LogAudit` 按模型所在模块得出）；`operation`、`login` 是 Monitor 保留的操作日志、登录日志 | `system`、`monitor`、`message` | `content` | 是 |
+| 审计事件（`activity_log.event`） | snake_case 过去分词 | `created`、`disabled` | `published`、`force_deleted` | 是 |
+| 审计 description | `<日志名>.<模型标识>.<事件>`（模型标识 = 多态别名去掉模块前缀），前端 i18n key | `system.user.created` | `content.article.published` | 是 |
+| 操作日志 description | 路由名（下一行），前端 i18n key；**路由名变化即 description 变化**，前端的翻译要同步（§6.6） | `admin.system.users.store` | `admin.content.articles.publish` | 是 |
+| 路由名 | `<入口>.<模块>.<资源复数短横线>.<动作>`；个人功能不带模块；资源路由用 apiResource 的动作名，其他路由的后缀 = 路径末段，嵌套资源为 `<父>.<子>.<动作>` | `admin.system.users.status`、`admin.monitor.failed-jobs.retry-all`、`admin.monitor.schedules.logs.index`、`admin.notifications.read` | `admin.content.articles.force-delete` | 作为操作日志的 description |
+| 路由路径 | 资源用复数短横线；子资源、动作作为末段，与按钮键、路由名后缀一致；表单的选项挂在使用它的表单所属的资源下（`/<资源>/<关联>-options`） | `/system/users/role-options`、`/monitor/failed-jobs/retry-all` | `/content/articles/{article}/force-delete` | — |
+| 权限码（§6.2、§8.2） | 节点的 `name`：小写点分，段内用短横线；单数，`<模块>.<菜单>[.<按钮>]`，Core 也带模块段（它是菜单树的路径，不是注册表名，不受上面的前缀规则约束） | `system.user.create`、`monitor.failed-job.retry` | `content.article.force-delete` | 是 |
+| 配置键（`config/core.php`） | `core.<模块标识>.<功能 snake 单数>.<键>`；入口在 `core.apps.<入口>`，Support 的在 `core.<功能>`；时长的键带单位（`_minutes`、`_hours`、`_days`，秒级超时沿用 `timeout`） | `core.system.attachment.orphan_ttl_hours`、`core.monitor.operation_log.max_payload_bytes` | `core.content.*`（需要时） | — |
+| 环境变量 | `CORE_<功能>_<键>`：配置键去掉 `core.`、模块段（入口去掉 `apps.`），点换成下划线、全大写（`tests/Arch` 检查；例外 `CORE_HTML_MEDIA_HOSTS`） | `CORE_ATTACHMENT_ORPHAN_TTL_HOURS`、`CORE_ADMIN_PAGINATION_PAGE_SIZE` | `CORE_<功能>_<键>` | — |
+| 后端翻译键 | **两种并存，按模块归属区分**：Core 用英文原文作为 JSON 键（`lang/*.json`，或框架语言包的键如 `validation.exists`）；业务模块只用自己的命名空间键 `<模块>::<文件>.<键>`（`resources/lang`，随模块删除），不写进根目录的 `lang/`。`core:make-* --core` 生成到 Core 的代码沿用生成器的命名空间键（唯一的例外）。`tests/Arch/TranslationsTest.php` 检查归属与中文是否齐全 | `__('Enabled')` | `__('content::article.status.draft')` | — |
+| 前端 i18n 键（菜单、按钮、通知 title） | 小写点分，段内 camelCase（Vben 习惯，**不与权限码统一**，不要“顺手”改成短横线） | `system.user.changeStatus`、`monitor.failedJob.retry` | `content.article.publish` | 是：`permissions.title` |
+
+**表三：术语**（文档、注释、提示文案统一使用）
+
+| 术语 | 含义 | 不要写成 |
+|---|---|---|
+| 节点 | `permissions` 表中的一行：目录、菜单、内嵌页、外链、按钮（`PermissionType`）；菜单管理管理的就是节点 | 权限节点、菜单与权限节点；“菜单节点”只用来指 `type=menu` 的节点 |
+| 菜单 | `type=menu` 的节点（“节点”只指它）；菜单管理页、`/menu/all` 是 Vben 的叫法，照用 | 指代所有节点 |
+| 权限码 | 节点的 `name`（`system.user.create`），即 spatie 的 permission name 与 Vben 的路由 name | 权限码、权限名、权限点 |
+| 数据权限 | 这项功能（§8.4） | — |
+| 数据范围 | 角色选用的一个范围（`all`、`self`……），以及 `visibleTo()` 的结果 | 数据权限范围 |
+| 启用 / 停用 | `Status` 枚举的两个值，账号、角色、节点、字典共用 | 禁用（“禁用”只用于“禁止使用某个 API / 函数”） |
+| 操作者 | 当前请求或用例的发起用户（`$actor`） | 操作人 |
+| 软删除 / 恢复 / 彻底删除 | §10.1 的整套功能 | 回收站、永久删除 |
+| 定时任务 | Laravel 的任务调度（`schedule`），URL 与权限码用 `schedule`，模型用 schedule-monitor 的 `ScheduledTask` | 计划任务、job（`job` 指队列任务） |
+| 对外标识 | 表二上半部分的名字（登记到注册表或存入数据库、不随类名变化） | — |
 
 ### 4.5 偏离默认目录：官方支持与需要的配置
 
@@ -185,8 +265,11 @@ app/Modules/Content/
 | 路由、语言包、视图 | 需注册 | Provider 中 `loadRoutesFrom()`、`loadTranslationsFrom()`、`loadViewsFrom()`，路由缓存照常可用 |
 | 迁移 | **不受影响** | 保留在 `database/migrations` |
 | 认证模型、权限模型 | 需配置 | `config/auth.php`、`config/permission.php` 指向 Core 的模型 |
-| 多态类型 | **必须第一天配置** | `AppServiceProvider` 中开启 `Relation::enforceMorphMap()`；各模块在自己的 Provider 中用 `Relation::morphMap()` 登记别名（业务模块 `<模块>.<模型>`，内核模块 `<模型>`）。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
+| 多态类型 | **必须第一天配置** | `AppServiceProvider` 中只开启强制（`Relation::requireMorphMap()`）；各模块（含 System 的 `user`）在自己的 Provider 中用 `Relation::morphMap()` 登记别名（对外标识，§4.4：业务模块 `<模块>.<模型>`，内核模块 `<模型>`）。否则通知、日志、token、角色关联等表会存入完整类名，以后移动类就要迁移数据（官方文档的提醒） |
 | 官方 `make:*` 命令 | 受影响（默认命名空间固定） | 名称一律写以 `App/` 开头的完整路径，如 `make:controller App/Http/Admin/System/Controllers/UserController`；日常使用 `core:make-*` 生成命令（§10.4） |
+| Fortify 的 Action | 受影响（Starter Kit 默认放在 `app/Actions/Fortify`） | 放在 `Core/System/Actions`（写入一律走模块的 Action，§5.4），在 `SystemServiceProvider` 中 `Fortify::updateUserProfileInformationUsing()` 等登记 |
+| 不在 `app/` 中的模型的 Policy | 受影响（按命名推断不到，如 Sanctum 的 `PersonalAccessToken`） | 在所属模块的 Provider 中 `Gate::policy()` 显式绑定（Monitor 的 `PersonalAccessTokenPolicy`） |
+| 测试目录 | 受影响（默认 `tests/Feature`、`tests/Unit`） | 不使用 Feature / Unit：`tests/` 与 `app/` 同构，`phpunit.xml` 只有 Arch 与 App 两个套件（§10.5） |
 
 ## 5. 分层与依赖边界
 
@@ -261,7 +344,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
    一句话：会写库并且能独立成立的，做 Action；只是“算”或“判断”的，按依赖范围放到模型、枚举、Service；只是“拼查询”的，放到 scope 或 Query。
 4. **唯一性**：有唯一索引的字段，新增与修改的 Action 都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存——它在保存点中保存（PostgreSQL 在语句失败后会中止整个事务，必须回滚到保存点），撞上唯一索引时返回 422 并挂在冲突的字段上。Form Request 的 `Rule::unique` 可选，Action 的兜底必须有（并发、命令行、受限入口都经过它）。
-5. **业务规则违反**：领域层不依赖 HTTP，不抛 Symfony 的 `HttpException`。与字段无关的（只有草稿能发布、最后一个超管不能删除、并发时状态已变）抛 `App\Support\Exceptions\BusinessRuleViolation`（可带挂靠的字段）；某个字段的值不合法抛 `ValidationException`。状态码由入口决定：后台入口（Admin）把 `BusinessRuleViolation` 映射为 422 + `message`（带字段时加 `errors`），与 §6.1 的格式一致；`AuthorizationException`（403）与 `ModelNotFoundException`（404）是框架的领域异常，照常使用。
+5. **业务规则违反**：领域层不依赖 HTTP，不抛 Symfony 的 `HttpException`。与字段无关的（只有草稿能发布、最后一个超管不能删除、并发时状态已变）抛 `App\Support\Exceptions\BusinessRuleViolation`（可带挂靠的字段）；某个字段的值不合法抛 `ValidationException`。状态码由入口决定：后台入口（Admin）把 `BusinessRuleViolation` 映射为 422 + `message`（带字段时加 `errors`），与 §6.1 的格式一致；没有自己格式的入口与其他请求由 `bootstrap/app.php` 的全局兜底按 Laravel 校验失败的标准 JSON 返回 422（`{ message }`，带字段时加 `errors: { 字段: [message] }`，在全部入口的渲染之后登记），不会变成 500；`AuthorizationException`（403）与 `ModelNotFoundException`（404）是框架的领域异常，照常使用。
 6. **唯一的“模型 → Action”例外**：模型 trait `HasAttachments` 与 `Attachment` 的模型事件在记录被彻底删除时调用 `DeleteAttachment`，让“连同附件与文件一起删除”对所有模块自动生效；除此之外模型、Query、Policy、Rule 不调用 Action（读侧不使用 Action 由 `tests/Arch` 检查，模型不在检查范围内）。
 7. **读写分开**：Action 不返回查询结果（返回被写入的模型即可）；需要写后再读的，入口先调 Action 再调 Query（如立即健康检查）。
 
@@ -280,14 +363,14 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 
 | 扩展点 | 业务模块怎么用 |
 |---|---|
-| 菜单与权限节点 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\MenuRegistry` 注册本模块的目录、菜单、按钮节点；由同步命令 `core:sync-permissions` 统一写入（§8.2） |
+| 节点（菜单与按钮） | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\MenuRegistry` 注册本模块的目录、菜单、按钮节点；由同步命令 `core:sync-permissions` 统一写入（§8.2） |
 | 数据权限范围提供者 | 实现 `App\Core\System\Contracts\DataScopeProvider`，列入模块的 `resources/data-scopes.php` 并注册到 `App\Core\System\Services\DataScopeRegistry`（如按部门、区域），角色表单中自动出现（§8.4） |
-| 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`（如 `device.heartbeat_interval`） |
-| 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。业务模块的类型编码以模块名开头（如 `content.article_source`） |
-| 日志 | 数据变更审计：模型实现 `App\Core\Monitor\Contracts\Auditable`（`auditSnapshot()` 给出审计的字段，`auditDigestedFields()` 列出只记摘要的大字段），模块的 Action 在同一事务中调用 Monitor 的 `LogAudit`（`handle($actor, $model, '<事件>', $before)`）。日志名为多态别名的模块段（如 `content`）；`operation`、`login` 是 Monitor 的保留日志名（§6.6）。差异计算、“没有变化不写”、大字段摘要、`description`（`<多态别名>.<事件>`）由 `LogAudit` 统一处理，模块只提供快照（§6.11）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
-| 通知 | 定义本模块的通知类：继承 `App\Core\Message\Notifications\InboxNotification`，实现 `type()`（对外的类型名，以模块名开头，如 `content.article_approved`）与 `toInbox()`（返回 `NotificationContentData`：`title`、`content`、`level`、`link`、`params`），用 `$user->notify()` 发送，即统一出现在通知中心；停用的用户不接收，项目装了 Reverb 后在 `via()` 中加上 `broadcast` 即可实时推送（§6.9）。`tests/Arch` 强制 `app/` 中的通知类都继承它、`type()` 格式合法且唯一 |
-| 异步导出 | 实现 `App\Core\System\Contracts\Exporter`（显示名、权限码、列、按“操作者 + 列表参数”构造查询——**调用该列表的 Query 类**，复用同一份筛选白名单与数据范围——与逐行映射），在模块的 `resources/exporters.php` 中登记对外名称（如 `system.user`，由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`），列表再提供一个导出入口（`POST /<列表路径>/export`，权限码 `<菜单>.export`），即接入统一的异步导出（队列、simple-excel 流式写出）、完成通知与下载（附件的签名地址），§6.10 |
-| 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在模块的 `resources/enums.php` 中登记对外名称（由 Provider 的 `boot()` 注册到 `App\Core\System\Services\EnumRegistry`）（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。业务模块的名称以模块名开头（如 `content.article_status`） |
+| 系统参数分组 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\SettingRegistry` 注册本模块的参数分组（`resources/settings.php`：分组标题、各参数的类型、默认值或作为默认值来源的 config 键、是否公开、额外校验规则）；由同步命令 `core:sync-settings` 写入，代码用 `Settings` 服务读取（§6.7）。一个分组只属于一个模块，键为 `<分组>.<参数名>`；业务模块的分组为模块标识或 `<模块>_<功能>`（如 `device.heartbeat_interval`，§4.4） |
+| 字典类型 | 在 Provider 的 `boot()` 中向 `App\Core\System\Services\DictRegistry` 声明本模块用到的字典类型与初始字典项（`resources/dicts.php`）；由同步命令 `core:sync-dicts` 写入，校验用 `new InDict('<类型>')`（§6.7）。类型编码是对外标识（§4.4，业务模块如 `content.article_source`） |
+| 日志 | 数据变更审计：模型实现 `App\Core\Monitor\Contracts\Auditable`（`auditSnapshot()` 给出审计的字段，`auditDigestedFields()` 列出只记摘要的大字段），模块的 Action 在同一事务中调用 Monitor 的 `LogAudit`（`handle($actor, $model, '<事件>', $before)`）。日志名为模型所属模块的标识（`LogAudit` 按多态别名登记的模型类所在的 `App\Core\<模块>` / `App\Modules\<模块>` 得出：Core 为 `system`、`monitor`、`message`，业务模块为模块名如 `content`，§4.4）；`operation`、`login` 是 Monitor 保留给操作日志、登录日志的日志名（§6.6）。差异计算、“没有变化不写”、大字段摘要、`description`（`<日志名>.<模型标识>.<事件>`，模型标识为多态别名去掉模块前缀，如 `content.article.published`、`system.user.created`）由 `LogAudit` 统一处理，模块只提供快照（§6.11）。日志的 `description` 存稳定的标识（i18n key、路由名、事件名），由前端翻译，后端不翻译、不存翻译后的文案 |
+| 通知 | 定义本模块的通知类：继承 `App\Core\Message\Notifications\InboxNotification`，类名为 `<事物><过去分词>Notification`，实现 `type()`（对外的类型名：类名去掉 `Notification` 的 snake_case，业务模块加模块前缀，如 `ArticleApprovedNotification` → `content.article_approved`，§4.4）与 `toInbox()`（返回 `NotificationContentData`：`title`、`content`、`level`、`link`、`params`），用 `$user->notify()` 发送，即统一出现在通知中心；停用的用户不接收，项目装了 Reverb 后在 `via()` 中加上 `broadcast` 即可实时推送（§6.9）。`tests/Arch` 强制 `app/` 中的通知类都继承它、以 `Notification` 结尾、`type()` 与类名对应且唯一 |
+| 异步导出 | 实现 `App\Core\System\Contracts\Exporter`（显示名、权限码、列、按“操作者 + 列表参数”构造查询——**调用该列表的 Query 类**，复用同一份筛选白名单与数据范围——与逐行映射），在模块的 `resources/exporters.php` 中登记对外名称（对外标识，§4.4：Core 如 `user`，业务模块如 `content.article`；由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`），列表再提供一个导出入口（`POST /<列表路径>/export`，权限码 `<菜单>.export`），即接入统一的异步导出（队列、simple-excel 流式写出）、完成通知与下载（附件的签名地址），§6.10 |
+| 枚举选项 | 枚举实现 `HasLabel`（需要语义色时再实现 `HasColor`，§10.1），并在模块的 `resources/enums.php` 中登记对外名称（由 Provider 的 `boot()` 注册到 `App\Core\System\Services\EnumRegistry`）（**显式白名单**，未登记的不下发），即可由 `/options/enums` 下发给前端（§6.7）。名称是对外标识（§4.4，业务模块如 `content.article_status`） |
 | Core 事件 | 在模块 Provider 中 `Event::listen()` Core 发出的领域事件（清单见下），清理或同步本模块的数据。不要监听 Core 模型的 Eloquent 事件（`eloquent.deleting: …`）：它们与领域语义不一致（批量操作、`forceFill()->save()` 等），也不是公开约定 |
 
 **Core 发出的事件**（`App\Core\System\Events`，可监听的公开约定）：
@@ -296,9 +379,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 |---|---|---|---|
 | `UserDeleting` | `DeleteUser` | 删除用户的事务中、删除用户行之前，同步分发（`$event->user` 及其关联仍在） | 在同一事务中清理属于该用户的数据，失败则删除整体回滚（System 删除他的导出连同文件，Message 删除他的通知） |
 | `UserDeleted` | `DeleteUser` | 事务提交之后（`ShouldDispatchAfterCommit`），回滚时不分发；`$event->user` 只能读属性 | 删除后才做、不必同进退的事：通知外部系统、清理缓存、派发队列任务 |
-| `ExportFinished` | `GenerateExport`、`FailExport` | 导出完成或失败、状态写入之后 | Message 给发起人发送通知（System 不依赖 Message） |
+| `ExportFinished` | `GenerateExport`、`FailExport` | 导出完成或失败、状态写入之后 | Message 给发起人发送通知 `ExportFinishedNotification`（System 不依赖 Message） |
 
-**Core 对模块公开的类**：上表的扩展点与事件，加上 `Contracts`、`Data`、`Enums`、`Models`（含 `Models/Concerns`）、`Rules`，点名的 Action（`SyncAttachments`、`StoreAttachment`、`CreateExport`、Monitor 的 `LogAudit`）与点名的 Service（各注册表、`Settings`、`Dictionary`、`DataScopeRegistry`）。其余是 Core 的内部实现，可能随重构变化。
+**Core 对模块公开的类**：上表的扩展点与事件，加上 `Contracts`、`Data`、`Enums`、`Models`（含 `Models/Concerns`）、`Rules`、`Queries/RoleOptions`，点名的 Action（`SyncAttachments`、`StoreAttachment`、`CreateExport`、Monitor 的 `LogAudit`）与点名的 Service（各注册表、`Settings`、`Dictionary`、`DataScopeRegistry`）。其余是 Core 的内部实现，可能随重构变化。
 
 ### 5.6 强制手段
 
@@ -360,7 +443,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
   - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、非超管修改、删除、启停“管不到”的角色，编辑、重置密码、启停、删除“管不到”的用户，强制下线“管不到”的用户的会话与 token（§8.5）、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）、查看或删除他人的导出（§6.10）。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、非超管让不生效的菜单节点生效（启用挂 `status`，移出停用的祖先挂 `parent_id`，§8.6）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、导出的筛选与排序不在白名单或格式不对（`filter.<字段>` 等，与列表相同，§6.10）、唯一性冲突。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、非超管让不生效的节点生效（启用挂 `status`，移出停用的祖先挂 `parent_id`，§8.6）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、导出的筛选与排序不在白名单或格式不对（`filter.<字段>` 等，与列表相同，§6.10）、唯一性冲突。
   - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）、并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9；删除时文章已被别人删除，§10.1；附件管理删除时附件刚被绑定，§6.8）与取决于全局状态、没有对应字段的 422（同时进行的导出超过上限、立即备份时备份任务未同步，§6.10）用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
@@ -374,10 +457,10 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 | `POST /forgot-password`、`POST /reset-password` | Fortify | 找回密码；返回 `{ message }`。找回密码**无论邮箱是否存在都返回成功**，不暴露哪些邮箱已注册 |
 | 两步验证的开启、确认、关闭、二维码、密钥、恢复码；确认密码；修改资料、修改密码 | Fortify | 个人设置中使用。修改资料（`PUT /user/profile-information`）接受 `name`、`email`、`avatar_id`（头像附件的 id，`null` 去掉头像，§6.8） |
 | `GET /auth/codes` | 自建 | 当前用户的有效权限码（目录、菜单、按钮都含，口径见 §8.1），`string[]` |
-| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`（字符串）、`username`、`realName`、`email`（可为 null）、`avatar`（头像的预览地址：签名的临时 URL，过期时间按 `avatar_url_ttl` 的窗口对齐，同一窗口内不变；没有头像时为 null，§6.8）、`twoFactorEnabled`（两步验证已确认开启）、`roles`（启用角色的标识，即 `roles.name`，§8.5）、`desc`、`homePath` |
-| `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致（见下方“菜单节点”） |
+| `GET /user/info` | 自建 | 当前用户信息；前端启动时用它判断是否已登录。字段：`userId`（字符串）、`username`、`realName`、`email`（可为 null）、`avatar`（头像的预览地址：签名的临时 URL，过期时间按 `avatar_url_ttl_minutes` 的窗口对齐，同一窗口内不变；没有头像时为 null，§6.8）、`twoFactorEnabled`（两步验证已确认开启）、`roles`（启用角色的标识，即 `roles.name`，§8.5）、`desc`、`homePath` |
+| `GET /menu/all` | 自建 | 当前用户可见的菜单树，结构与 Vben 路由一致（见下方“节点”） |
 
-**菜单节点**（`/menu/all` 的输出，即 Vben 的路由结构）。节点类型采用 Vben 的 5 种：
+**节点**（`/menu/all` 的输出，即 Vben 的路由结构）。节点类型采用 Vben 的 5 种：
 
 | 类型 | 含义 | `/menu/all` 中的输出 |
 |---|---|---|
@@ -433,8 +516,8 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 ### 6.4 字段命名与数据格式
 
-- **自有资源的字段一律 snake_case**（`parent_id`、`created_at`、`data_scope`）：校验错误的键、query-builder 的字段名、前端 `setFormErrors` 都要求**表单字段名 = 接口字段名**。只有 Vben 规定的结构使用 camelCase：`/user/info`、`/menu/all` 与菜单节点的 `meta.*`，以及分页参数 `pageSize`。
-- **状态统一为字符串枚举 `enabled` / `disabled`**：通用枚举 `App\Core\System\Enums\Status`（实现 `HasLabel`），用户、角色、菜单节点共用。前端适配层 `CellSwitch` / `CellTag` 的默认值相应改为 `'enabled'` / `'disabled'`。
+- **自有资源的字段一律 snake_case**（`parent_id`、`created_at`、`data_scope`）：校验错误的键、query-builder 的字段名、前端 `setFormErrors` 都要求**表单字段名 = 接口字段名**。只有 Vben 规定的结构使用 camelCase：`/user/info`、`/menu/all` 与节点的 `meta.*`，以及分页参数 `pageSize`。
+- **状态统一为字符串枚举 `enabled` / `disabled`**：通用枚举 `App\Core\System\Enums\Status`（实现 `HasLabel`），用户、角色、节点共用。前端适配层 `CellSwitch` / `CellTag` 的默认值相应改为 `'enabled'` / `'disabled'`。
 - **时间**输出带时区偏移的 ISO 8601（§10.1），前端表格列用 formatter 格式化。
 - **id** 为自增整数（对外开放的入口使用 ULID，见 §5.7）。
 - **不提供“名称 / 路径是否已存在”这类检查接口**：唯一性一律在保存时由 422 返回，前端用 `setFormErrors` 回填到对应字段。
@@ -455,7 +538,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `DELETE /system/users/{user}` | 删除 | `system.user.delete` |
 | `PUT /system/users/{user}/status` | 启用 / 停用：`{ status }` | `system.user.status` |
 | `PUT /system/users/{user}/password` | 重置密码：`{ password }`；吊销对方的会话与 token | `system.user.password` |
-| `GET /system/roles/options` | 角色下拉 `[{ value: 标识, label: 显示名 }]`，只含启用角色 | `system.user.create` 或 `system.user.update` |
+| `GET /system/users/role-options` | 用户表单的角色下拉 `[{ value: 标识, label: 显示名 }]`，只含启用角色（`UserPolicy::viewFormOptions`） | `system.user.create` 或 `system.user.update` |
 | `GET /system/roles` | 分页；筛选 `name`、`title`、`status` | `system.role` |
 | `GET /system/roles/{role}` | 详情，含 `permissions`（权限码 `string[]`） | `system.role` |
 | `POST /system/roles` | 新增：`name`、`title`、`status`、`data_scope`、`remark`、`sort`、`permissions`（`string[]`） | `system.role.create` |
@@ -470,7 +553,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `PUT /system/menus/{menu}` | 修改：字段同新增 | `system.menu.update` |
 | `DELETE /system/menus/{menu}` | 删除 | `system.menu.delete` |
 
-- **菜单节点**（`/system/menus`，路由参数 `{menu}` 绑定 `Permission`）：
+- **节点**（`/system/menus`，路由参数 `{menu}` 绑定 `Permission`）：
   - 输出字段：顶层 `id`、`parent_id`（根为 null）、`type`、`name`、`path`（按钮为 null）、`component`（只有 `menu` 有值，其余为 null；与 `/menu/all` 不同，不换成 `IFrameView`）、`status`、`is_builtin`，以及 `meta`（`title`、`icon`（可为 null）、`order`，和 `meta` 列中已设置的白名单键）。列表的每个节点另有 `children`（叶子为空数组）；详情与新增、修改的响应不含 `children`。
   - 列表：整棵树，含停用节点与按钮，同级按 `sort`、`id` 排序；一次查询取出全部节点后在内存中组装。
   - 写入字段：`type`、`name`、`meta.title` 必填；`parent_id`（已存在的节点）、`status` 可选——新增时默认根节点、`enabled`，修改时未提交表示不变；`path`、`component`、`meta.*` 按下表。`meta.title`（i18n key 或纯文本）、`meta.icon` 存入 `title`、`icon` 列，`meta.order`（整数，默认 0）存入 `sort` 列（不接受顶层 `sort`、`title`、`icon`），其余键按白名单（§8.2）存入 `meta` 列；`meta` 整体替换：未提交的 `icon` 为 null、`order` 为 0、其余键去掉，值为 null 的键视为未设置。未知的 `meta` 键 → 422（错误挂在 `meta.<键>`）。新增成功返回 201，`guard_name` 为 `web`，`is_builtin` 为 false。
@@ -489,20 +572,20 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 类型层级、成环、生命线节点、有子节点不能删等规则见 §8.6。写入后 spatie 的权限缓存随之清除，`/menu/all`、`/auth/codes` 立即按新数据计算。
   - Policy（`PermissionPolicy`）方法：`viewAny` / `view`（`system.menu`）、`create`、`update`、`delete`（删除内置节点 403）；节点不按数据范围过滤。
 - **用户**的输出字段：`id`、`username`、`name`、`email`（可为 null）、`status`、`roles`、`created_at`、`updated_at`；不输出密码与两步验证的字段。
-  - `roles` 在**读接口**（列表、详情，以及新增、修改、启停的响应）中输出为对象数组 `[{ name: 标识, title: 显示名 }]`（含停用的角色，按 `sort`、`id` 排序）：列表要显示角色名，而能看用户列表的人不一定有角色下拉（`/system/roles/options`）的权限。**写接口**的 `roles` 入参是角色标识 `string[]`，前端回填表单时取 `roles.map(r => r.name)`。
+  - `roles` 在**读接口**（列表、详情，以及新增、修改、启停的响应）中输出为对象数组 `[{ name: 标识, title: 显示名 }]`（含停用的角色，按 `sort`、`id` 排序）：列表要显示角色名，而能看用户列表的人不一定有角色下拉（`/system/users/role-options`）的权限。**写接口**的 `roles` 入参是角色标识 `string[]`，前端回填表单时取 `roles.map(r => r.name)`。
   - 列表：经过数据范围（`visibleTo`，§8.4）；筛选 `username`、`name`、`email`（模糊）、`status`（精确）、`created_at`（区间，§6.3）；排序 `id`、`username`、`created_at`，默认 `-id`。查询在 Query 类 `UserList` 中，导出（`UserExporter`，§6.10）用同一个。
   - 导出：列 `id`、`username`、`name`、`email`、`status`（显示名）、`roles`（角色显示名，逗号分隔）、`created_at`；只含操作者在列表中能看到的用户（同一份筛选与数据范围）。
   - 新增：`username`（必填，`alpha_dash`，最长 64，统一存为小写，转小写后唯一）、`name`（必填）、`email`（可空、唯一）、`password`（必填，规则同修改密码：`Password::defaults()`）、`roles`（已存在角色的标识，可省略）、`status`（默认 `enabled`）。`created_by` 写入操作者。成功返回 201。
   - 修改：字段同新增，不含 `password`（提交即 422）；未提交 `roles` 表示角色不变；提交的 `status` 与当前不同时按启用 / 停用处理（规则同状态接口）。
   - 重置密码：`{ password }`，规则同新增；成功返回 `data: null`，对方全部的会话与 token 失效。不能重置自己的密码（403，自己的密码在个人设置中验证当前密码后修改）。
   - 删除：同时吊销对方的会话与 token；对方创建的用户 `created_by` 置空。
-  - Policy（`UserPolicy`）方法：`viewAny` / `view`（`system.user`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.user.status`）、`resetPassword`（`system.user.password`）；记录级方法都检查数据范围（`isVisibleTo`）。
+  - Policy（`UserPolicy`）方法：`viewAny` / `view`（`system.user`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.user.status`）、`resetPassword`（`system.user.password`）、`viewFormOptions`（用户表单的选项即角色下拉：`system.user.create` 或 `system.user.update`）；记录级方法都检查数据范围（`isVisibleTo`）。
 - **角色**的输出字段：`id`、`name`（标识）、`title`、`status`、`data_scope`、`remark`、`sort`、`is_super_admin`（是否为 `super-admin` 角色，前端据此隐藏授权树、禁用删除与停用）、`created_at`、`updated_at`；详情与新增、修改的响应另含 `permissions`（权限码 `string[]`），列表不含。
   - 列表：筛选 `name`、`title`（模糊）、`status`（精确）；排序 `sort`、`id`、`created_at`，默认 `sort,id`。
   - 新增、修改：`name`、`title` 必填；`status`（默认 `enabled`）、`data_scope`（必须是已登记的范围，默认 `self`；非超管只能选自己可授予的范围，§8.5）、`remark`、`sort`（默认 0）、`permissions`（已登记的权限码）可选；修改时未提交 `permissions` 表示权限不变，`super-admin` 角色不能提交 `permissions`（422）。新增成功返回 201。
-  - Policy（`RolePolicy`）方法：`viewAny` / `view`（`system.role`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.role.status`）、`viewFormOptions`（授权树与数据范围选项）、`viewOptions`（角色下拉）。
+  - Policy（`RolePolicy`）方法：`viewAny` / `view`（`system.role`）、`create`、`update`、`delete`、`changeStatus`（启用 / 停用，`system.role.status`）、`viewFormOptions`（角色表单的选项：授权树与数据范围）。表单的选项挂在使用它的表单所属的资源下、由该资源 Policy 的 `viewFormOptions` 授权（§4.4），因此角色下拉在 `/system/users/role-options`（`UserPolicy`）而不在 `/system/roles` 下。
 - **授权树**节点：`{ name, type, meta: { title, icon }, children }`，`icon` 可为 null，叶子的 `children` 为空数组；只含生效节点（本身及全部祖先都启用，含按钮与没有子节点的目录），同级按 `sort`、`id` 排序。
-- 路由参数加格式约束（§9）：`{user}`、`{role}`、`{menu}` 等模型 id 只匹配数字，固定路径（`options`、`permission-tree`、`data-scopes`）不会被当成 id。
+- 路由参数加格式约束（§9）：`{user}`、`{role}`、`{menu}` 等模型 id 只匹配数字，固定路径（`role-options`、`permission-tree`、`data-scopes`）不会被当成 id。
 - 业务保护规则（不能删除自己、内置节点不能删等）见 §8.6。
 
 ### 6.6 监控接口
@@ -525,16 +608,17 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `GET /monitor/failed-jobs` | 失败任务分页 | `monitor.failed-job` |
 | `GET /monitor/failed-jobs/{failed_job}` | 详情，另含 `payload` 摘要与 `trace`（已脱敏、截断） | `monitor.failed-job` |
 | `POST /monitor/failed-jobs/{failed_job}/retry` | 重试（限流） | `monitor.failed-job.retry` |
-| `POST /monitor/failed-jobs/retry` | 全部重试：`{ queue }`（可选，只重试该队列；限流） | `monitor.failed-job.retry` |
+| `POST /monitor/failed-jobs/retry-all` | 全部重试：`{ queue }`（可选，只重试该队列；限流） | `monitor.failed-job.retry` |
 | `DELETE /monitor/failed-jobs/{failed_job}` | 删除 | `monitor.failed-job.delete` |
-| `DELETE /monitor/failed-jobs` | 清空 | `monitor.failed-job.delete` |
+| `DELETE /monitor/failed-jobs/flush` | 清空 | `monitor.failed-job.delete` |
 | `GET /monitor/health` | 最近一次健康检查的结果 | `monitor.health` |
 | `POST /monitor/health/check` | 立即检查：同步执行全部检查，返回结果（限流） | `monitor.health.check` |
 | `GET /monitor/system-info` | 系统信息（只读） | `monitor.health` |
 | `GET /monitor/backups`、`GET /monitor/backups/destinations`、`POST /monitor/backups/run` | 备份列表、各备份盘的健康状态、立即备份（§6.10） | `monitor.backup`、`monitor.backup.run` |
 
-- **菜单节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）、`monitor.schedule`（`/monitor/schedule`，组件 `/monitor/schedule/list`，按钮 `monitor.schedule.run`）、`monitor.failed-job`（`/monitor/failed-job`，组件 `/monitor/failed-job/list`，按钮 `monitor.failed-job.retry`、`monitor.failed-job.delete`）、`monitor.health`（`/monitor/health`，组件 `/monitor/health/index`，按钮 `monitor.health.check`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token；健康检查与系统信息合并为一页（`monitor.health`）。备份页 `monitor.backup`（按钮 `monitor.backup.run`）见 §6.10。
-- 定时任务用 `schedule`（Laravel 的“任务调度”，`schedule:*` 命令）而不是 `job` 命名：`job` 在 Laravel 中指队列任务，与相邻的失败任务（`failed-job`）混淆。
+- **节点**（`app/Core/Monitor/resources/menus.php`）：目录 `monitor`（`/monitor`，`lucide:monitor-cog`，`order` 9100，紧随 `system` 的 9000）下有菜单 `monitor.online`（`/monitor/online`，组件 `/monitor/online/list`，按钮 `monitor.online.logout`）、`monitor.operation-log`（`/monitor/operation-log`，组件 `/monitor/operation-log/list`）、`monitor.login-log`（`/monitor/login-log`，组件 `/monitor/login-log/list`）、`monitor.schedule`（`/monitor/schedule`，组件 `/monitor/schedule/list`，按钮 `monitor.schedule.run`）、`monitor.failed-job`（`/monitor/failed-job`，组件 `/monitor/failed-job/list`，按钮 `monitor.failed-job.retry`、`monitor.failed-job.delete`）、`monitor.health`（`/monitor/health`，组件 `/monitor/health/index`，按钮 `monitor.health.check`）。日志没有按钮。在线会话页用两个标签页分别展示会话与 token；健康检查与系统信息合并为一页（`monitor.health`）。备份页 `monitor.backup`（按钮 `monitor.backup.run`）见 §6.10。
+- 定时任务用 `schedule`（Laravel 的“任务调度”，`schedule:*` 命令）而不是 `job` 命名：`job` 在 Laravel 中指队列任务，与相邻的失败任务（`failed-job`）混淆。按 §4.4 的“Http 按 URL、领域按模型”：URL、权限码与 Http 层的类用 `schedule`（`ScheduleController`、`ScheduleLogController`、`RunScheduleController`、`ScheduleResource`），模型、Policy、Action、Query 用 schedule-monitor 的 `ScheduledTask`（`ScheduledTaskPolicy`、`RunScheduledTask`、`ScheduledTaskList`）。
+- 路由名（即操作日志的 `description`）：`admin.monitor.schedules.index`、`admin.monitor.schedules.logs.index`、`admin.monitor.schedules.run`、`admin.monitor.failed-jobs.retry`（单条）、`admin.monitor.failed-jobs.retry-all`、`admin.monitor.failed-jobs.destroy`、`admin.monitor.failed-jobs.flush`、`admin.monitor.health`、`admin.monitor.health.check`、`admin.monitor.backups.run`、`admin.monitor.online.sessions.destroy`、`admin.monitor.online.tokens.destroy`。
 - 路由参数加格式约束（§9）：`{operation_log}`、`{login_log}`、`{token}`、`{schedule}` 只匹配数字，`{session}` 只匹配 16 位字母与数字，`{failed_job}` 只匹配 UUID。
 
 **日志的存储**
@@ -557,7 +641,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - **截断**（与脱敏一起在 Action 中完成）：字符串值超过 `config('core.monitor.operation_log.max_value_length')`（默认 1000）个字符的，保留前面部分并加上 `…(truncated)`，递归处理，`route_parameters` 同样适用；脱敏、截断后的 `payload` 编码为 JSON 仍超过 `max_payload_bytes`（默认 65536 字节）时，整体替换为 `{ "_truncated": true, "_bytes": 原始请求体的 JSON 字节数 }`。
 - **脱敏**：键名（不区分大小写，支持 `*` 通配）与 `config('core.monitor.masked_keys')` 匹配的值整体替换为 `******`，递归处理嵌套对象与数组；默认 `*password*`（含 `password_confirmation`、`current_password`）、`*token*`、`*secret*`、`code`、`recovery_code`。`route_parameters` 同样脱敏。脱敏在 Action 中完成，任何调用方写入的操作日志都经过它。脱敏与截断的规则由 Monitor 的 `DataMasker` 实现，失败任务、定时任务的输出共用同一份规则与键名（下文“失败任务”）。
 - **写入失败不影响响应**：在响应发送之后写入（`defer(...)->always()`，4xx / 5xx 也写），异常只 `report()`，不抛出。PHP-FPM 下在 `fastcgi_finish_request()` 之后执行；Octane 下由 worker 在发送响应后执行（框架的 `InvokeDeferredCallbacks`），不延迟响应，但该 worker 要等写完才接下一个请求。数据只在闭包中捕获，不放静态属性或单例。
-- 文案：`description` 是路由名，由前端翻译（前端 locales 中以路由名为 key，找不到时直接显示路由名）；后端不翻译（§5.5）。
+- 文案：`description` 是路由名，由前端翻译（前端 locales 中以路由名为 key，找不到时直接显示路由名）；后端不翻译（§5.5）。**路由名是接口契约的一部分**：改动路由名（含路径末段、嵌套资源的写法）就改动了操作日志的 `description`，前端 locales 中的键要同步改，旧日志保留旧名（找不到翻译时显示路由名）。路由名的格式见 §4.4 的表二。
 - 输出字段：`id`、`user_id`（`causer_id`，用户被删除后保留原值）、`username`、`description`、`method`、`path`、`status`、`duration_ms`、`ip_address`、`user_agent`、`request_id`、`created_at`；详情另含 `route_parameters` 与 `payload`（已脱敏）：通常是对象，为空时为 `[]`（响应包装按数组解码，无法区分空对象与空数组）。
 - 列表：筛选 `user_id`、`method`（大写）、`status`、`request_id`（精确），`username`、`description`、`ip_address`（模糊），`created_at`（区间，§6.3）；排序 `id`、`created_at`，默认 `-id`。
 
@@ -627,7 +711,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   | `Database` | 默认数据库连接可用 |
   | `DatabaseConnectionCount` | 只在默认连接为 MySQL / MariaDB / PostgreSQL 时注册：连接数超过 50 警告，超过 100 失败 |
   | `Cache` | 默认缓存可读写 |
-  | `UsedDiskSpace` | 磁盘使用率超过 70% 警告，超过 90% 失败；依赖 `df` 命令，Windows 下默认不注册（§11.5，`CORE_HEALTH_DISK_SPACE`） |
+  | `UsedDiskSpace` | 磁盘使用率超过 70% 警告，超过 90% 失败；依赖 `df` 命令，Windows 下默认不注册（§11.5，`CORE_HEALTH_DISK_SPACE_ENABLED`） |
   | `Queue` | 默认队列：心跳任务每分钟派发一次，最近 5 分钟内被 worker 执行过 |
   | `Schedule` | 调度心跳在 2 分钟内（`schedule:run` 每分钟执行） |
   | `DebugMode` | `APP_DEBUG` 为 false |
@@ -690,7 +774,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `PUT /system/settings/{key}` | 修改单个参数：`{ value }` | `system.setting.update` |
 | `PUT /system/setting-groups/{group}` | 按分组批量修改：`{ <参数名>: 值, … }` | `system.setting.update` |
 
-**菜单节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.dict`（`/system/dict`，组件 `/system/dict/list`，`lucide:book-open-text`，`order` 40；按钮 `create`、`update`、`delete`，字典类型与字典项共用）、`system.setting`（`/system/setting`，组件 `/system/setting/index`，`lucide:sliders-horizontal`，`order` 50；按钮 `update`——参数不能新增、删除，没有对应按钮）。字典页是“类型列表 + 选中类型的字典项”，参数页是按分组的表单（与 `monitor.health` 一样用 `index`）。
+**节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.dict`（`/system/dict`，组件 `/system/dict/list`，`lucide:book-open-text`，`order` 40；按钮 `create`、`update`、`delete`，字典类型与字典项共用）、`system.setting`（`/system/setting`，组件 `/system/setting/index`，`lucide:sliders-horizontal`，`order` 50；按钮 `update`——参数不能新增、删除，没有对应按钮）。字典页是“类型列表 + 选中类型的字典项”，参数页是按分组的表单（与 `monitor.health` 一样用 `index`）。
 
 **字典与枚举的分工**：代码要按值分支的固定集合（状态、类型、事件）用**枚举**（§10.1），值随代码发布、不能在后台改；管理员可以增删改、代码只校验“是否合法”的值列表（文章来源、客户行业）用**字典**。
 
@@ -729,7 +813,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
                   'type' => 'int',                    // SettingType：string、text、int、float、bool、json
                   'name' => 'system.setting.auth.loginRateLimit',
                   'remark' => 'system.setting.auth.loginRateLimitRemark',   // 可选
-                  'config' => 'core.auth.login_rate_limit',  // 默认值来源：config 键；或用 'default' => 值，二者选一
+                  'config' => 'core.system.auth.login_rate_limit',  // 默认值来源：config 键；或用 'default' => 值，二者选一
                   'public' => false,                  // 是否出现在公开参数接口中，默认 false
                   'rules' => ['min:1', 'max:1000'],   // 额外校验规则，可选
               ],
@@ -764,7 +848,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - System 声明的公开参数：`site.name`（站点名称，默认 `config('app.name')`）、`site.login_notice`（登录页提示文案，`text`，默认空字符串）。
 - System 声明的其他分组：`auth`（`auth.login_rate_limit`，§7.2）、`attachment`（上传的类型白名单 `attachment.allowed_extensions` 与大小上限 `attachment.max_size`，§6.8）。
 
-**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.auth.login_rate_limit')`（`CORE_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8），已读通知的保留天数、公告每批发送的人数与通知链接（§6.9），导出的保留时长、并发上限、分块大小、超时、通知链接与发起导出的限流（§6.10），富文本净化的档位（§9），备份的盘、保留策略与通知（`config/backup.php`，§6.10）同样是部署级配置。
+**接入现有配置**：登录与两步验证的限流次数改由系统参数 `auth.login_rate_limit` 控制（§7.2），`config('core.system.auth.login_rate_limit')`（`CORE_AUTH_LOGIN_RATE_LIMIT`）是它的默认值来源。其余 `config/core.php` 的项都是部署级配置，留在 config：API 与运维动作的限流阈值（§5.8 列为部署级）、分页、`home_path`（依赖前端路由）、前端地址与重置密码路径、脱敏键名与日志长度、健康检查阈值；日志保留天数由包的命令读取 config，也留在 config；附件的存储盘、地址有效期、孤儿保留小时数、上传限流（§6.8），已读通知的保留天数、公告每批发送的人数与通知链接（§6.9），导出的保留时长、并发上限、分块大小、超时、通知链接与发起导出的限流（§6.10），富文本净化的档位（§9），备份的盘、保留策略与通知（`config/backup.php`，§6.10）同样是部署级配置。
 
 **枚举选项**（`GET /options/enums?names=a,b`）
 
@@ -775,7 +859,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 **声明与同步**
 
-字典与参数的声明与菜单节点同构：Core 提供接口（`Services/DictRegistry`、`Services/SettingRegistry`）与 `Services` 中的单例实现，只保存启动时注册的静态声明；各模块在 Provider 的 `boot()` 中 `register(require __DIR__.'/resources/dicts.php')`（`settings.php` 同理）；同步命令由 `core:sync` 依次执行（`DatabaseSeeder` 调用，部署时也执行，§11.4）。都幂等（再次执行没有变更），在一个事务中，结束时清除缓存，在命令输出中列出每一类变更。
+字典与参数的声明与节点同构：Core 提供接口（`Services/DictRegistry`、`Services/SettingRegistry`）与 `Services` 中的单例实现，只保存启动时注册的静态声明；各模块在 Provider 的 `boot()` 中 `register(require __DIR__.'/resources/dicts.php')`（`settings.php` 同理）；同步命令由 `core:sync` 依次执行（`DatabaseSeeder` 调用，部署时也执行，§11.4）。都幂等（再次执行没有变更），在一个事务中，结束时清除缓存，在命令输出中列出每一类变更。
 
 ```php
 // resources/dicts.php
@@ -819,7 +903,7 @@ return [
 | `GET /system/attachments` | 附件管理：分页，经过数据范围 | `system.attachment` |
 | `DELETE /system/attachments/{attachment}` | 删除附件（连同文件）；已绑定的不能删 | `system.attachment.delete` |
 
-**菜单节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.attachment`（`/system/attachment`，组件 `/system/attachment/list`，`lucide:paperclip`，`order` 60；按钮 `delete`）。附件只能上传与删除，没有新增、修改按钮：上传是所有登录用户的能力（下文），不归附件管理页。
+**节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.attachment`（`/system/attachment`，组件 `/system/attachment/list`，`lucide:paperclip`，`order` 60；按钮 `delete`）。附件只能上传与删除，没有新增、修改按钮：上传是所有登录用户的能力（下文），不归附件管理页。
 
 **表与模型**
 
@@ -830,11 +914,11 @@ return [
 
 **存储**
 
-- 存储盘为部署级配置：`config('core.attachments.disk')`（`CORE_ATTACHMENT_DISK`，默认 `local`，即 `storage/app/private`，**不在 Web 根目录下**）。生产可换成 S3 等私有盘；**不要配成 `public` 盘**（任何人都能按路径直接访问）。
+- 存储盘为部署级配置：`config('core.system.attachment.disk')`（`CORE_ATTACHMENT_DISK`，默认 `local`，即 `storage/app/private`，**不在 Web 根目录下**）。生产可换成 S3 等私有盘；**不要配成 `public` 盘**（任何人都能按路径直接访问）。
 - 下载、预览一律经过本入口的签名路由（`URL::temporarySignedRoute()`），由 `Storage::disk()->download()` / `response()` 流式输出。
-- **过期时间对齐到固定的时间窗口**：`expires = (floor(now / ttl) + 2) × ttl`（Unix 秒）。同一个窗口内签出的地址**完全相同**，浏览器可以缓存；有效期在 ttl 与 2 × ttl 之间，至少一个 ttl，不会刚签出就过期。窗口长度：下载、预览为 `config('core.attachments.url_ttl')` 分钟（`CORE_ATTACHMENT_URL_TTL`，默认 30）；头像为 `config('core.attachments.avatar_url_ttl')` 分钟（`CORE_ATTACHMENT_AVATAR_URL_TTL`，默认 1440，即 24 小时）。**不使用**框架 `local` 盘的 `storage.local` 签名路由（`config/filesystems.php` 中 `local.serve` 为 false，不注册 `/storage/{path}`）与 S3 的 `temporaryUrl()`：
+- **过期时间对齐到固定的时间窗口**：`expires = (floor(now / ttl) + 2) × ttl`（Unix 秒）。同一个窗口内签出的地址**完全相同**，浏览器可以缓存；有效期在 ttl 与 2 × ttl 之间，至少一个 ttl，不会刚签出就过期。窗口长度：下载、预览为 `config('core.system.attachment.url_ttl_minutes')` 分钟（`CORE_ATTACHMENT_URL_TTL_MINUTES`，默认 30）；头像为 `config('core.system.attachment.avatar_url_ttl_minutes')` 分钟（`CORE_ATTACHMENT_AVATAR_URL_TTL_MINUTES`，默认 1440，即 24 小时）。**不使用**框架 `local` 盘的 `storage.local` 签名路由（`config/filesystems.php` 中 `local.serve` 为 false，不注册 `/storage/{path}`）与 S3 的 `temporaryUrl()`：
   - 同一套做法适用于任何盘，响应头（下文“安全”）在一处统一设置，过期、篡改的处理也只有一种；
-  - 授权在**签发时**完成：只有已经通过授权的接口（上传、附件详情、业务记录自己的接口）才签发 URL；签名路由本身不需要登录，`<img src>`、`<a href>`、新标签页都能直接使用，不依赖 Cookie 与 `Authorization` 头。代价是地址不绑定用户：签发之后收回权限（数据范围、撤回公告、改动角色）不会让已发出的地址失效，在有效期内（最长 2 × ttl）仍可下载，地址也可能进入浏览器历史与代理日志——因此 ttl 保持较短，不要调大 `url_ttl`；
+  - 授权在**签发时**完成：只有已经通过授权的接口（上传、附件详情、业务记录自己的接口）才签发 URL；签名路由本身不需要登录，`<img src>`、`<a href>`、新标签页都能直接使用，不依赖 Cookie 与 `Authorization` 头。代价是地址不绑定用户：签发之后收回权限（数据范围、撤回公告、改动角色）不会让已发出的地址失效，在有效期内（最长 2 × ttl）仍可下载，地址也可能进入浏览器历史与代理日志——因此 ttl 保持较短，不要调大 `url_ttl_minutes`；
   - 代价是文件经过 PHP 输出；大文件走 S3 时，以后可以按需改为 S3 的 `temporaryUrl()`（带 `ResponseContentDisposition`），接口字段不变。
 - 签名为绝对地址（含域名）：前端与 API 不同子域时也可直接使用。反向代理后须配置可信代理（§11.5），否则签发与校验的地址不一致。过期或签名不对 → 403（框架的 `InvalidSignatureException`）；附件不存在 → 404。
 - **头像也用签名 URL，不放公开盘**：只有一种存储与一种访问方式，S3 私有桶同样适用，不需要 `storage:link`；上传的文件不会因为“设为头像”而变成永久公开的地址。头像地址的窗口更长（默认 24 小时，有效 24～48 小时），同一窗口内 `/user/info` 返回的地址不变，页面上已加载的头像可以被浏览器缓存，不会在一次使用中途失效；前端启动、刷新页面时会拿到新窗口的地址。
@@ -892,14 +976,14 @@ return [
 
 **清理**
 
-- 孤儿：`Attachment` 使用框架的 `Prunable`，`model:prune` 删除**未绑定**且创建于 `config('core.attachments.orphan_ttl')` 小时（`CORE_ATTACHMENT_ORPHAN_HOURS`，默认 24）之前的附件。逐条删除（不用 `MassPrunable`），以便触发删除文件。调度每天执行（`routes/console.php`）。N 是存储维护策略，与日志保留天数一样放在 config，不进系统参数。
+- 孤儿：`Attachment` 使用框架的 `Prunable`，`model:prune` 删除**未绑定**且创建于 `config('core.system.attachment.orphan_ttl_hours')` 小时（`CORE_ATTACHMENT_ORPHAN_TTL_HOURS`，默认 24）之前的附件。逐条删除（不用 `MassPrunable`），以便触发删除文件。调度每天执行（`routes/console.php`）。N 是存储维护策略，与日志保留天数一样放在 config，不进系统参数。
 - 删除附件记录（管理接口、`SyncAttachments` 替换、绑定对象被删除、孤儿清理）时，由模型的 `deleted` 事件在**事务提交后**删除文件（`DB::afterCommit()`，不在事务中时立即执行），事务回滚时文件保留，不会出现“记录还在、文件没了”。反过来“文件还在、记录没了”只会在提交后删文件失败时出现（只 `report()`），无害。
 
 **头像**（第一个使用方）
 
 - 头像是用户在 `avatar` 用途上绑定的附件（`User` 使用 `HasAttachments`，`avatar()` 为该用途的 `morphOne`），`users` 表不再有 `avatar` 列。
 - 设置：个人资料（Fortify 的 `PUT /user/profile-information`，§7.2）提交 `avatar_id`：自己上传的、未绑定的图片附件（`OwnedAttachment`，`mimeTypes` 为预览白名单），或当前的头像；`null` 表示去掉头像。替换或去掉后，原头像附件连同文件删除。未提交 `avatar_id` 表示不变。
-- 输出：`/user/info` 的 `avatar` 为头像的**预览地址**（签名 URL，窗口为 `avatar_url_ttl`，同一窗口内不变），没有头像时为 null（§6.2）。
+- 输出：`/user/info` 的 `avatar` 为头像的**预览地址**（签名 URL，窗口为 `avatar_url_ttl_minutes`，同一窗口内不变），没有头像时为 null（§6.2）。
 - 用户管理**不能**设置他人头像：头像是个人资料，由本人维护；用户管理的接口与输出不变。
 
 ### 6.9 消息接口
@@ -914,7 +998,7 @@ return [
 | `PUT /notifications/read-all` | 本人的未读全部标为已读 | 登录即可 |
 | `DELETE /notifications/{notification}` | 删除单条 | 本人（`NotificationPolicy::delete`） |
 | `GET /announcements` | 我收到的公告分页；筛选 `title`、`level`、`published_at` | 登录即可（只查发给本人的） |
-| `GET /announcements/{announcement}` | 我收到的公告详情，含 `content`、`attachments` | `AnnouncementPolicy::read` |
+| `GET /announcements/{announcement}` | 我收到的公告详情，含 `content`、`attachments` | `AnnouncementPolicy::viewReceived` |
 | `GET /message/announcements` | 公告管理分页，经过数据范围 | `message.announcement` |
 | `GET /message/announcements/{announcement}` | 详情，含 `content`、`attachments` | `message.announcement` |
 | `GET /message/announcements/role-options` | 目标角色下拉 `[{ value: 标识, label: 显示名 }]`，只含启用角色 | `message.announcement.create` 或 `.update` |
@@ -924,9 +1008,9 @@ return [
 | `POST /message/announcements/{announcement}/publish` | 发布：分批发送站内通知（队列），立即返回 | `message.announcement.publish` |
 | `POST /message/announcements/{announcement}/revoke` | 撤回：删除已发出的通知 | `message.announcement.revoke` |
 
-**菜单节点**（`app/Core/Message/resources/menus.php`）：目录 `message`（`/message`，`lucide:message-square`，`order` 9200，排在 `system`（9000）、`monitor`（9100）之后；管理员可在菜单管理中调整）下有菜单 `message.announcement`（`/message/announcement`，组件 `/message/announcement/list`，`lucide:megaphone`；按钮 `create`、`update`、`delete`、`publish`、`revoke`）。
+**节点**（`app/Core/Message/resources/menus.php`）：目录 `message`（`/message`，`lucide:message-square`，`order` 9200，排在 `system`（9000）、`monitor`（9100）之后；管理员可在菜单管理中调整）下有菜单 `message.announcement`（`/message/announcement`，组件 `/message/announcement/list`，`lucide:megaphone`；按钮 `create`、`update`、`delete`、`publish`、`revoke`）。
 
-**通知中心与“我收到的公告”不是菜单节点**：它们是每个登录用户都有的个人功能，只需登录（`LOGIN_ONLY_ROUTES`，或只检查“是不是本人”的 Policy）。前端用静态路由（与个人中心相同，§6.2 的 `mixed` 模式），如 `/notifications`（通知中心）、`/announcements`（我收到的公告）、`/announcements/:id`（公告详情，公告通知的 `link` 指向它）；顶栏的通知铃铛调用 `/notifications` 与 `/notifications/unread-count`。
+**通知中心与“我收到的公告”不是节点**：它们是每个登录用户都有的个人功能，只需登录（`LOGIN_ONLY_ROUTES`，或只检查“是不是本人”的 Policy）。前端用静态路由（与个人中心相同，§6.2 的 `mixed` 模式），如 `/notifications`（通知中心）、`/announcements`（我收到的公告）、`/announcements/:id`（公告详情，公告通知的 `link` 指向它）；顶栏的通知铃铛调用 `/notifications` 与 `/notifications/unread-count`。
 
 路由参数：`{notification}` 只匹配 UUID，`{announcement}` 只匹配数字（§9）。
 
@@ -934,20 +1018,20 @@ return [
 
 - 表：官方的 `notifications`（`php artisan make:notifications-table`）：`id`（UUID）、`type`、`notifiable_type` / `notifiable_id`（多态，存别名 `user`，§4.5）、`data`、`read_at`、时间戳。唯一的改动：`data` 由 `text` 改为 `json`——撤回公告时按 `data->subject` 查找已发出的通知，PostgreSQL 的 JSON 路径查询要求列是 json 类型；MySQL、SQLite 不受影响，框架的 `array` 转换照常工作。
 - 写入用框架的 database 通道（`$user->notify()`、`Notification::send()`，写入 `User::notifications()`，模型是框架的 `DatabaseNotification`）；读取、授权与清理用 Message 的模型 `App\Core\Message\Models\Notification`（继承 `DatabaseNotification`，同一张表，多态别名 `notification`）。System 不依赖 Message，`User` 保持框架的 `Notifiable`。
-- 用户被删除时，他的通知一并删除（Message 监听 `User` 的 `deleted` 事件）。
+- 用户被删除时，他的通知一并删除（Message 监听 Core 事件 `UserDeleting`，在删除的事务中，§5.5）。
 
 **通知类的约定**（扩展点 §5.5，模块接入通知中心的唯一方式）
 
 所有出现在通知中心的通知都继承 `App\Core\Message\Notifications\InboxNotification`（`tests/Arch` 强制：`app/` 中 `Illuminate\Notifications\Notification` 的子类都必须继承它）。基类固定了存储与输出的结构，模块只实现两个方法：
 
 ```php
-class ArticleApproved extends InboxNotification
+class ArticleApprovedNotification extends InboxNotification
 {
     public function __construct(private readonly Article $article) {}
 
     public static function type(): string
     {
-        return 'content.article_approved';          // 对外的类型名：小写点分、以模块名开头、全局唯一
+        return 'content.article_approved';          // 对外的类型名：类名去掉 Notification 的 snake_case，业务模块加模块前缀
     }
 
     public function toInbox(object $notifiable): NotificationContentData
@@ -962,10 +1046,10 @@ class ArticleApproved extends InboxNotification
     }
 }
 
-$user->notify(new ArticleApproved($article));       // 发送；大量接收人时实现 ShouldQueue 或分批（如公告）
+$user->notify(new ArticleApprovedNotification($article));       // 发送；大量接收人时实现 ShouldQueue 或分批（如公告）
 ```
 
-- `type()`：对外的类型名（格式 `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`，以模块名开头，全局唯一，`tests/Arch` 检查）。基类的 `databaseType()`、`broadcastType()`（`final`）返回它：库中的 `type` 列、接口与推送中的 `type` 都是这个名称，**不出现 PHP 类名**，移动、重命名类不用迁移数据（与多态别名同理，§4.5）。前端按 `type` 区分图标、筛选，类型的显示名由前端翻译。
+- `type()`：对外的类型名（对外标识，§4.4：格式 `^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$`；表达“发生了什么事”，写成 `<事物>_<过去分词>`，与发送方是哪个模块无关；Core 不带前缀，如 `announcement_published`、`export_finished`，业务模块为 `<模块>.<snake>`；就是类名去掉 `Notification` 后的 snake_case，全局唯一，`tests/Arch` 检查）。类名以 `Notification` 结尾，不与同名的事件冲突（事件 `ExportFinished` ↔ 通知 `ExportFinishedNotification`）。基类的 `databaseType()`、`broadcastType()`（`final`）返回它：库中的 `type` 列、接口与推送中的 `type` 都是这个名称，**不出现 PHP 类名**，移动、重命名类不用迁移数据（与多态别名同理，§4.5）。前端按 `type` 区分图标、筛选，类型的显示名由前端翻译。
 - `toInbox()`：返回只读数据对象 `App\Core\Message\Data\NotificationContentData`，基类的 `toDatabase()`、`toArray()`（`final`）由它生成。构造时校验，不符合时抛出 `InvalidArgumentException`（开发期的错误，发送即失败）：
 
   | 字段 | 规则 |
@@ -988,7 +1072,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 未读数：`{ count }`。
 - 标记已读：已读的保持原 `read_at`（幂等），返回该通知；全部已读：本人全部未读的一次更新，返回 `data: null`。删除：返回 `data: null`。不提供“标为未读”与“清空”，需要时再加。
 - Policy（`NotificationPolicy`）：`viewAny`（任何登录用户，列表只查本人的）；`view`、`update`（标记已读）、`delete`：通知属于操作者本人，否则 403；`create` 等一律拒绝（通知只由代码发送）。**不按数据范围、不按权限码**：通知只属于接收人本人，管理员也不能查看他人的通知。
-- **清理**：模型使用框架的 `MassPrunable`，`model:prune` 删除**已读**且创建于 `config('core.message.notifications.read_ttl')` 天（`CORE_NOTIFICATION_READ_DAYS`，默认 90）之前的通知，未读的不清理；调度每天执行（`routes/console.php`）。保留天数与日志、附件孤儿的保留时间一样是部署级配置（§6.7）。
+- **清理**：模型使用框架的 `MassPrunable`，`model:prune` 删除**已读**且创建于 `config('core.message.notification.read_ttl_days')` 天（`CORE_NOTIFICATION_READ_TTL_DAYS`，默认 90）之前的通知，未读的不清理；调度每天执行（`routes/console.php`）。保留天数与日志、附件孤儿的保留时间一样是部署级配置（§6.7）。
 
 **公告**
 
@@ -1004,17 +1088,17 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
   - 只有草稿能修改、发布，只有已发布的能撤回，已发布的不能删除（先撤回）：只看公告本身，按 §6.1 由 Policy 返回 403。两人同时操作时，Action 在事务中锁行复核，状态已变时 422（`message`）。
 - **发布**：Action `PublishAnnouncement` 锁行复核仍是草稿 → `published`、`published_at`、`published_by` → 派发队列任务 `SendAnnouncement`（`ShouldQueueAfterCommit`，事务提交后才入队），接口立即返回公告。
   - **接收人**：启用的用户；目标为 `roles` 时，另须拥有任一目标角色且该角色启用（停用的角色不生效，与 §8.4 一致）。
-  - `SendAnnouncement`（worker 中执行）：公告仍是已发布时，按 `chunkById` 取接收人的 id，每 `config('core.message.announcements.batch_size')`（`CORE_ANNOUNCEMENT_BATCH_SIZE`，默认 500）个一批，派发一个 `Bus::batch`（名称 `announcement:<id>`，`allowFailures()`：一批失败不影响其他批，失败的批在失败任务中重试），每批一个 `SendAnnouncementChunk`。没有接收人时不派发。
-  - `SendAnnouncementChunk`：批次已取消时跳过；在事务中锁住公告行、复核仍是已发布，按上面的条件重新查询这一批的用户（入队后被停用、删除、移出目标角色的不再收到），`Notification::sendNow()` 写入通知 `AnnouncementPublished`：`type` 为 `message.announcement`，`title` 为公告标题（纯文本），`content` 为正文的纯文本摘要（前 100 个字符），`level` 同公告，`link` 为 `config('core.message.announcements.link')`（`CORE_ANNOUNCEMENT_LINK`，默认 `/announcements/{id}`，前端路由，与 §6.2 的 `home_path` 同属部署级配置），`subject` 为公告。一批在一个事务中：失败时整批回滚，重试不会重复发送（`#[Tries(3)]`）；提交之后才失败的重试（worker 在确认任务前崩溃、在“失败任务”中重试 `SendAnnouncement`）跳过已经收到这条公告的用户（按 `Notification::about()` 与这一批的用户 id 查找）；与撤回用同一行锁互斥，撤回之后不会再写入。
+  - `SendAnnouncement`（worker 中执行）：公告仍是已发布时，按 `chunkById` 取接收人的 id，每 `config('core.message.announcement.batch_size')`（`CORE_ANNOUNCEMENT_BATCH_SIZE`，默认 500）个一批，派发一个 `Bus::batch`（名称 `announcement:<id>`，`allowFailures()`：一批失败不影响其他批，失败的批在失败任务中重试），每批一个 `SendAnnouncementChunk`。没有接收人时不派发。
+  - `SendAnnouncementChunk`：批次已取消时跳过；在事务中锁住公告行、复核仍是已发布，按上面的条件重新查询这一批的用户（入队后被停用、删除、移出目标角色的不再收到），`Notification::sendNow()` 写入通知 `AnnouncementPublishedNotification`：`type` 为 `announcement_published`，`title` 为公告标题（纯文本），`content` 为正文的纯文本摘要（前 100 个字符），`level` 同公告，`link` 为 `config('core.message.announcement.link')`（`CORE_ANNOUNCEMENT_LINK`，默认 `/announcements/{id}`，前端路由，与 §6.2 的 `home_path` 同属部署级配置），`subject` 为公告。一批在一个事务中：失败时整批回滚，重试不会重复发送（`#[Tries(3)]`）；提交之后才失败的重试（worker 在确认任务前崩溃、在“失败任务”中重试 `SendAnnouncement`）跳过已经收到这条公告的用户（按 `Notification::about()` 与这一批的用户 id 查找）；与撤回用同一行锁互斥，撤回之后不会再写入。
   - 任务在默认队列（worker 须处理，§11.3）；队列驱动为 `sync` 时在请求中执行（只用于开发、测试）。批处理需要框架的 `job_batches` 表（`0001_01_01_000002_create_jobs_table` 已创建）。
 - **撤回**：Action `RevokeAnnouncement` 锁行复核仍是已发布 → `revoked`、`revoked_at`，并在同一事务中**删除已经发出的通知**（`Notification::about($announcement)`，按 `data->subject` 查找，没有索引；撤回是低频操作）：接收人的通知中心里不再出现它，也不会点进一个看不了的公告。尚未执行的批在锁住公告行后看到已撤回，直接跳过。不采用“标记失效”：失效的通知仍要显示标题，等于撤回后内容仍在传播。
 - 删除：草稿与已撤回的公告可以删除，附件一并删除（`HasAttachments`）；已撤回的通知在撤回时已删除。
 - **我收到的公告**（`/announcements`）：已发布、且目标包含当前用户（全部用户，或当前拥有任一启用的目标角色）的公告。按**当前**的角色计算，而不是发布时的接收人名单：发布后才创建、才分配到角色的用户也能在列表中看到（不补发通知），被移出目标角色后看不到。
   - 输出 `id`、`title`、`level`、`published_at`、`publisher`；详情另含 `content`、`attachments`。不输出状态、目标与创建人等管理字段。
   - 列表：筛选 `title`（模糊）、`level`（精确）、`published_at`（区间）；排序 `published_at`，默认 `-published_at`。
-  - 详情：`AnnouncementPolicy::read`——已发布且目标包含操作者，否则 403（草稿、已撤回、不是发给自己的）。附件的签名地址由详情接口签发；`/attachments/{id}` 的访问权委托给公告的 `view`（§6.8），只对公告管理员开放。
-- **授权**（`AnnouncementPolicy`）：`viewAny` / `view`（`message.announcement`）、`create`、`update`（草稿）、`delete`（不是已发布）、`publish`（草稿）、`revoke`（已发布）、`viewFormOptions`（目标角色下拉：`create` 或 `update`）；记录级方法都检查数据范围（`isVisibleTo`，按 `created_by`：公告是管理员创建的业务记录，§8.4）；`read`（我收到的公告）不需要权限码、不按数据范围，只看是否发给了操作者。
-- **目标角色下拉**：与 `/system/roles/options` 相同（启用角色，按 `sort`、`id`），但按公告的权限码授权：能写公告的人不一定能管理用户。
+  - 详情：`AnnouncementPolicy::viewReceived`——已发布且目标包含操作者，否则 403（草稿、已撤回、不是发给自己的）。附件的签名地址由详情接口签发；`/attachments/{id}` 的访问权委托给公告的 `view`（§6.8），只对公告管理员开放。
+- **授权**（`AnnouncementPolicy`）：`viewAny` / `view`（`message.announcement`）、`create`、`update`（草稿）、`delete`（不是已发布）、`publish`（草稿）、`revoke`（已发布）、`viewFormOptions`（目标角色下拉：`create` 或 `update`）；记录级方法都检查数据范围（`isVisibleTo`，按 `created_by`：公告是管理员创建的业务记录，§8.4）；`viewReceived`（我收到的公告）不需要权限码、不按数据范围，只看是否发给了操作者。
+- **目标角色下拉**：与用户表单的 `/system/users/role-options` 数据相同（启用角色，按 `sort`、`id`，同一个 Query `RoleOptions`），但挂在公告下、按公告的权限码授权（`AnnouncementPolicy::viewFormOptions`）：能写公告的人不一定能管理用户。
 
 ### 6.10 导出与备份接口
 
@@ -1030,7 +1114,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 | `GET /monitor/backups/destinations` | 各备份盘的健康状态（数组，**不分页**，§6.3 的例外） | `monitor.backup` |
 | `POST /monitor/backups/run` | 立即备份：派发调度中已定义的 `backup:run`，立即返回（限流） | `monitor.backup.run` |
 
-**菜单节点**：`system.user` 下增加按钮 `system.user.export`（`common.export`）。目录 `monitor` 下增加菜单 `monitor.backup`（`/monitor/backup`，组件 `/monitor/backup/list`，`lucide:archive`，`order` 70；按钮 `monitor.backup.run`）。**“我的导出”不是菜单节点**：与通知中心一样是每个登录用户都有的个人功能，前端用静态路由（如 `/exports`，§6.2 的 `mixed` 模式），完成通知的 `link` 指向它。
+**节点**：`system.user` 下增加按钮 `system.user.export`（`common.export`）。目录 `monitor` 下增加菜单 `monitor.backup`（`/monitor/backup`，组件 `/monitor/backup/list`，`lucide:archive`，`order` 70；按钮 `monitor.backup.run`）。**“我的导出”不是节点**：与通知中心一样是每个登录用户都有的个人功能，前端用静态路由（如 `/exports`，§6.2 的 `mixed` 模式），完成通知的 `link` 指向它。
 
 路由参数：`{export}` 只匹配数字（§9）。
 
@@ -1042,7 +1126,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 导出请求直接继承该列表的 Form Request（筛选值的格式校验与列表完全相同），前端在列表页用同一份 `filter`、`sort` 调用；
 - “我的导出”的列表、详情、删除仍是统一的 `/exports`。
 
-**导出类（扩展点，§5.5）**：实现 `App\Core\System\Contracts\Exporter`，在模块的 `resources/exporters.php` 中登记对外名称（**显式白名单**，`return ['system.user' => UserExporter::class];`，由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`，§5.5）。名称存入导出记录（不存类名，移动、重命名类不用迁移数据，与多态别名同理），格式与通知的类型名相同（小写点分、以模块名开头、全局唯一），登记时校验（类须实现 `Exporter`）。
+**导出类（扩展点，§5.5）**：实现 `App\Core\System\Contracts\Exporter`，在模块的 `resources/exporters.php` 中登记对外名称（**显式白名单**，`return ['user' => UserExporter::class];`，由 Provider 的 `boot()` 注册到 `App\Core\System\Services\ExporterRegistry`，§5.5）。名称存入导出记录（不存类名，移动、重命名类不用迁移数据，与多态别名同理），是对外标识（§4.4：Core 不带前缀，业务模块为 `<模块>.<模型>`，与该模型的多态别名相同，全局唯一），登记时校验（类须实现 `Exporter`）。
 
 | 方法 | 说明 |
 |---|---|
@@ -1053,14 +1137,14 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 | `map(Model $row): array` | 一行：`列键 => 标量或 null`（字符串、整数、浮点、布尔），按 `columns()` 的顺序取值，缺少的列为空；枚举输出 `label()`、时间输出应用时区的 `Y-m-d H:i:s` 由导出类决定 |
 
 - **列表的查询放在模块的 Query 类中**：`UserList::builder($actor, $parameters)` 返回 query-builder（`visibleTo`、预加载、允许的筛选与排序、默认排序），列表控制器 `->paginate()`，导出类 `->getEloquentBuilder()`。参数是 `{ filter, sort }` 数组（列表请求的 `ListRequest::listParameters()`），因此同一份参数可以存入导出记录、在队列中重放。接入导出的列表都按此抽出 Query 类。
-- 第一个使用方是用户列表（`UserExporter`，名称 `system.user`）：列 `id`、`username`、`name`、`email`、`status`（显示名）、`roles`（角色显示名，逗号分隔）、`created_at`。
+- 第一个使用方是用户列表（`UserExporter`，名称 `user`）：列 `id`、`username`、`name`、`email`、`status`（显示名）、`roles`（角色显示名，逗号分隔）、`created_at`。
 
 **发起**（`POST /system/users/export`，Action `CreateExport`）
 
 - 请求：列表的 Form Request 去掉 `page`、`pageSize`，加 `format`（`xlsx`、`csv`，默认 `xlsx`）；未声明的字段（含 `page`）→ 422。`filter`、`sort` 的格式与值校验和列表相同。
   - 未知筛选的 422 **错误键与列表不同**（都是 422，前端按 422 处理即可）：导出的 `filter` 在请求体中，未声明的筛选键先被 `failOnUnknownFields` 拒绝，错误挂在 `filter.<键>` 上；列表的 `filter` 在查询字符串中（`failOnUnknownFields` 不检查），由 query-builder 拒绝，错误挂在 `filter` 上。未知排序两者相同，都挂在 `sort` 上。
 - **同步构造一次查询**（不执行）：不在白名单的筛选、排序 → 422（§6.3），时间区间格式错误 → 422（`filter.<字段>`），与列表的行为一致，不会等到队列中才失败。
-- **并发上限**：同一用户排队与进行中的导出不超过 `config('core.exports.max_active')`（`CORE_EXPORT_MAX_ACTIVE`，默认 3），超过 → 422（`message`，取决于全局状态，§6.1）。检查与写入在一个事务中，先锁住操作者的用户行（`lockForUpdate()`），同一用户的并发请求串行化。
+- **并发上限**：同一用户排队与进行中的导出不超过 `config('core.system.export.max_active')`（`CORE_EXPORT_MAX_ACTIVE`，默认 3），超过 → 422（`message`，取决于全局状态，§6.1）。检查与写入在一个事务中，先锁住操作者的用户行（`lockForUpdate()`），同一用户的并发请求串行化。
 - **限流**：在 admin 入口的总限流之外，另经过 `admin-exports` 限流器：每个用户每分钟 `config('core.apps.admin.export_rate_limit')`（`CORE_ADMIN_EXPORT_RATE_LIMIT`，默认 5）次，超过 429。
 - 写入导出记录（`queued`，`locale` 为当前请求的语言，`params` 为 `{ filter, sort }`），派发队列任务 `RunExport`（`ShouldQueueAfterCommit`，事务提交后才入队），返回 201 与导出记录。
 
@@ -1069,14 +1153,14 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 1. 锁行复核：记录已删除（被取消）或已不是 `queued` → 直接结束（重复投递时幂等）。
 2. 复核发起人：账号启用、**仍有导出类的权限码**（按执行时的授权判定）；否则失败（不写出任何数据）。数据范围同样按执行时计算。
 3. 标记 `running`、`started_at`。
-4. 按 `exports.locale`（发起时的语言）翻译表头、显示名（`withLocale()`，执行后恢复，常驻内存安全），用 simple-excel 流式写入本机临时文件：查询用 `lazy(config('core.exports.chunk_size'))`（`CORE_EXPORT_CHUNK_SIZE`，默认 500）分块读取（每块照常预加载关联），**不会一次读入全部数据**；查询最后追加主键排序，排序列有重复值时分块也稳定。
+4. 按 `exports.locale`（发起时的语言）翻译表头、显示名（`withLocale()`，执行后恢复，常驻内存安全），用 simple-excel 流式写入本机临时文件：查询用 `lazy(config('core.system.export.chunk_size'))`（`CORE_EXPORT_CHUNK_SIZE`，默认 500）分块读取（每块照常预加载关联），**不会一次读入全部数据**；查询最后追加主键排序，排序列有重复值时分块也稳定。
 5. **防公式注入**：XLSX 中的字符串一律写为字符串单元格（openspout 默认把以 `=` 开头的字符串写成公式）；CSV 中以 `=`、`+`、`-`、`@`、制表符、回车开头的字符串前加 `'`（OWASP 的做法）。数字、布尔照常写出。CSV 带 UTF-8 BOM（Excel 直接打开中文不乱码）。
-6. 写完后把文件存到附件盘（`core.attachments.disk`），路径 `exports/<年>/<月>/<日>/<40 位随机串>.<xlsx|csv>`；在一个事务中锁行复核记录仍在，登记附件（绑定到导出记录的 `file` 用途，`created_by` 为发起人，`name` 为 `<导出的显示名>-<年月日-时分秒>.<扩展名>`），标记 `completed`、`row_count`、`finished_at`。记录在执行期间被删除 → 删除已存的文件，结束。临时文件无论成败都删除。
+6. 写完后把文件存到附件盘（`core.system.attachment.disk`），路径 `exports/<年>/<月>/<日>/<40 位随机串>.<xlsx|csv>`；在一个事务中锁行复核记录仍在，登记附件（绑定到导出记录的 `file` 用途，`created_by` 为发起人，`name` 为 `<导出的显示名>-<年月日-时分秒>.<扩展名>`），标记 `completed`、`row_count`、`finished_at`。记录在执行期间被删除 → 删除已存的文件，结束。临时文件无论成败都删除。
 7. 派发事件 `App\Core\System\Events\ExportFinished`。
 
-**任务约束**：`#[Tries(1)]`（不自动重试：导出只读、但可能很重，失败后由用户重新发起）；超时 `config('core.exports.timeout')` 秒（`CORE_EXPORT_TIMEOUT`，默认 60，任务级的 timeout 优先于 worker 的 `--timeout`），超时即失败（`failOnTimeout`）。**超时必须小于队列连接的 `retry_after`（默认 90）并留出余量**，否则任务仍在执行时会被另一个 worker 再次取出；调大导出超时须同时调大 `retry_after`（§11.3）。任何失败（异常、超时、worker 被杀后超过尝试次数）都由任务的 `failed()` 调用 Action `FailExport`：记录仍存在且未完成时标记 `failed`、`finished_at`，派发 `ExportFinished`；异常细节只在失败任务中（§6.6），不写入导出记录、不发给用户。
+**任务约束**：`#[Tries(1)]`（不自动重试：导出只读、但可能很重，失败后由用户重新发起）；超时 `config('core.system.export.timeout')` 秒（`CORE_EXPORT_TIMEOUT`，默认 60，任务级的 timeout 优先于 worker 的 `--timeout`），超时即失败（`failOnTimeout`）。**超时必须小于队列连接的 `retry_after`（默认 90）并留出余量**，否则任务仍在执行时会被另一个 worker 再次取出；调大导出超时须同时调大 `retry_after`（§11.3）。任何失败（异常、超时、worker 被杀后超过尝试次数）都由任务的 `failed()` 调用 Action `FailExport`：记录仍存在且未完成时标记 `failed`、`finished_at`，派发 `ExportFinished`；异常细节只在失败任务中（§6.6），不写入导出记录、不发给用户。
 
-**完成通知**：Message 监听 `ExportFinished`，给发起人发送 `App\Core\Message\Notifications\ExportFinished`（`type` 为 `message.export`）：`title` 为前端 i18n key `message.notification.exportCompleted` / `message.notification.exportFailed`，`params` 为 `{ title: 导出的显示名（发起时的语言）, rows: 行数 }`，`level` 为 `success` / `error`，`link` 为 `config('core.exports.link')`（`CORE_EXPORT_LINK`，默认 `/exports`，前端路由，可含 `{id}`），`subject` 为导出记录。通知中**不放下载地址**：签名地址会过期，通知会保留很久；用户从“我的导出”取当时签发的地址。
+**完成通知**：Message 监听 `ExportFinished`，给发起人发送 `App\Core\Message\Notifications\ExportFinishedNotification`（`type` 为 `export_finished`）：`title` 为前端 i18n key `message.notification.exportCompleted` / `message.notification.exportFailed`，`params` 为 `{ title: 导出的显示名（发起时的语言）, rows: 行数 }`，`level` 为 `success` / `error`，`link` 为 `config('core.system.export.link')`（`CORE_EXPORT_LINK`，默认 `/exports`，前端路由，可含 `{id}`），`subject` 为导出记录。通知中**不放下载地址**：签名地址会过期，通知会保留很久；用户从“我的导出”取当时签发的地址。
 
 **表与输出**
 
@@ -1089,7 +1173,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 
 **Policy**（`ExportPolicy`）：`viewAny`（任何登录用户，列表只查本人的）；`view`、`delete`：导出属于操作者本人，否则 403（超管也一样）；`create`、`update` 等一律拒绝（发起由各列表的导出入口按权限码授权）。**不按数据范围**：导出记录只属于发起人；数据范围在生成文件时已经作用于其中的数据。发起人之后失去权限码时，已生成的文件在到期前仍可下载（生成时他有权看到这些数据）。
 
-**清理**：`Export` 使用框架的 `Prunable`（逐条删除，以便连同文件删除），`model:prune` 删除创建于 `config('core.exports.ttl')` 小时（`CORE_EXPORT_TTL_HOURS`，默认 24）之前的导出，**不论状态**（卡在排队中的也清理）；调度每小时执行（`routes/console.php`），文件最多比 ttl 多保留一小时。用户被删除时，他的导出连同文件一并删除（System 监听 `User` 的 `deleting` 事件；外键 `cascadeOnDelete` 兜底）。保留时长、并发上限、分块大小、超时都是部署级配置（§6.7）。
+**清理**：`Export` 使用框架的 `Prunable`（逐条删除，以便连同文件删除），`model:prune` 删除创建于 `config('core.system.export.ttl_hours')` 小时（`CORE_EXPORT_TTL_HOURS`，默认 24）之前的导出，**不论状态**（卡在排队中的也清理）；调度每小时执行（`routes/console.php`），文件最多比 ttl 多保留一小时。用户被删除时，他的导出连同文件一并删除（System 监听 Core 事件 `UserDeleting`；外键 `cascadeOnDelete` 兜底）。保留时长、并发上限、分块大小、超时都是部署级配置（§6.7）。
 
 **导入（本步不做）**：simple-excel 同样能流式读取（`SimpleExcelReader`），以后需要时与导出对称地做：上传文件为附件（`AllowedUpload`，`csv`、`xlsx`）→ `POST /<列表路径>/import { attachment_id }`（`OwnedAttachment`）→ 导入记录 + 队列任务 → 逐行按模块声明的校验规则校验、**调用模块的 Action 写入**（不绕过业务规则）→ 错误报告（行号 + 字段错误）作为附件绑定到导入记录 → 完成通知。现在不做通用导入框架：导入是写操作，每个模块的校验规则、写入 Action、部分失败的语义（整批回滚还是跳过错误行）、重复导入的幂等都不同，没有第一个使用方时抽象不出稳定的接口；导出只读、规则统一，适合先做成扩展点。
 
@@ -1128,7 +1212,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 | `POST /content/articles/{article}/restore` | 恢复已删除的文章 | `content.article.restore` |
 | `DELETE /content/articles/{article}/force-delete` | 彻底删除已删除的文章（连同封面文件） | `content.article.force-delete` |
 
-**菜单节点**（`app/Modules/Content/resources/menus.php`）：目录 `content`（`/content`，`lucide:newspaper`，`order` 100：业务目录排在内核的 `system`（9000）等之前）下有菜单 `content.article`（`/content/article`，组件 `/content/article/list`，`lucide:file-text`，`order` 10；按钮 `create`、`update`、`delete`、`publish`（发布与取消发布共用）、`restore`、`force-delete`、`export`）。
+**节点**（`app/Modules/Content/resources/menus.php`）：目录 `content`（`/content`，`lucide:newspaper`，`order` 100：业务目录排在内核的 `system`（9000）等之前）下有菜单 `content.article`（`/content/article`，组件 `/content/article/list`，`lucide:file-text`，`order` 10；按钮 `create`、`update`、`delete`、`publish`（发布与取消发布共用）、`restore`、`force-delete`、`export`）。
 
 路由参数：`{article}` 只匹配数字（§9）。默认的路由模型绑定**不含已删除的文章**（详情、修改、删除、发布、取消发布 → 404）；只有恢复、彻底删除的路由带 `withTrashed()`。
 
@@ -1179,14 +1263,14 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 | 开放平台、第三方授权（以后） | Passport（OAuth2） |
 
 - 业务代码统一使用 `auth:sanctum`，不区分请求来自会话还是 token。
-- 不使用 JWT：无法立即吊销，“强制下线、禁用立即生效”会变弱，Laravel 也没有官方 JWT 包。
+- 不使用 JWT：无法立即吊销，“强制下线、停用立即生效”会变弱，Laravel 也没有官方 JWT 包。
 - **部署前提**：后台前端与 API 在同一个主域名下（同域不同路径，或 `admin.example.com` 与 `api.example.com`）。本地开发用 Vite 代理保持同源。
 
 ### 7.2 Fortify 提供的能力（直接使用，不自写）
 
 | 功能 | 说明 |
 |---|---|
-| 登录、登出、登录限流 | 登录字段配置为 `username`；在 `Fortify::authenticateUsing()` 中拒绝已禁用账号；限流次数由系统参数控制：`auth.login_rate_limit`（同一“用户名 + IP”每分钟的登录次数，两步验证按同一次数；默认值来自 `config('core.auth.login_rate_limit')`，环境变量 `CORE_LOGIN_RATE_LIMIT`，§6.7），限流器每次请求时读取，后台修改后立即生效 |
+| 登录、登出、登录限流 | 登录字段配置为 `username`；在 `Fortify::authenticateUsing()` 中拒绝已停用的账号；限流次数由系统参数控制：`auth.login_rate_limit`（同一“用户名 + IP”每分钟的登录次数，两步验证按同一次数；默认值来自 `config('core.system.auth.login_rate_limit')`，环境变量 `CORE_AUTH_LOGIN_RATE_LIMIT`，§6.7），限流器每次请求时读取，后台修改后立即生效 |
 | 两步验证 | TOTP 动态码 + 恢复码，开启后需确认才生效 |
 | 找回密码、重置密码 | 邮件链接重置 |
 | 邮箱验证 | 按需开启 |
@@ -1219,7 +1303,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
   - 不记录：两步验证的质询（通过后有 `login`，失败有 `failed`）、确认密码、发送找回密码邮件。
   - 写入失败只 `report()`，不影响登录本身。
 - **在线会话与强制下线**：会话使用 `database` 驱动（生产可用 Redis 并另行记录），列表读取会话表（`Session` 模型，只对外输出会话 ID 的前 16 位）；强制下线即删除会话；设备 / App 的 token 一并展示与吊销。非 database 驱动时会话列表为空。接口与规则见 §6.6。
-- **禁用账号立即生效**：中间件检查账号状态，并删除该用户全部会话与 token。
+- **停用账号立即生效**：中间件检查账号状态，并删除该用户全部会话与 token。
 - **设备 / App 的 token 签发接口**（Fortify 不发 token）。
 - **指定角色必须开启两步验证**：登录后的中间件检查，未开启则只允许访问两步验证设置。
 
@@ -1227,7 +1311,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 
 - 会话 Cookie：`HttpOnly`、线上 `Secure`、`SameSite=Lax`；CSRF 由 Sanctum 处理。 Laravel 13 的 CSRF 校验认可浏览器的 `Sec-Fetch-Site: same-origin`；前端与 API 不同子域时仍必须携带 `X-XSRF-TOKEN`。
 - token：设置过期时间；启用 Sanctum `token_prefix` 便于识别泄露；用 abilities 限定权限范围；定时清理过期 token。
-- 改密码、禁用账号、强制下线时，吊销对应的会话与 token。
+- 改密码、停用账号、强制下线时，吊销对应的会话与 token。
 
 ## 8. 授权与数据权限
 
@@ -1353,6 +1437,7 @@ public function delete(User $actor, User $user): Response
 
 - **默认拒绝**：测试强制要求每个模型都有 Policy 且标准方法齐全；每条受保护路由都有授权声明（§10.5）。
 - 批量操作：默认检查一次批量方法；需要时逐条检查。
+- **不绑定模型的操作直接用权限码**：导出（`#[Authorize('system.user.export')]`）、健康检查、系统信息、备份这类没有对应模型（或不针对某条记录）的接口，控制器直接声明按钮或菜单的权限码，由 `Gate::before` 判定（§8.1）；其余接口一律走 Policy 的能力（`#[Authorize('update', 'user')]`）。
 
 ### 8.4 数据权限
 
@@ -1361,7 +1446,7 @@ public function delete(User $actor, User $user): Response
 
 | 方法 | 说明 |
 |---|---|
-| `key()` | 范围标识，存入 `roles.data_scope` |
+| `key()` | 范围标识，存入 `roles.data_scope`：对外标识（§4.4，最长 64），Core 为 `all`、`self`，业务模块为 `<模块>.<snake>`（如 `organization.department`） |
 | `label()` | 显示名（多语言），作为角色表单的选项（`/system/roles/data-scopes`） |
 | `constrain(Builder $query, User $user, Collection $roles)` | 给查询加条件；`$roles` 是该用户选用此范围的启用角色 |
 | `contains(Model $record, User $user, Collection $roles)` | 单条判定，与 `constrain()` 同一规则 |
@@ -1441,7 +1526,7 @@ public function delete(User $actor, User $user): Response
 - 授予的权限码超出自己的有效权限码 —— 422（`permissions`）；选用自己不可授予的数据范围 —— 422（`data_scope`，§8.5）。
 - 停用角色的权限与数据范围都不生效。
 
-**菜单节点**
+**节点**
 
 - 内置节点不能删除 —— 403（超管也一样）。
 - 内置节点的结构性字段 `name`、`type`、`path`、`component`、`meta.iframeSrc`、`meta.link` 不可修改：前端只读，提交的值与库中不同 —— 422（对应字段，如 `meta.link`）；它们只能由同步命令修改（§8.2）。
@@ -1526,7 +1611,7 @@ public function delete(User $actor, User $user): Response
   - 项目可在 `config/core.php` 中增加档位（同样的键：`media`、`media_hosts`）。
 - **声明**：富文本字段在模型的 `casts()` 中声明 `'content' => SanitizedHtml::class`（默认档位）或 `SanitizedHtml::class.':basic'`；写入属性时（fill、赋值、工厂、填充）即净化，任何写入路径存进库的都是净化后的内容。档位名不存在时抛出异常（开发期错误）。表单的长度上限按净化前计（Form Request）。
 - **约定**：存 HTML 的列一律用 `SanitizedHtml`，不在 Action、控制器中手动净化，也不存未净化的 HTML 再在输出时净化；纯文本字段（标题、摘要、通知内容）不存 HTML，前端按文本显示。“哪些列是富文本”无法从代码中可靠识别，由代码审查检查（`CONTRIBUTING.md` 的清单）；`tests/Arch` 保证只有一个净化入口。
-- **正文中的图片**：只引用外部的 `https` 地址（`config('core.html.media_schemes')` 默认只有 `https`，避免混合内容），**生产环境应设置 `CORE_HTML_MEDIA_HOSTS`**（不限主机时正文可以嵌入外部的跟踪图片，收到公告的人一打开就把 IP 暴露给外部主机）；**不要嵌入附件的签名地址**——它会在 `url_ttl` 的一到两倍时间后过期，正文中的图片随之失效。需要“上传图片插入正文”时，应另建一个不过期的公开图片通道（公开盘或 CDN 上的独立目录、不可枚举的文件名，图片白名单与大小上限），并用 `CORE_HTML_MEDIA_HOSTS` 限定正文只能引用它；本脚手架暂不提供（§14）。正文以外的文件作为记录的附件（如公告的 `attachment_ids`）。
+- **正文中的图片**：只引用外部的 `https` 地址（`config('core.html.media_schemes')` 默认只有 `https`，避免混合内容），**生产环境应设置 `CORE_HTML_MEDIA_HOSTS`**（不限主机时正文可以嵌入外部的跟踪图片，收到公告的人一打开就把 IP 暴露给外部主机）；**不要嵌入附件的签名地址**——它会在 `url_ttl_minutes` 的一到两倍时间后过期，正文中的图片随之失效。需要“上传图片插入正文”时，应另建一个不过期的公开图片通道（公开盘或 CDN 上的独立目录、不可枚举的文件名，图片白名单与大小上限），并用 `CORE_HTML_MEDIA_HOSTS` 限定正文只能引用它；本脚手架暂不提供（§14）。正文以外的文件作为记录的附件（如公告的 `attachment_ids`）。
 
 ## 10. 编码规范
 
@@ -1538,7 +1623,7 @@ public function delete(User $actor, User $user): Response
 - 统计类数据用 `Cache::flexible()`；请求内缓存用 `Cache::memo()` 或 `#[Scoped]`。
 - 时间：写库前统一转换为应用时区；输出带时区偏移的 ISO 8601。
 - 枚举：实现统一的 `HasLabel`（多语言，必须，`tests/Arch` 强制）/ `HasColor`（语义色，可选）接口，由后端统一下发选项（在 `EnumRegistry` 中登记后由 `/options/enums` 下发，§6.7）。
-  - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum --color` 生成同时实现 `HasColor` 的枚举。
+  - `App\Support\Enums\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum --color` 生成同时实现 `HasColor` 的枚举。
 - 统计指标、复杂查询做成模块里独立的 Query 类。
 - **软删除是整套功能**：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数（`--soft-deletes`）生成；只加 `SoftDeletes` 不算完成。规范如下（样板是 Content 的文章，§6.11）：
   - 表加 `deleted_at`（`$table->softDeletes()->index()`），模型 `use SoftDeletes`；输出字段带 `deleted_at`（未删除为 null）。
@@ -1615,9 +1700,9 @@ Scramble 的兼容性在引入时另行验证。
 | `core:make-policy` | §8.3 的十个标准方法：先权限码，再业务保护（软删除的 `restore`、`forceDelete` 只对已删除的，提示文案来自语言包），最后 `isVisibleTo()`；软删除另有 `viewTrashed`；模型没有软删除时 `restore` 等四个方法默认拒绝 |
 | `core:make-action` | 按名称识别用例：`Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>` 为标准写法（`handle(…, User $actor)`、事务、`lockForUpdate()` 复核、并发 422 / 404），其他名称生成“锁行 → 修改 → 返回”的骨架。可写入的字段取模型的 `#[Fillable]`（没有字段白名单常量，§5.4）；模型实现了 `Auditable` 时写操作在同一事务中调用 Monitor 的 `LogAudit`（§5.5）；不加 `--model` 时只生成带 `User $actor` 的骨架 |
 | `core:make-query` | `<模型>List::builder(User $actor, array $parameters): QueryBuilder`：`visibleTo`、预加载、筛选与排序白名单、默认 `-id`，软删除时 `trashed` 筛选与 `viewTrashed` 检查（§6.10）；名称以 `List` 结尾时模型可省略。没有模型时生成 `get(User $actor): array` 的统计骨架 |
-| `core:make-exporter` | `Exporters/<模型>Exporter`（调用 `<模型>List`，缺少时一并生成），并登记到模块的 `resources/exporters.php`（对外名称 `<模块>.<模型>`；文件没有时创建，并在 Provider 中注册到 `ExporterRegistry`） |
+| `core:make-exporter` | `Exporters/<模型>Exporter`（调用 `<模型>List`，缺少时一并生成），并登记到模块的 `resources/exporters.php`（对外名称：业务模块 `<模块>.<模型>`，`--core` 时为 `<模型>`；文件没有时创建，并在 Provider 中注册到 `ExporterRegistry`） |
 | `core:make-enum --color` | 同时实现 `HasColor`（语义色，§10.1） |
-| `core:make-controller` | 资源控制器的五个方法：`index`（列表请求 + `<模型>List`）、`show`（预加载）、`store`（201）、`update`、`destroy`，写操作调用 Action 并传入 `#[CurrentUser]`；缺少的列表请求、表单请求、Resource、Query 与 Action 一并生成。`--invokable` 生成单动作控制器：`<模型>Export`（导出，`CreateExport`）、`ForceDelete<模型>`（返回 `data: null`）与其他 `<动作><模型>`（调用同名 Action、返回 Resource，ability 为动作名），并打印对应的 `Route::post(...)` / `Route::delete(...)` |
+| `core:make-controller` | 资源控制器的五个方法：`index`（列表请求 + `<模型>List`）、`show`（预加载）、`store`（201）、`update`、`destroy`，写操作调用 Action 并传入 `#[CurrentUser]`；缺少的列表请求、表单请求、Resource、Query 与 Action 一并生成。`--invokable` 生成单动作控制器：`Export<模型复数>`（导出，`CreateExport`，如 `ExportPosts`）、`ForceDelete<模型>`（返回 `data: null`）与其他 `<动作><模型>`（调用同名 Action、返回 Resource，ability 为动作名），并打印对应的 `Route::post(...)` / `Route::delete(...)` |
 | `core:make-request` | `--list`：继承 `ListRequest` 并校验筛选值（`name`、`created_at`、`trashed`）；`--export`：继承列表请求，去掉 `page`、`pageSize`，加 `format`（§6.10）；只有 `--model`：新增 / 修改的表单请求 |
 | `core:make-resource` | 逐个列出 `id`、`name`、`created_by`、`creator`、`deleted_at` 与时间字段，`relations()` 返回需要预加载的关联 |
 
@@ -1647,17 +1732,17 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 模块 `app/Modules/Blog` | `Models/Post`、`Policies/PostPolicy`、`Actions/{Create,Update,Delete}Post`、[`Actions/{Restore,ForceDelete}Post`]、`Queries/PostList`、[`Exporters/PostExporter`]、`resources/lang/{en,zh_CN}/post.php`（`config('core.locales')` 中的每种语言） |
 | 共享文件（幂等） | `resources/menus.php`：目录 `blog`（没有时创建）下的菜单 `blog.post`（`/blog/post`，组件 `/blog/post/list`）与按钮 `create`、`update`、`delete`[、`restore`、`force-delete`][、`export`]；模块 Provider：多态别名 `blog.post`、语言包、[`resources/exporters.php` 的注册]；[`resources/exporters.php`：`blog.post`]；模块 README 中加入该模型一节（接口、权限码、文件清单、加字段时要改的地方） |
 | 数据库 | `database/migrations/*_create_posts_table.php`、`database/factories/Modules/Blog/Models/PostFactory.php` |
-| 入口 `app/Http/Admin/Blog` | `Controllers/PostController`（五个资源方法）、[`Controllers/{Restore,ForceDelete}PostController`]、[`Controllers/PostExportController`]、`Requests/{PostIndex,Post}Request`、[`Requests/PostExportRequest`]、`Resources/PostResource` |
+| 入口 `app/Http/Admin/Blog` | `Controllers/PostController`（五个资源方法）、[`Controllers/{Restore,ForceDelete}PostController`]、[`Controllers/ExportPostsController`]、`Requests/{PostIndex,Post}Request`、[`Requests/ExportPostsRequest`]、`Resources/PostResource` |
 | 路由（`app/Http/Admin/routes.php`） | `auth:sanctum` 分组中的模块分组 `Route::prefix('blog')->name('blog.')`（已有时追加到其中）：[`posts/export`]、[`posts/{post}/restore`、`posts/{post}/force-delete`（`withTrashed()`）]、`Route::apiResource('posts', …)`，参数一律 `whereNumber` |
-| 测试 | `tests/Http/Admin/Blog/Controllers/PostControllerTest.php`（列表、详情、新增、修改、删除的 401、403、200 / 201、404、422 与数据范围）、[恢复、彻底删除、导出各一个测试文件]、[`tests/Modules/Blog/Actions/PostActivityTest.php`] |
+| 测试 | `tests/Http/Admin/Blog/Controllers/PostControllerTest.php`（列表、详情、新增、修改、删除的 401、403、200 / 201、404、422 与数据范围）、[恢复、彻底删除、导出各一个测试文件]、[`tests/Modules/Blog/Actions/PostAuditTest.php`] |
 
-- 命名：权限码与多态别名用 snake_case（`blog.post`、`order_center.sales_order`），菜单路径、路由前缀与 URI 用 kebab-case（`/order-center/sales-order`、`order-center/sales-orders`），路由名为 `<入口>.<模块 kebab>.<URI>.<动作>`；菜单与目录的标题是前端 i18n key（`blog.title`、`blog.post.title`），后端不翻译（§6.2）。
+- 命名（§4.4）：权限码、多态别名与导出名用 snake_case（`blog.post`、`order_center.sales_order`；`--core` 时多态别名与导出名不带模块前缀），导出入口为 `Export<模型复数>Controller` / `Export<模型复数>Request`（`ExportPostsController`），菜单路径、路由前缀与 URI 用 kebab-case（`/order-center/sales-order`、`order-center/sales-orders`），路由名为 `<入口>.<模块 kebab>.<URI>.<动作>`；菜单与目录的标题是前端 i18n key（`blog.title`、`blog.post.title`），后端不翻译（§6.2）。
 - **路由自动写入**入口的 `routes.php`：入口路由文件只描述结构（分组 + `apiResource`），格式固定，按“`auth:sanctum` 分组的结尾”与“同名模块分组的结尾”两个锚点插入，导入按 Pint 的格式重排；找不到锚点时打印要粘贴的分组。比“只打印片段”多一步自动化，但风险可控：插入内容是确定的几行，命令幂等，生成后由 `tests/Arch` 检查每条路由都有授权声明。
 - 生成结果**不手改即通过** Pint、PHPStan（max）、Rector 与 Pest（含 `tests/Arch`），并能 `migrate:fresh --seed` 与 `core:sync`：由端到端检查 `composer test:generator-e2e`（`tests/Core/Generator/EndToEndTest.php`，`generator-e2e` 组，`composer test` 不含它，CI 中单独一步）保证——在系统临时目录中建一份项目副本（`vendor` 用硬链接），在副本中生成三份：全部选项的新模块（`core:make-module Blog --crud=Post --soft-deletes --export --audit`）、同一模块中默认选项的第二个模型（`core:make-crud Tag --module=Blog`，检验共享文件的追加）、不使用数据范围的另一个模块（`core:make-module Shop --crud=Product --no-data-scope`），再跑 Pint、PHPStan、Rector、全部 Pest 测试、`migrate:fresh --seed` 与 `core:sync`，最后删除副本，工作区不留任何文件。生成器自身的单元测试在 `tests/Core/Generator`。
 
 ### 10.5 测试
 
-- Pest；`tests/` 目录与 `app/` 对应。
+- Pest；`tests/` 目录与 `app/` 对应，测试文件的命名见 §4.4 表一（一个类一个 `<类名>Test`；一组类合成 `<Model>ActionsTest`、`<主题>PoliciesTest`、`<Model>AuditTest`；测试用的类放在同目录的 `Fixtures/`）。
 - `tests/Pest.php` 提供统一辅助：同步内置节点（`syncBuiltinPermissions()`）、拥有某些权限码的用户（`userWithPermissions()`，角色范围为 `self`）、指定数据范围的用户（`userWithDataScope()`）、超管（`superAdminActor()`）；403、数据权限过滤用框架自带的断言（`assertForbidden()`、`Gate::forUser()->inspect()` 等）。
 - 每个接口至少覆盖：成功、无权限 403、数据权限之外 403/404、校验失败 422。
 - 授权相关的约定测试（`tests/Arch`）：
@@ -1716,7 +1801,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 
 1. 数据库迁移（迁移必须向下兼容）；
 2. 切换新代码或新镜像；
-3. `php artisan optimize`，然后 `php artisan core:sync` 依次同步模块声明的菜单与权限节点（§8.2）、字典与系统参数（§6.7），任何一个失败即以非 0 退出、中止发布；再 `php artisan schedule-monitor:sync` 把调度定义同步到定时任务监控（§6.6；会删除调度中已不存在的任务）；
+3. `php artisan optimize`，然后 `php artisan core:sync` 依次同步模块声明的节点（§8.2）、字典与系统参数（§6.7），任何一个失败即以非 0 退出、中止发布；再 `php artisan schedule-monitor:sync` 把调度定义同步到定时任务监控（§6.6；会删除调度中已不存在的任务）；
 4. PHP-FPM：平滑重载 FPM（刷新 OPcache）；Octane：`php artisan octane:reload`（**必需**，否则仍运行内存中的旧代码）；
 5. `php artisan queue:restart`，让队列进程加载新代码。
 
@@ -1816,7 +1901,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 角色与用户的防提权 | 授予权限码、数据范围、分配角色时的“只能给自己有的”、保留操作者管不到的授权、最后一个超管（加锁） | spatie/laravel-permission、数据库行锁 |
 | 数据权限 | `DataScopeProvider` 接口与 `DataScopeRegistry`（含可授予范围的防提权）、默认“全部 / 仅本人”、模型 trait `HasDataScope`（`visibleTo()` / `isVisibleTo()`，归属列可声明） | Eloquent 查询范围、Policy |
 | 列表查询 | 时间区间筛选 `DateTimeRangeFilter`（ISO 8601 带时区）；query-builder 的未知筛选 / 排序异常（`InvalidQuery`，默认 400）统一映射为 422（`VbenResponse`） | spatie/laravel-query-builder |
-| 认证补充 | 登录日志（认证事件的监听、限流时派发 `Lockout`）、在线会话与强制下线（会话表的只读模型、token 列表、当前会话与超管保护）、禁用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
+| 认证补充 | 登录日志（认证事件的监听、限流时派发 `Lockout`）、在线会话与强制下线（会话表的只读模型、token 列表、当前会话与超管保护）、停用账号立即生效、设备 token 签发、指定角色强制两步验证 | Fortify、Sanctum、认证事件、数据库会话 |
 | 操作日志 | 记录写请求的中间件（排除认证请求、脱敏、耗时、请求 ID，响应后写入且失败不影响响应）、日志的只读查询接口（数据范围委托给操作者）、按日志名区分的模型 | spatie/laravel-activitylog（含 `activitylog:clean`）、`Context`、`defer()` |
 | 字典 | 字典类型 / 字典项与管理接口（内置项的保护）、扩展点 `DictRegistry`（`resources/dicts.php` 声明）与同步命令 `core:sync-dicts`、整体缓存的读取服务 `Dictionary`、`InDict` 校验规则、选项下发接口（`/options/dicts`） | Cache（`Cache::memo()`）、Validation、模型事件（提交后清除缓存） |
 | 系统参数 | 后台可修改值的键值参数（只能改已声明的，`null` 表示使用默认值）、扩展点 `SettingRegistry`（`resources/settings.php` 声明分组、类型、默认值或 config 键、是否公开、校验规则、引用的字典）与同步命令 `core:sync-settings`（三个同步由 `core:sync` 依次执行）、按类型校验与转换（`SettingType`）、读取服务 `Settings`（缓存、默认值）、按分组的管理接口、公开参数接口（`/settings/public`，只输出声明为公开的） | Cache（`Cache::memo()`）、Validation、`json` cast |

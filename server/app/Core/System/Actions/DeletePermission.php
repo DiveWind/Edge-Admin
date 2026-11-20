@@ -7,7 +7,7 @@ use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\DB;
 
 /**
- * 删除菜单与权限节点（DELETE /system/menus/{menu}，设计文档 §6.5、§8.6）。
+ * 删除节点（DELETE /system/menus/{menu}，设计文档 §6.5、§8.6）。
  *
  * - 有子节点的节点不能删除 → 422（只有 message，没有对应的表单字段，§6.1）：先锁住节点行再检查，
  *   与新增子节点（CreatePermission 对上级加共享锁）互斥，不会在检查之后又挂上子节点；

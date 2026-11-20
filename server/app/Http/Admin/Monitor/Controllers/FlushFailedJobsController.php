@@ -7,7 +7,7 @@ use App\Core\Monitor\Models\FailedJob;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
- * 清空失败任务（DELETE /monitor/failed-jobs，设计文档 §6.6）：FailedJobProviderInterface::flush()，成功返回 `data: null`。
+ * 清空失败任务（DELETE /monitor/failed-jobs/flush，设计文档 §6.6）：FailedJobProviderInterface::flush()，成功返回 `data: null`。
  *
  * 授权由 FailedJobPolicy::deleteAny() 判定（monitor.failed-job.delete）。
  */

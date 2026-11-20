@@ -12,5 +12,5 @@ use App\Core\System\Exporters\UserExporter;
 */
 
 return [
-    'system.user' => UserExporter::class,
+    'user' => UserExporter::class,
 ];

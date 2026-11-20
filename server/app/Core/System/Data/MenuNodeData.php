@@ -5,7 +5,7 @@ namespace App\Core\System\Data;
 use App\Core\System\Enums\PermissionType;
 
 /**
- * 模块声明的一个菜单与权限节点（MenuRegistry 中注册、已校验并展开 buttons 后的形式，设计文档 §8.2）。
+ * 模块声明的一个节点（MenuRegistry 中注册、已校验并展开 buttons 后的形式，设计文档 §8.2）。
  *
  * 同步命令 core:sync-permissions 按它写入 permissions 表：新增节点时全部字段生效；已有节点只修正结构性字段
  * （type、path、component、meta.link、meta.iframeSrc，见 structuralMeta()），其余以数据库为准。

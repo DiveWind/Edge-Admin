@@ -24,7 +24,7 @@ class ArticleController
     /**
      * 列表（经过数据范围 visibleTo($actor)）：筛选 title（模糊）、category、status（精确）、published_at、created_at（区间）、
      * trashed（with / only，另需 viewTrashed）；排序 id、published_at、created_at，默认 `-id`。不在白名单内的参数返回 422（§6.3）。
-     * 查询在 Query 类 ArticleList 中，与导出（ArticleExportController）共用。
+     * 查询在 Query 类 ArticleList 中，与导出（ExportArticlesController）共用。
      */
     #[Authorize('viewAny', Article::class)]
     public function index(ArticleIndexRequest $request, ArticleList $list, #[CurrentUser] User $actor): AnonymousResourceCollection

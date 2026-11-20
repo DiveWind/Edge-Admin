@@ -18,7 +18,7 @@
 | `Notifications/InboxNotification` | 通知中心的通知的基类（扩展点）：子类实现 `type()`（对外的类型名）与 `toInbox()`（内容）；`databaseType()` / `broadcastType()` 返回类型名，`toDatabase()` / `toArray()` 由内容生成（都是 `final`）；`via()` 默认 `['database']`；`shouldSend()`（`final`）对停用的用户返回 false |
 | `Data/NotificationContentData` | 一条通知的内容：`title`、`content`、`level`、`link`、`params`、`subject`；构造时校验（见下文） |
 | `Enums/NotificationLevel` | 通知与公告的级别：`info`、`success`、`warning`、`error`（`HasColor`，`/options/enums` 的 `notification_level`） |
-| `Models/Notification` | 通知（继承框架的 `DatabaseNotification`，同一张表，多态别名 `notification`）：`ownedBy($user)` / `isOwnedBy($user)`、`about($record)`（按 `data->subject` 查找关于某条记录的通知）、`isRead()`；`MassPrunable`（已读且超过 `core.message.notifications.read_ttl` 天） |
+| `Models/Notification` | 通知（继承框架的 `DatabaseNotification`，同一张表，多态别名 `notification`）：`ownedBy($user)` / `isOwnedBy($user)`、`about($record)`（按 `data->subject` 查找关于某条记录的通知）、`isRead()`；`MassPrunable`（已读且超过 `core.message.notification.read_ttl_days` 天） |
 | `Policies/NotificationPolicy` | 只有本人能查看、标记已读、删除（不需要权限码，管理员也不能操作他人的通知） |
 | `Actions/MarkNotificationAsRead`、`MarkAllNotificationsAsRead`、`DeleteNotification` | 标记已读（幂等）、本人全部已读、删除 |
 | `Queries/NotificationList`、`Queries/UnreadNotificationCount` | 我的通知列表（只含本人的，筛选与排序白名单）、未读数 |
@@ -29,18 +29,18 @@
 | `Actions/SyncAnnouncementRoles` | 按 `target` 保存公告的目标角色（`roles` 时必须至少一个且都存在 → 否则 422），由新增、修改调用 |
 | `Queries/AnnouncementList`、`Queries/ReceivedAnnouncementList` | 公告管理的列表（`visibleTo`）、我收到的公告（`receivedBy`），筛选与排序白名单 |
 | `Actions/PublishAnnouncement` | 发布：锁行复核草稿 → `published` → 派发 `Jobs/SendAnnouncement`（事务提交后入队） |
-| `Jobs/SendAnnouncement`、`Jobs/SendAnnouncementChunk` | 分批发送：按 `core.message.announcements.batch_size` 个接收人一批派发 `Bus::batch`（`announcement:<id>`，`allowFailures()`）；每批锁住公告行复核仍已发布、重新筛选用户后 `sendNow()`，整批一个事务 |
-| `Notifications/AnnouncementPublished` | 公告的通知（类型 `message.announcement`，`subject` 为公告，`link` 为 `core.message.announcements.link`） |
+| `Jobs/SendAnnouncement`、`Jobs/SendAnnouncementChunk` | 分批发送：按 `core.message.announcement.batch_size` 个接收人一批派发 `Bus::batch`（`announcement:<id>`，`allowFailures()`）；每批锁住公告行复核仍已发布、重新筛选用户后 `sendNow()`，整批一个事务 |
+| `Notifications/AnnouncementPublishedNotification` | 公告的通知（类型 `announcement_published`，`subject` 为公告，`link` 为 `core.message.announcement.link`） |
 | `Actions/RevokeAnnouncement` | 撤回：锁行复核已发布 → `revoked`，同一事务中删除已发出的通知；撤回是终态 |
-| `Policies/AnnouncementPolicy` | 公告管理（`message.announcement.*`、状态规则、数据范围）与 `read`（我收到的公告：已发布且目标包含操作者） |
+| `Policies/AnnouncementPolicy` | 公告管理（`message.announcement.*`、状态规则、数据范围）与 `viewReceived`（我收到的公告：已发布且目标包含操作者） |
 
-- 内部实现（不对外）：`Listeners/NotifyExportFinished`（监听 System 的 `ExportFinished`）与 `Notifications/ExportFinished`（导出完成的通知）。
+- 内部实现（不对外）：`Listeners/NotifyExportFinished`（监听 System 的 `ExportFinished`）与 `Notifications/ExportFinishedNotification`（导出完成的通知）。
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；列表的查询调用 `Queries/<模型>List`；接口放在各受信任入口的同名目录：`app/Http/Admin/Message`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 
 ## 模块怎么接入通知中心（扩展点，设计文档 §5.5）
 
-1. 定义通知类，继承 `InboxNotification`（`php artisan make:notification App/Modules/Content/Notifications/ArticleApproved`，再改为继承它）：
+1. 定义通知类，继承 `InboxNotification`（`php artisan make:notification App/Modules/Content/Notifications/ArticleApprovedNotification`，再改为继承它；类名以 `Notification` 结尾，设计文档 §4.4）：
 
    ```php
    namespace App\Modules\Content\Notifications;
@@ -50,13 +50,13 @@
    use App\Core\Message\Notifications\InboxNotification;
    use App\Modules\Content\Models\Article;
 
-   class ArticleApproved extends InboxNotification
+   class ArticleApprovedNotification extends InboxNotification
    {
        public function __construct(private readonly Article $article) {}
 
        public static function type(): string
        {
-           return 'content.article_approved';          // 对外的类型名：小写点分、以模块名开头、全局唯一
+           return 'content.article_approved';          // 对外的类型名：类名去掉 Notification 的 snake_case，业务模块加模块前缀
        }
 
        public function toInbox(object $notifiable): NotificationContentData
@@ -87,14 +87,14 @@
 
 ## 导出完成的通知
 
-`Listeners/NotifyExportFinished` 监听 System 的 `ExportFinished`，给发起人发送 `Notifications/ExportFinished`（类型 `message.export`，`title` 为 `message.notification.exportCompleted` / `exportFailed`，`params` 为 `{ title, rows }`，`link` 为 `config('core.exports.link')`，不含下载地址，设计文档 §6.10）。
+`Listeners/NotifyExportFinished` 监听 System 的 `ExportFinished`，给发起人发送 `Notifications/ExportFinishedNotification`（类型 `export_finished`：通知的类型表达“发生了什么事”，与发送方是哪个模块无关，`title` 为 `message.notification.exportCompleted` / `exportFailed`，`params` 为 `{ title, rows }`，`link` 为 `config('core.system.export.link')`，不含下载地址，设计文档 §6.10）。
 
 ## 依赖 Core 的能力
 
-- System：`User`（接收人；停用的不接收）、`Role`（公告的目标角色）；菜单与权限节点（`MenuRegistry`，`resources/menus.php`）；
+- System：`User`（接收人；停用的不接收）、`Role`（公告的目标角色）；节点（`MenuRegistry`，`resources/menus.php`）；
   数据权限（`HasDataScope`，公告按 `created_by`）；附件（`HasAttachments`、`OwnedAttachment`、`SyncAttachments`）；枚举选项（`EnumRegistry`）。
 - Support：富文本净化 `Eloquent/Casts/SanitizedHtml`（`symfony/html-sanitizer`，规则在 `AppServiceProvider` 中绑定）。
-- 配置（部署级，`config/core.php` 的 `message`）：`notifications.read_ttl`（已读通知保留天数）、`announcements.batch_size`（每批人数）、`announcements.link`（公告通知的前端链接）。
+- 配置（部署级，`config/core.php` 的 `message`）：`notification.read_ttl_days`（已读通知保留天数）、`announcement.batch_size`（每批人数）、`announcement.link`（公告通知的前端链接）。
 - 调度：`routes/console.php` 每天 `model:prune --model=Notification`。队列：默认队列（公告的分批发送），批处理使用框架的 `job_batches` 表。
 
 ## 生成命令

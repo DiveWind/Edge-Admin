@@ -59,7 +59,7 @@ describe('index', function (): void {
 
     it('filters by read state, type and creation time', function (string $query, int $count): void {
         Notification::factory()->ownedBy($this->user)->read()->create(['type' => 'demo.example', 'created_at' => '2026-11-01 10:00:00']);
-        Notification::factory()->ownedBy($this->user)->create(['type' => 'message.announcement', 'created_at' => '2026-11-10 10:00:00']);
+        Notification::factory()->ownedBy($this->user)->create(['type' => 'announcement_published', 'created_at' => '2026-11-10 10:00:00']);
         Notification::factory()->ownedBy($this->user)->create(['type' => 'content.article_approved', 'created_at' => '2026-11-10 10:00:00']);
 
         $this->actingAs($this->user)
@@ -69,8 +69,8 @@ describe('index', function (): void {
     })->with([
         'unread' => ['filter[is_read]=false', 2],
         'read' => ['filter[is_read]=1', 1],
-        'one type' => ['filter[type]=message.announcement', 1],
-        'several types' => ['filter[type]=message.announcement,demo.example', 2],
+        'one type' => ['filter[type]=announcement_published', 1],
+        'several types' => ['filter[type]=announcement_published,demo.example', 2],
         'created at' => ['filter[created_at]=2026-11-05T00:00:00%2B08:00,', 2],
     ]);
 

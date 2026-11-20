@@ -192,7 +192,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   - Action **只暴露 `handle()`**：没有其他公开方法、公开静态方法与公开常量（Fortify 契约的 `update()` / `reset()` 除外，`tests/Arch` 检查）；依赖构造注入，不 `resolve()`；`Update<X>` 不调用 `Create<X>` 的东西。
   - 不写库的可复用逻辑按依赖范围放：一条记录自身 → 模型方法（可写入的字段就是 `#[Fillable]`，Action 用 `array_intersect_key($attributes, array_flip($model->getFillable()))`）；一个枚举值 → 枚举方法；跨记录或要注入依赖（含只加锁的守卫）→ `Services/`；输入校验 → `Rules/`；单个 where → scope；组合查询 → `Queries/`；与业务无关 → `app/Support`。
   - 唯一索引：新增、修改都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存（保存点，冲突 → 422）。
-  - 业务规则违反抛 `App\Support\Exceptions\BusinessRuleViolation`（可带字段，Admin 映射为 422）；字段值不合法抛 `ValidationException`；领域层不抛 Symfony 的 `HttpException`（`tests/Arch`）。
+  - 业务规则违反抛 `App\Support\Exceptions\BusinessRuleViolation`（可带字段；Admin 映射为 Vben 格式的 422，其他请求由 `bootstrap/app.php` 的全局兜底返回标准 JSON 422）；字段值不合法抛 `ValidationException`；领域层不抛 Symfony 的 `HttpException`（`tests/Arch`）。
   - 数据变更审计：模型实现 `App\Core\Monitor\Contracts\Auditable`，Action 在同一事务中调用 `App\Core\Monitor\Actions\LogAudit`。
 - **列表查询**一律放在模块的 `Queries/<Model>List::builder(User $actor, array $parameters)`（嵌套列表以上级记录代替 `$actor`），控制器只 `->paginate($request->pageSize())`；筛选与排序白名单只在 Query 中，列表请求只校验 `filter.*` 的取值（两边一致由 `tests/Arch` 检查）。
 - 跨模块清理用 Core 事件（`App\Core\System\Events\UserDeleting` 等，清单见设计文档 §5.5），不监听 Core 模型的 `eloquent.*` 事件。
@@ -210,7 +210,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ### 授权（设计文档 §8）
 
-- 菜单与权限节点在模块的 `resources/menus.php` 中声明，在模块 Provider 的 `boot()` 中注册到 `App\Core\System\Services\MenuRegistry`，
+- 节点（目录、菜单、按钮）在模块的 `resources/menus.php` 中声明，在模块 Provider 的 `boot()` 中注册到 `App\Core\System\Services\MenuRegistry`，
   由 `php artisan core:sync-permissions` 写入 `permissions` 表；权限码即节点的 `name`（小写点分，如 `system.user.create`）。
 - 判定一律走 `can()` / Gate / Policy：`Gate::before` 对已登记的权限码按 `EffectivePermissions` 判定（停用节点、停用角色不生效），其他 ability 交给 Policy。
   **禁止** spatie 的判定 API（`hasRole()`、`hasPermissionTo()` 等，PHPStan 拦截）与 `role:` / `permission:` 中间件；是否超管用 `isSuperAdmin()`。
@@ -219,6 +219,12 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 ### 命名与生成
 
 - 本脚手架不带品牌名：配置 `config/core.php`、命令前缀 `core:`、环境变量前缀 `CORE_`。
+- **命名规则见设计文档 §4.4 的三张表**（类名与文件名、对外标识、术语），要点：
+  - Http 层（控制器、Request、Resource、路由参数）按 URL 资源命名，领域层按模型命名（`ScheduleController` ↔ `ScheduledTask`、`MenuController` ↔ `Permission`）；
+  - 单动作控制器：路径末段是动词 → `<Verb><宾语>Controller`（`PublishArticle`、`ExportUsers`、`RetryAllFailedJobs`）；末段是名词 → `<名词短语>Controller`（`UserStatus`、`UserRoleOptions`）；Request 为控制器名去掉 `Controller` 加 `Request`；
+  - 对外标识（多态别名、枚举名、导出名、通知 type、字典 code、数据范围 key）：Core 不带前缀，业务模块 `<模块>.<snake>`（`tests/Arch` 检查）；通知类 `<事物><过去分词>Notification`，type 为其 snake_case（`export_finished`）；审计日志名 = 模块标识；
+  - 路由名后缀 = 路径末段，嵌套资源用 `Route::apiResource('<父>.<子>', …)`；路由名即操作日志的 description，改动要同步前端翻译与 `docs/` 的契约；
+  - 翻译：Core 用 JSON 原文键，业务模块用 `<模块>::` 命名空间键（`tests/Arch` 检查）；配置键 `core.<模块>.<功能>.<键>`，环境变量 `CORE_<功能>_<键>`（`tests/Arch` 检查）；术语用“节点”“权限码”“停用”。
 - 新建文件**使用 `php artisan core:make-*` 生成命令**（`php artisan list core` 查看全部，用法见 [`README.md`](README.md#代码生成)），生成物直接通过 `composer ci`，不手写骨架：
 
   | 生成 | 命令 |
@@ -241,8 +247,8 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   - 没有对应 `core:make-*` 的类型（事件、监听、任务、通知等）才用官方 `make:*`，名称写以 `App/` 开头的完整路径，如 `make:event App/Modules/Content/Events/ArticlePublished`。
 - 测试放在 `tests/` 下与 `app/` 对应的目录（`tests/Http/Admin/...`、`tests/Core/System/...`、`tests/Modules/...`），不使用 `tests/Feature`、`tests/Unit`。
 - 模型：用 `#[Fillable]`、`#[Hidden]` 等 Attribute 与 `casts()` 方法，不用属性写法；使用 `App\Support\Eloquent\Concerns\UsesAppTimezone`；工厂放在 `database/factories/` 下与模型相同的路径。
-- 多态别名：模块的模型在**本模块 Provider** 的 `Relation::morphMap()` 中登记，业务模块为 `<模块>.<模型>`（如 `content.article`），内核模块为 `<模型>`（`core:make-model` 自动完成）；`AppServiceProvider` 只负责 `enforceMorphMap()` 与 Core/System 的 `user`。
-- 枚举实现 `App\Core\System\Contracts\HasLabel`（`label()` 返回多语言的显示名称，`tests/Arch` 强制）。
+- 多态别名：模块的模型在**本模块 Provider** 的 `Relation::morphMap()` 中登记，业务模块为 `<模块>.<模型>`（如 `content.article`），内核模块为 `<模型>`（`core:make-model` 自动完成）；`AppServiceProvider` 只开启强制（`requireMorphMap()`），System 的 `user` 也在 `SystemServiceProvider` 中登记。
+- 枚举实现 `App\Support\Enums\HasLabel`（`label()` 返回多语言的显示名称，`tests/Arch` 强制）。
 - `app/Core/Generator` 是生成命令所在的内核模块（只在命令行下注册），修改生成规则时同步更新它的测试 `tests/Core/Generator`。
 
 ### 富文本与导出（设计文档 §9、§6.10）

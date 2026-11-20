@@ -129,7 +129,7 @@ it('deletes the attachments of a record together with the record', function (): 
 });
 
 it('prunes the orphans older than the configured hours, with their files', function (): void {
-    config(['core.attachments.orphan_ttl' => 24]);
+    config(['core.system.attachment.orphan_ttl_hours' => 24]);
     $old = Attachment::factory()->withFile()->create(['created_at' => now()->subHours(25)]);
     $recent = Attachment::factory()->withFile()->create(['created_at' => now()->subHours(23)]);
     $bound = Attachment::factory()->boundTo(User::factory()->create(), 'files')->withFile()->create(['created_at' => now()->subDays(30)]);

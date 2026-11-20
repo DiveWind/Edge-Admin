@@ -8,7 +8,7 @@ use App\Http\Admin\Requests\ListRequest;
  * 执行记录列表的查询参数（GET /monitor/schedules/{schedule}/logs，设计文档 §6.3、§6.6）：page、pageSize、sort 由 ListRequest 校验，
  * 这里校验筛选值的格式；type 可用逗号传多个（starting、finished、failed、skipped），created_at 区间由 DateTimeRangeFilter 校验。
  */
-class ScheduledTaskLogIndexRequest extends ListRequest
+class ScheduleLogIndexRequest extends ListRequest
 {
     /**
      * Get the validation rules that apply to the request.

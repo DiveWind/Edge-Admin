@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * 新增菜单与权限节点（POST /system/menus，设计文档 §6.5、§8.2、§8.6）：自定义节点（is_builtin = false），guard 为 web。
+ * 新增节点（POST /system/menus，设计文档 §6.5、§8.2、§8.6）：自定义节点（is_builtin = false），guard 为 web。
  *
  * - 可写入的字段为 Permission 的 `#[Fillable]`（guard_name 除外），其余键忽略：meta.title / meta.icon / meta.order 已由入口转换为
  *   title / icon / sort 列，meta 只含 Permission::META_KEYS 中的键；

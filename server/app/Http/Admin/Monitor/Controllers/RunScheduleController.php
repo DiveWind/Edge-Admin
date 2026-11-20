@@ -12,7 +12,7 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
  * 只接受已同步的任务 id，不接受命令字符串；执行的是调度定义中的同名事件（ExecuteScheduledTask）。
  * 授权由 ScheduledTaskPolicy::run() 判定（monitor.schedule.run）；路由另经过 admin-ops 限流。
  */
-class RunScheduledTaskController
+class RunScheduleController
 {
     #[Authorize('run', 'schedule')]
     public function __invoke(ScheduledTask $schedule, RunScheduledTask $action): void

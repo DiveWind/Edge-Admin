@@ -2,58 +2,31 @@
 
 namespace App\Http\Admin\System\Controllers;
 
-use App\Core\System\Actions\{DeleteUnboundAttachment, StoreAttachment};
+use App\Core\System\Actions\DeleteUnboundAttachment;
 use App\Core\System\Models\{Attachment, User};
 use App\Core\System\Queries\AttachmentList;
-use App\Http\Admin\System\Requests\{AttachmentIndexRequest, AttachmentUploadRequest};
+use App\Http\Admin\System\Requests\AttachmentIndexRequest;
 use App\Http\Admin\System\Resources\AttachmentResource;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
-use LogicException;
 
 /**
- * 附件（设计文档 §6.8）：上传与详情（`/attachments`，各业务表单使用），附件管理的列表与删除（`/system/attachments`）。
- * 下载与预览是签名路由（AttachmentDownloadController、AttachmentPreviewController）。
+ * 附件管理（`/system/attachments`，设计文档 §6.8）：列表与删除。上传与详情是个人功能（`/attachments`，MyAttachmentController）。
  *
  * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）；授权由 AttachmentPolicy 判定
- * （上传只需登录；详情的访问权委托给绑定对象；管理按 system.attachment 与数据范围），写入调用 System 模块的 Action。
+ * （system.attachment、system.attachment.delete 与数据范围），删除调用 System 模块的 Action。
  */
 class AttachmentController
 {
     /**
-     * 附件管理的列表（经过数据范围 visibleTo($actor)，不含私有附件如导出的文件，预加载 creator）：筛选 name、mime_type（模糊）、created_by、collection（精确）、
+     * 列表（经过数据范围 visibleTo($actor)，不含私有附件如导出的文件，预加载 creator）：筛选 name、mime_type（模糊）、created_by、collection（精确）、
      * is_bound（true / false）、created_at（区间 `起,止`）；排序 id、size、created_at，默认 `-id`。不在白名单内的参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', Attachment::class)]
     public function index(AttachmentIndexRequest $request, AttachmentList $list, #[CurrentUser] User $actor): AnonymousResourceCollection
     {
         return AttachmentResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
-    }
-
-    /**
-     * 上传（201）：返回未绑定的附件与签名的下载、预览地址；由业务表单提交它的 id 完成绑定。
-     */
-    #[Authorize('create', Attachment::class)]
-    public function store(AttachmentUploadRequest $request, StoreAttachment $action, #[CurrentUser] User $actor): AttachmentResource
-    {
-        $file = $request->file('file');
-
-        if (! $file instanceof UploadedFile) {
-            throw new LogicException('file 已由 AttachmentUploadRequest 校验为上传的文件。');
-        }
-
-        return new AttachmentResource($action->handle($file, $actor));
-    }
-
-    /**
-     * 详情，含重新签发的下载、预览地址（访问权见 AttachmentPolicy::view()）。
-     */
-    #[Authorize('view', 'attachment')]
-    public function show(Attachment $attachment): AttachmentResource
-    {
-        return new AttachmentResource($attachment);
     }
 
     /**

@@ -30,7 +30,7 @@ it('generates the class in the module directory', function (string $command, str
         'namespace App\Modules\Content\Queries;', 'class ArticleStatistics', 'public function get(User $actor): array',
     ]],
     'enum' => ['core:make-enum', 'ArticleStatus', 'app/Modules/Content/Enums/ArticleStatus.php', [
-        'use App\Core\System\Contracts\HasLabel;', 'enum ArticleStatus: string implements HasLabel', 'public function label(): string',
+        'use App\Support\Enums\HasLabel;', 'enum ArticleStatus: string implements HasLabel', 'public function label(): string',
     ]],
     'data' => ['core:make-data', 'ArticleSummary', 'app/Modules/Content/Data/ArticleSummaryData.php', [
         'namespace App\Modules\Content\Data;', 'final readonly class ArticleSummaryData',
@@ -41,7 +41,7 @@ it('generates an enum with a semantic color with --color', function (): void {
     $this->artisan('core:make-enum', ['name' => 'ArticleStatus', '--module' => 'Content', '--color' => true])->assertSuccessful();
 
     expect($this->project->read('app/Modules/Content/Enums/ArticleStatus.php'))->toContain(
-        'use App\Core\System\Contracts\{HasColor, HasLabel};', 'enum ArticleStatus: string implements HasColor, HasLabel', 'public function color(): string',
+        'use App\Support\Enums\{HasColor, HasLabel};', 'enum ArticleStatus: string implements HasColor, HasLabel', 'public function color(): string',
     );
 });
 

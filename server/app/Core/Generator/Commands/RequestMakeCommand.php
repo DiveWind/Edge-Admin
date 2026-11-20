@@ -11,13 +11,13 @@ use Override;
  *
  * - `--list`：列表请求，继承入口的 Requests\ListRequest（page、pageSize、sort、filter[]，§6.3）；带模型（`--model=`，或名称为
  *   `<已有的模型>Index`）时按模型文件的写法校验筛选值（name、created_at、软删除的 trashed）；
- * - `--export`：导出请求（§6.10），继承同模块的列表请求（`<名称>Export` → `<名称>IndexRequest`，须已存在），去掉 page、pageSize，加 format；
+ * - `--export`：导出请求（§6.10），继承同模块的列表请求（`Export<模型复数>` → `<模型>IndexRequest`，须已存在），去掉 page、pageSize，加 format；
  * - 只有 `--model=`：新增 / 修改的表单请求（占位字段 name 的校验与字段名）。
  */
 #[Signature('core:make-request
     {name : 请求类名，如 StoreArticle（生成 StoreArticleRequest）}
     {--list : 列表请求，继承入口的 ListRequest}
-    {--export : 导出请求，继承同模块的列表请求（<名称>Export → <名称>IndexRequest）}
+    {--export : 导出请求，继承同模块的列表请求（Export<模型复数> → <模型>IndexRequest）}
     {--model= : 请求对应的模型（模块中的模型名）}
     '.self::ENTRY_OPTIONS.'
     '.self::MODULE_OPTIONS)]
@@ -113,11 +113,11 @@ class RequestMakeCommand extends EntryGeneratorCommand
     }
 
     /**
-     * 导出请求继承的列表请求：`<名称>Export` → `<名称>IndexRequest`。
+     * 导出请求继承的列表请求：`Export<模型复数>` → `<模型>IndexRequest`（如 ExportPosts → PostIndexRequest）。
      */
     private function parentRequest(): string
     {
-        return Str::chopEnd(Str::chopEnd($this->getNameInput(), 'Request'), 'Export').'IndexRequest';
+        return Str::singular(Str::chopStart(Str::chopEnd($this->getNameInput(), 'Request'), 'Export')).'IndexRequest';
     }
 
     /**

@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
  *
  * - 只有草稿能发布：AnnouncementPolicy 返回 403；两人同时发布时在事务中锁行复核，已不是草稿 → 422（message），因此只会发送一次；
  * - 状态改为 published，记下 published_at 与发布人 published_by；
- * - 派发 SendAnnouncement（ShouldQueueAfterCommit：事务提交后才入队），由它按批（core.message.announcements.batch_size）派发 Bus::batch。
+ * - 派发 SendAnnouncement（ShouldQueueAfterCommit：事务提交后才入队），由它按批（core.message.announcement.batch_size）派发 Bus::batch。
  */
 class PublishAnnouncement
 {

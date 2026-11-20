@@ -2,7 +2,7 @@
 
 namespace App\Core\System\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 通用的启用 / 停用状态（设计文档 §6.4）：用户、角色、菜单节点共用，接口中为字符串 `enabled` / `disabled`。

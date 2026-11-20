@@ -2,9 +2,9 @@
 
 namespace {{ namespace }};
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 {{#color}}
-use App\Core\System\Contracts\HasColor;
+use App\Support\Enums\HasColor;
 {{/color}}
 
 /**

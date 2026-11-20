@@ -9,7 +9,7 @@ use Illuminate\Container\Attributes\Singleton;
 use InvalidArgumentException;
 
 /**
- * 菜单与权限节点的声明（Core 的扩展点，设计文档 §5.5、§8.2）：`#[Singleton]`，只保存启动时注册的静态声明，不保存请求数据（§10.3）。
+ * 节点的声明（Core 的扩展点，设计文档 §5.5、§8.2）：`#[Singleton]`，只保存启动时注册的静态声明，不保存请求数据（§10.3）。
  *
  * 各模块在自己 Provider 的 boot() 中注册本模块的节点（System 自己的节点也这样注册），
  * 由同步命令 `php artisan core:sync-permissions` 统一写入 permissions 表：

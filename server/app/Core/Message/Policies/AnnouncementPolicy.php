@@ -15,7 +15,7 @@ use Illuminate\Auth\Access\Response;
  * 403 / 422 的分工（§6.1、§8.6）：这里判定只看“操作者 + 公告本身”的规则——只有草稿能修改、发布，只有已发布的能撤回，已发布的不能删除；
  * 目标角色与 target 不符、引用不能使用的附件、并发时状态已变由 Action / Form Request 返回 422。
  *
- * read（我收到的公告）：不需要权限码、不按数据范围，只看是否发给了操作者（已发布且目标包含操作者，Announcement::isReceivedBy()）。
+ * viewReceived（我收到的公告）：不需要权限码、不按数据范围，只看是否发给了操作者（已发布且目标包含操作者，Announcement::isReceivedBy()）。
  *
  * 规则与调用方无关：禁止判断是哪个入口在调用。公告没有软删除与批量操作，相关方法一律拒绝。
  */
@@ -124,7 +124,7 @@ class AnnouncementPolicy
     /**
      * 我收到的公告：已发布，且目标包含操作者。
      */
-    public function read(User $actor, Announcement $announcement): Response
+    public function viewReceived(User $actor, Announcement $announcement): Response
     {
         return $announcement->isReceivedBy($actor) ? Response::allow() : Response::deny();
     }

@@ -13,7 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * - name：导出类的对外名称；title：导出的显示名（后端文案，按当前请求的语言翻译；导出类已不再登记时为 name）；
  * - params：列表参数 `{ filter, sort }`（为空时为 `[]`）；row_count：完成时写出的行数；
  * - file：生成的文件（附件，格式同 AttachmentResource，签名的下载地址由本接口签发）；完成前、未加载 file 关联时为 null；
- * - expires_at：到期清理的时间（创建时间 + config('core.exports.ttl') 小时）；时间为带时区偏移的 ISO 8601。
+ * - expires_at：到期清理的时间（创建时间 + config('core.system.export.ttl_hours') 小时）；时间为带时区偏移的 ISO 8601。
  *
  * @mixin Export
  */

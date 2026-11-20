@@ -2,7 +2,7 @@
 
 namespace App\Core\Message\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 公告的状态（设计文档 §6.9）：草稿 → 已发布 → 已撤回。撤回是终态（不能再发布、不能修改，只能删除）。

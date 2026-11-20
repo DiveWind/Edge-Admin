@@ -2,10 +2,10 @@
 
 namespace App\Core\System\Models;
 
-use App\Core\System\Contracts\HasColor;
 use App\Core\System\Enums\Status;
 use App\Core\System\Observers\DictionaryObserver;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
+use App\Support\Enums\HasColor;
 use Database\Factories\Core\System\Models\DictItemFactory;
 use Illuminate\Database\Eloquent\Attributes\{Fillable, ObservedBy};
 use Illuminate\Database\Eloquent\Factories\HasFactory;

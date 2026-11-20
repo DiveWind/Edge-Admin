@@ -12,8 +12,8 @@ use Override;
  * core:make-exporter：模块中某个列表的导出类（Exporters/<模型>Exporter，设计文档 §6.10、§10.4），与 Content 的 ArticleExporter 一致：
  * 查询调用列表的 Query 类 `<模型>List`（缺少时一并生成），列与 map() 按模型文件的写法生成。
  *
- * 登记到模块的 resources/exporters.php（对外名称 `<模块>.<模型>`；文件没有时创建，并在 ServiceProvider 的 boot() 中注册到 ExporterRegistry）；
- * 并提示还需要的：菜单的 `<菜单>.export` 按钮与导出入口（core:make-controller <模型>Export --invokable --model=<模型>）。
+ * 登记到模块的 resources/exporters.php（对外名称：业务模块 `<模块>.<模型>`，内核模块 `<模型>`，设计文档 §4.4；文件没有时创建，并在 ServiceProvider 的 boot() 中注册到 ExporterRegistry）；
+ * 并提示还需要的：菜单的 `<菜单>.export` 按钮与导出入口（core:make-controller Export<模型复数> --invokable --model=<模型>）。
  */
 #[Signature('core:make-exporter
     {name : 模型名或导出类名，如 Article（生成 ArticleExporter）}
@@ -65,6 +65,7 @@ class ExporterMakeCommand extends ModuleGeneratorCommand
     {
         $model = $this->model();
         $name = $this->permissionFor($model);
+        $identifier = $this->identifierFor($model);
 
         $status = $this->generateUnlessExists('core:make-query', [
             'name' => "{$model}List",
@@ -79,14 +80,14 @@ class ExporterMakeCommand extends ModuleGeneratorCommand
             $this->writeFromStub('module.exporters', $declarations, $this->replacements($class), 'Declarations');
         }
 
-        $this->register($declarations, "导出类 {$name}", fn (string $code): ?string => ClassMapFile::register($code, $name, $class));
+        $this->register($declarations, "导出类 {$identifier}", fn (string $code): ?string => ClassMapFile::register($code, $identifier, $class));
         $this->register($this->moduleProvider()['path'], '导出类声明 resources/exporters.php', fn (string $code): ?string => ModuleProviderFile::registerExporters($code));
 
         if (! in_array("{$name}.export", $this->declaredMenuNames(), true)) {
             $this->components->info('还需要：');
             $this->components->bulletList([
                 "在 [{$this->relativePath($this->modulePath('resources/menus.php'))}] 的菜单 {$name} 下加按钮 'export' => 'common.export'",
-                "导出入口：php artisan core:make-controller {$model}Export --invokable --model={$model} --module={$this->moduleName()}".($this->option('core') ? ' --core' : ''),
+                '导出入口：php artisan core:make-controller '.self::exportName($model)." --invokable --model={$model} --module={$this->moduleName()}".($this->option('core') ? ' --core' : ''),
             ]);
         }
 

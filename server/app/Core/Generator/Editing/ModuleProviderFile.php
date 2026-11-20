@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * - 多态别名：追加到 boot() 中的 `Relation::morphMap([` … `]);`；还没有时插在 boot() 方法体的开头；
  * - 契约绑定：追加到 `public array $bindings = [` … `];`（框架注册 Provider 时自动绑定）；还没有时插在第一个方法之前；
  * - 语言包：`$this->loadTranslationsFrom(__DIR__.'/resources/lang', '<命名空间>');`，追加到 boot() 的末尾；
- * - 菜单与权限节点：boot() 注入 MenuRegistry，`$menus->register(require __DIR__.'/resources/menus.php');`；
+ * - 节点：boot() 注入 MenuRegistry，`$menus->register(require __DIR__.'/resources/menus.php');`；
  * - 导出类：boot() 注入 ExporterRegistry，`$exporters->register(require __DIR__.'/resources/exporters.php');`（条目在 resources/exporters.php，ClassMapFile）。
  *
  * 预期的格式与 core.module.provider.stub 生成的一致；找不到上述位置时抛出 UnexpectedFormatException，不猜测位置。
@@ -112,7 +112,7 @@ class ModuleProviderFile
     }
 
     /**
-     * 登记模块的菜单与权限节点（resources/menus.php）；已登记时返回 null。
+     * 登记模块的节点（resources/menus.php）；已登记时返回 null。
      *
      * @throws UnexpectedFormatException
      */

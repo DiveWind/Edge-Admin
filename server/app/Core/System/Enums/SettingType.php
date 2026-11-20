@@ -2,7 +2,7 @@
 
 namespace App\Core\System\Enums;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
  * 系统参数的类型（设计文档 §6.7）：决定接口的校验规则、保存前的转换与读取时的类型。

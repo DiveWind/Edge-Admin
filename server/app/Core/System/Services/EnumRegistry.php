@@ -2,7 +2,7 @@
 
 namespace App\Core\System\Services;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 use BackedEnum;
 use Illuminate\Container\Attributes\Singleton;
 use InvalidArgumentException;
@@ -26,9 +26,10 @@ use InvalidArgumentException;
 class EnumRegistry
 {
     /**
-     * 对外名称的格式：小写点分、以字母开头（如 `status`、`login_event`、`content.article_status`）。
+     * 对外名称的格式（对外标识，设计文档 §4.4）：snake_case，Core 不带前缀（`status`、`login_event`），
+     * 业务模块为 `<模块>.<snake>`（`content.article_status`）。
      */
-    public const string NAME_PATTERN = '/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/';
+    public const string NAME_PATTERN = '/^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$/';
 
     /**
      * 对外名称 => 枚举类（按登记顺序）。
@@ -56,7 +57,7 @@ class EnumRegistry
             $name = (string) $name;
 
             if (preg_match(self::NAME_PATTERN, $name) !== 1) {
-                throw new InvalidArgumentException("枚举的对外名称“{$name}”不合法：应为小写点分、以字母开头的标识，如 content.article_status。");
+                throw new InvalidArgumentException("枚举的对外名称“{$name}”不合法：应为 snake_case 的标识，业务模块加模块名前缀，如 status、content.article_status。");
             }
 
             if (isset($this->enums[$name]) || isset($declared[$name])) {

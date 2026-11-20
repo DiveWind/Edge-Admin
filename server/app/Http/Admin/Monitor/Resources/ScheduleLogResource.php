@@ -13,7 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * @mixin ScheduledTaskLog
  */
-class ScheduledTaskLogResource extends JsonResource
+class ScheduleLogResource extends JsonResource
 {
     /**
      * Transform the resource into an array.

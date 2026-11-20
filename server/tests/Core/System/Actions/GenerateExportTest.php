@@ -155,7 +155,7 @@ describe('file', function (): void {
     })->with(['=1+1', '+1', '-1', '@SUM(A1)']);
 
     it('reads the rows in chunks and keeps the order of the list sort', function (): void {
-        config(['core.exports.chunk_size' => 2]);
+        config(['core.system.export.chunk_size' => 2]);
         foreach (['dave', 'carol', 'erin', 'bob', 'alice'] as $username) {
             User::factory()->create(['username' => $username, 'name' => 'same']);
         }
@@ -184,7 +184,7 @@ describe('notifications', function (): void {
 
         $notification = Notification::query()->ownedBy($export->user()->sole())->sole();
 
-        expect($notification->type)->toBe('message.export')
+        expect($notification->type)->toBe('export_finished')
             ->and($notification->data)->toMatchArray([
                 'title' => 'message.notification.exportCompleted',
                 'level' => 'success',
@@ -209,7 +209,7 @@ describe('notifications', function (): void {
     ]);
 
     it('marks the export as failed and notifies the owner when the job fails', function (): void {
-        config(['core.exports.link' => '/exports/{id}']);
+        config(['core.system.export.link' => '/exports/{id}']);
         registerTestExporter(fn (): array => throw new RuntimeException('boom'));
         $export = queuedUserExport(['exporter' => 'test.items']);
 
@@ -270,7 +270,7 @@ describe('cancellation and idempotency', function (): void {
 });
 
 it('uses the configured timeout and fails on timeout without retries', function (): void {
-    config(['core.exports.timeout' => 45]);
+    config(['core.system.export.timeout' => 45]);
 
     $job = new RunExport(1);
 

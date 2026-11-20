@@ -57,15 +57,28 @@
 - 受信任的入口直接读取本模块的模型，写入调用 `Actions`；列表的查询调用 `Queries/<模型>List`；接口放在各受信任入口的同名目录：`app/Http/Admin/Monitor`。
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 
+**URL 资源 ↔ 模型**（Http 层按 URL 资源命名，领域层按模型命名，设计文档 §4.4）：
+
+| URL 资源（`/monitor/…`） | Http 层 | 模型 / 领域层 |
+|---|---|---|
+| `schedules` | `ScheduleController`、`ScheduleIndexRequest`、`ScheduleResource` | `ScheduledTask`、`ScheduledTaskPolicy`、`ScheduledTaskList` |
+| `schedules/{schedule}/logs` | `ScheduleLogController`（嵌套资源 `schedules.logs`）、`ScheduleLogIndexRequest`、`ScheduleLogResource` | `ScheduledTaskLog`、`ScheduledTaskLogList` |
+| `schedules/{schedule}/run` | `RunScheduleController` | `RunScheduledTask`、`ExecuteScheduledTask` |
+| `online/sessions` | `OnlineSessionController`、`OnlineSessionResource` | `Session`、`SessionPolicy`、`OnlineSessionList` |
+| `online/tokens` | `OnlineTokenController`、`OnlineTokenResource` | Sanctum 的 `PersonalAccessToken`、`PersonalAccessTokenPolicy`、`OnlineTokenList` |
+| `failed-jobs/retry-all`、`failed-jobs/flush` | `RetryAllFailedJobsController`、`FlushFailedJobsController` | `RetryFailedJobs`、`FlushFailedJobs` |
+| `health`、`health/check` | `HealthController`、`CheckHealthController` | `LatestHealthResults`、`RunHealthChecks` |
+| `backups/destinations` | `BackupDestinationsController` | `BackupDestinations` |
+
 ## 日志名
 
 | 日志名 | 写入方 | description |
 |---|---|---|
 | `operation` | `LogOperation`（后台入口的 `RecordOperationLog` 中间件） | 路由名，前端翻译 |
 | `login` | `LogLogin`（`RecordLoginActivity`） | 事件名，同 `event` |
-| 模块名小写（如 `content`） | 各模块（`LogsActivity` 或 `activity('<模块>')`） | 稳定的标识，前端翻译 |
+| 模块标识：Core 为 `system`、`monitor`、`message`，业务模块为模块名（如 `content`） | 各模块的 Action 调用 `LogAudit`（日志名按模型所在的模块得出，不由调用方传入） | `<日志名>.<模型标识>.<事件>`（如 `system.user.created`、`content.article.published`），前端翻译 |
 
-模块写审计日志时不要使用 `operation`、`login`。
+`operation`、`login` 是保留的日志名，不是模块标识（设计文档 §4.4）。
 
 ## 登录日志的事件
 
@@ -114,7 +127,7 @@
 
 ## 依赖 Core 的能力
 
-- System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`、“管得到”的判定 `Services/Manageability`。
+- System：节点的扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`、“管得到”的判定 `Services/Manageability`。
 - System：枚举选项的白名单 `EnumRegistry`：登记 `login_event`（`Enums/LoginEvent`，实现 `HasColor`）、`login_failure_reason`（`Enums/LoginFailureReason`），由 `/options/enums` 下发（设计文档 §6.7）。
 - 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health、spatie/laravel-backup；框架的 `failed_jobs`、`queue:retry`。
 

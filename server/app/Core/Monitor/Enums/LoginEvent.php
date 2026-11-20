@@ -2,7 +2,7 @@
 
 namespace App\Core\Monitor\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 登录日志的事件（activity_log 的 event 列，设计文档 §6.6、§7.3）。“结果”即事件：成功为 login，失败为 failed、lockout；logout、password_reset 是成功的认证操作。

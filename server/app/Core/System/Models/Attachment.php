@@ -27,7 +27,7 @@ use Throwable;
  *
  * 写入只在 System 模块的 Action 中进行（StoreAttachment、SyncAttachments、DeleteAttachment、DeleteUnboundAttachment，设计文档 §5.2）。
  * 记录删除后，文件在事务提交后删除（booted() 的 deleted 事件），事务回滚时文件保留。
- * 未绑定、创建超过 config('core.attachments.orphan_ttl') 小时的附件由 `model:prune` 逐条删除（Prunable，触发删除文件）；
+ * 未绑定、创建超过 config('core.system.attachment.orphan_ttl_hours') 小时的附件由 `model:prune` 逐条删除（Prunable，触发删除文件）；
  * 逐条删除时在锁内复核“仍未绑定”（prune() → DeleteUnboundAttachment），读出这一批之后才被绑定的附件跳过。
  *
  * @property int $id
@@ -181,7 +181,7 @@ class Attachment extends Model
     {
         return static::query()
             ->whereNull('attachable_type')
-            ->where('created_at', '<=', now()->subHours(config()->integer('core.attachments.orphan_ttl')));
+            ->where('created_at', '<=', now()->subHours(config()->integer('core.system.attachment.orphan_ttl_hours')));
     }
 
     /**

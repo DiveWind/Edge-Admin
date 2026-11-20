@@ -11,7 +11,7 @@ use Illuminate\Support\ServiceProvider;
  *
  * 注册本模块的契约绑定、多态别名、命令、事件监听、语言包与视图，并通过 Core 的扩展点接入（设计文档 §4.3、§5.5），不修改 Core 的任何文件：
  * - 语言包：resources/lang，命名空间 `{{ translationNamespace }}::`；
- * - 菜单与权限节点：resources/menus.php → MenuRegistry（core:sync-permissions 写入）；
+ * - 节点：resources/menus.php → MenuRegistry（core:sync-permissions 写入）；
  * - 字典类型与初始字典项：resources/dicts.php → DictRegistry（core:sync-dicts 写入）。
  *
  * 多态别名、契约绑定与导出类由 core:make-model、core:make-contract、core:make-exporter 自动登记；

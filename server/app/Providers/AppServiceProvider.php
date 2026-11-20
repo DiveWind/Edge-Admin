@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Core\System\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,7 +40,8 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * 模型：
-     * - 多态类型必须登记别名（§4.5）：通知、日志、token、角色等关联表存别名而非完整类名，以后移动类不必迁移数据；
+     * - 多态类型必须登记别名（§4.5）：通知、日志、token、角色等关联表存别名而非完整类名，以后移动类不必迁移数据。
+     *   这里只开启强制，别名由各模块在自己的 Provider 中登记（含 System 的 `user`）；
      * - 非生产环境开启严格模式：禁止延迟加载（N+1）、禁止静默丢弃未声明的属性、禁止访问不存在的属性；
      * - 日期使用不可变的 CarbonImmutable；
      * - 工厂 → 模型的推断与模型 → 工厂对称：Database\Factories\Core\System\Models\UserFactory → App\Core\System\Models\User
@@ -49,9 +49,7 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureModels(): void
     {
-        Relation::enforceMorphMap([
-            'user' => User::class,
-        ]);
+        Relation::requireMorphMap();
 
         Factory::guessModelNamesUsing(function (Factory $factory): string {
             $model = 'App\\'.Str::of($factory::class)->after('Database\\Factories\\')->replaceLast('Factory', '');

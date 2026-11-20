@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Core\System\Contracts;
+namespace App\Support\Enums;
 
 /**
  * 有显示名称的枚举（设计文档 §5.5、§10.1）：Core 与业务模块的枚举都实现它（tests/Arch 强制），

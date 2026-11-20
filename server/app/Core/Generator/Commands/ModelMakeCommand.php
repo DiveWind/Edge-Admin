@@ -17,7 +17,7 @@ use Override;
  * （`Relation::morphMap()`）与语言包（`loadTranslationsFrom()`）。
  *
  * 多态别名：业务模块为 `<模块>.<模型>`（snake_case，如 content.article，避免不同模块的同名模型冲突）；
- * 内核模块与 AppServiceProvider 中的 `user` 一致，为 `<模型>`。
+ * 内核模块为 `<模型>`（如 System 的 `user`）。
  */
 #[Signature('core:make-model
     {name : 模型名（单数），如 Article}
@@ -137,6 +137,6 @@ class ModelMakeCommand extends ModuleGeneratorCommand
 
     private function morphAlias(string $model): string
     {
-        return $this->option('core') ? Str::snake($model) : Str::snake($this->moduleName()).'.'.Str::snake($model);
+        return $this->identifierFor($model);
     }
 }

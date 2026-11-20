@@ -26,7 +26,7 @@ function exportWithFile(?User $owner = null): Export
 }
 
 it('prunes the exports older than the ttl together with their files, whatever their status', function (): void {
-    config(['core.exports.ttl' => 24]);
+    config(['core.system.export.ttl_hours' => 24]);
     $old = exportWithFile();
     $file = $old->file()->sole();
     $stuck = Export::factory()->create();
@@ -54,7 +54,7 @@ it('deletes the exports of a deleted user together with their files', function (
 });
 
 it('expires ttl hours after its creation', function (): void {
-    config(['core.exports.ttl' => 48]);
+    config(['core.system.export.ttl_hours' => 48]);
     $export = Export::factory()->create();
 
     expect($export->expiresAt()?->toIso8601String())->toBe($export->created_at?->addHours(48)->toIso8601String());

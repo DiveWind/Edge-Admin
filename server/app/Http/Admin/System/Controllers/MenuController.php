@@ -12,7 +12,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
- * 菜单管理（设计文档 §6.5、§8.2、§8.6）：菜单与权限节点（Permission）的整棵树、详情、新增、修改、删除。路由参数 `{menu}` 绑定 Permission。
+ * 菜单管理（设计文档 §6.5、§8.2、§8.6）：节点（Permission）的整棵树、详情、新增、修改、删除。路由参数 `{menu}` 绑定 Permission。
  *
  * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）；授权由 PermissionPolicy 判定（默认拒绝，删除内置节点 403），
  * 写入调用 System 模块的 Action（类型层级、成环、内置节点的结构性字段、生命线节点、有子节点不能删等业务规则都在 Action 中）。

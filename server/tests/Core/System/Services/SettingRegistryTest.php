@@ -14,7 +14,7 @@ it('is a singleton that holds the System groups', function (): void {
         ->and(array_keys(resolve(SettingRegistry::class)->all()))->toBe(['site.name', 'site.login_notice', 'auth.login_rate_limit', 'attachment.allowed_extensions', 'attachment.max_size'])
         ->and(resolve(SettingRegistry::class)->get('auth.login_rate_limit'))
         ->type->toBe(SettingType::Integer)
-        ->config->toBe('core.auth.login_rate_limit')
+        ->config->toBe('core.system.auth.login_rate_limit')
         ->public->toBeFalse();
 });
 

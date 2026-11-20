@@ -14,7 +14,7 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
 /**
  * 我收到的公告（设计文档 §6.9）：已发布、且目标包含当前用户（全部用户，或当前拥有任一启用的目标角色）的公告。
  *
- * 列表只需登录（LOGIN_ONLY_ROUTES），只查发给本人的（Announcement::receivedBy()）；详情由 AnnouncementPolicy::read 判定
+ * 列表只需登录（LOGIN_ONLY_ROUTES），只查发给本人的（Announcement::receivedBy()）；详情由 AnnouncementPolicy::viewReceived 判定
  * （草稿、已撤回、不是发给自己的 403）。公告通知的 link 指向前端的公告详情页，页面调用详情接口。
  */
 class ReceivedAnnouncementController
@@ -30,7 +30,7 @@ class ReceivedAnnouncementController
     /**
      * 详情，含 content 与 attachments（附件的签名地址由本接口签发）。
      */
-    #[Authorize('read', 'announcement')]
+    #[Authorize('viewReceived', 'announcement')]
     public function show(Announcement $announcement): ReceivedAnnouncementResource
     {
         return new ReceivedAnnouncementResource($announcement->load(['publisher', 'files']))->withDetails();

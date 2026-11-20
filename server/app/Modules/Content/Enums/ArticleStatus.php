@@ -2,7 +2,7 @@
 
 namespace App\Modules\Content\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 文章的状态（设计文档 §6.11）：草稿 ⇄ 已发布。

@@ -2,7 +2,7 @@
 
 namespace Tests\Core\System\Services\Fixtures;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 颜色不合法的枚举：EnumRegistry 拒绝登记。

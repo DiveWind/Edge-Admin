@@ -26,13 +26,13 @@ Schedule::command(CleanActivitylogCommand::class, ['--force'])->daily()->without
 // 定时任务的执行记录（设计文档 §6.6）：删除早于 schedule-monitor.delete_log_items_older_than_days 天的记录（包模型的 MassPrunable）
 Schedule::command(PruneCommand::class, ['--model' => [ScheduledTaskLog::class]])->daily()->withoutOverlapping();
 
-// 孤儿附件（设计文档 §6.8）：上传后一直没有绑定、超过 core.attachments.orphan_ttl 小时的附件，连同文件删除（Prunable，逐条删除）
+// 孤儿附件（设计文档 §6.8）：上传后一直没有绑定、超过 core.system.attachment.orphan_ttl_hours 小时的附件，连同文件删除（Prunable，逐条删除）
 Schedule::command(PruneCommand::class, ['--model' => [Attachment::class]])->daily()->withoutOverlapping();
 
-// 过期的导出（设计文档 §6.10）：创建超过 core.exports.ttl 小时的导出（不论状态），连同文件删除（Prunable，逐条删除）
+// 过期的导出（设计文档 §6.10）：创建超过 core.system.export.ttl_hours 小时的导出（不论状态），连同文件删除（Prunable，逐条删除）
 Schedule::command(PruneCommand::class, ['--model' => [Export::class]])->hourly()->withoutOverlapping();
 
-// 已读的通知（设计文档 §6.9）：已读、创建超过 core.message.notifications.read_ttl 天的通知（MassPrunable）；未读的不清理
+// 已读的通知（设计文档 §6.9）：已读、创建超过 core.message.notification.read_ttl_days 天的通知（MassPrunable）；未读的不清理
 Schedule::command(PruneCommand::class, ['--model' => [Notification::class]])->daily()->withoutOverlapping();
 
 // 健康检查（设计文档 §6.6）：每分钟执行检查并保存结果，以及调度、队列的心跳。它们每天产生数千条执行记录，不纳入定时任务监控

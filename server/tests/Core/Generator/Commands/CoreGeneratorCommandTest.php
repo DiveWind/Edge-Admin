@@ -127,3 +127,12 @@ it('keeps or drops the conditional blocks of a stub, together with the lines of 
     expect(CoreGeneratorCommand::renderSections($stub, ['on' => true, 'off' => false]))->toBe("a\nb c\nf\n")
         ->and(CoreGeneratorCommand::renderSections($stub, ['on' => false, 'off' => true]))->toBe("a\nd\ne\nf\n");
 });
+
+it('names the external identifiers of core modules without a module prefix (design §4.4)', function (): void {
+    $this->artisan('core:make-module', ['name' => 'Monitor', '--core' => true])->assertSuccessful();
+    $this->artisan('core:make-model', ['name' => 'Event', '--module' => 'Monitor', '--core' => true])->assertSuccessful();
+    $this->artisan('core:make-exporter', ['name' => 'Event', '--module' => 'Monitor', '--core' => true])->assertSuccessful();
+
+    expect($this->project->read('app/Core/Monitor/MonitorServiceProvider.php'))->toContain("'event' => Event::class,")
+        ->and($this->project->read('app/Core/Monitor/resources/exporters.php'))->toContain("'event' => EventExporter::class,");
+});

@@ -60,7 +60,7 @@ describe('index', function (): void {
         Export::factory()->for($actor)->create();
 
         $this->actingAs($actor)
-            ->getJson('/api/admin/exports?filter[name]=system.user&filter[status]=failed&filter[format]=csv&filter[created_at]='.urlencode(now()->subHour()->toIso8601String().','))
+            ->getJson('/api/admin/exports?filter[name]=user&filter[status]=failed&filter[format]=csv&filter[created_at]='.urlencode(now()->subHour()->toIso8601String().','))
             ->assertOk()
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.items.0.id', $csv->id);

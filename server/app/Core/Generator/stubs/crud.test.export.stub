@@ -45,7 +45,7 @@ it('exports no more {{ modelWordsPlural }} than the actor can see in the list', 
     $this->actingAs($actor)
         ->postJson(route('{{ routeName }}.export'), ['format' => 'csv'])
         ->assertCreated()
-        ->assertJsonPath('data.name', '{{ permission }}');
+        ->assertJsonPath('data.name', '{{ identifier }}');
 
     $export = Export::query()->sole();
     $file = $export->file()->sole();

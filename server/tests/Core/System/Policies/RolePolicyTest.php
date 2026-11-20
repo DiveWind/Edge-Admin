@@ -27,7 +27,6 @@ dataset('abilities', [
     'delete' => ['delete', true, ['system.role.delete']],
     'changeStatus' => ['changeStatus', true, ['system.role.status']],
     'viewFormOptions' => ['viewFormOptions', false, ['system.role.create', 'system.role.update']],
-    'viewOptions' => ['viewOptions', false, ['system.user.create', 'system.user.update']],
 ]);
 
 it('allows each ability only with its permission codes', function (string $ability, bool $onRecord, array $codes): void {

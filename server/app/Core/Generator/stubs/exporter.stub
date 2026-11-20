@@ -9,7 +9,7 @@ use {{ moduleNamespace }}\Queries\{{ model }}List;
 use Illuminate\Database\Eloquent\{Builder, Model};
 
 /**
- * {{ model }} 列表的导出（对外名称 `{{ permission }}`，设计文档 §6.10）：在 {{ moduleProvider }} 中登记到 ExporterRegistry。
+ * {{ model }} 列表的导出（对外名称 `{{ identifier }}`，设计文档 §6.10）：在 {{ moduleProvider }} 中登记到 ExporterRegistry。
  *
  * 查询就是列表的 {{ model }}List：同一份筛选与排序白名单、同一个数据范围{{#softDeletes}}，含 filter[trashed] 的授权（viewTrashed）{{/softDeletes}}，
  * 导出的数据不会比列表多。显示名与表头是本模块语言包（{{ lang }}.export）中的键，生成文件时按发起人的语言翻译。

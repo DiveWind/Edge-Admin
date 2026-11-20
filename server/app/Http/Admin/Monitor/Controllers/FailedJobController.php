@@ -13,7 +13,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
- * 失败任务（设计文档 §6.6）：列表、详情、删除。重试见 RetryFailedJobController / RetryFailedJobsController，清空见 FlushFailedJobsController。
+ * 失败任务（设计文档 §6.6）：列表、详情、删除。重试见 RetryFailedJobController / RetryAllFailedJobsController，清空见 FlushFailedJobsController。
  * 失败任务驱动不是 database-uuids 时列表为空、详情与删除 404。
  *
  * 授权由 FailedJobPolicy 判定（monitor.failed-job、monitor.failed-job.delete）；不按数据范围过滤（失败任务属于系统）。

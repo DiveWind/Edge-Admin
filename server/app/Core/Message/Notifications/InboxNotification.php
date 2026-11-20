@@ -11,7 +11,7 @@ use Illuminate\Notifications\Notification;
  * 通知中心的通知（设计文档 §5.5、§6.9）：模块的通知类都继承它（tests/Arch 强制），统一出现在通知中心。
  *
  * ```php
- * class ArticleApproved extends InboxNotification
+ * class ArticleApprovedNotification extends InboxNotification
  * {
  *     public function __construct(private readonly Article $article) {}
  *
@@ -27,10 +27,13 @@ use Illuminate\Notifications\Notification;
  *     }
  * }
  *
- * $user->notify(new ArticleApproved($article));
+ * $user->notify(new ArticleApprovedNotification($article));
  * ```
  *
- * - type()：对外的类型名（小写点分，以模块名开头，全局唯一，tests/Arch 检查）。databaseType()、broadcastType() 返回它：
+ * - 类名为 `<事物><过去分词>Notification`（不与同名的事件冲突，如事件 ExportFinished 与通知 ExportFinishedNotification）；
+ * - type()：对外的类型名，即类名去掉 Notification 后的 snake_case，表达“发生了什么事”，与发送方是哪个模块无关
+ *   （设计文档 §4.4 的对外标识：Core 不带前缀，如 `announcement_published`、`export_finished`；业务模块为 `<模块>.<snake>`，
+ *   如 `content.article_approved`；全局唯一，tests/Arch 检查）。databaseType()、broadcastType() 返回它：
  *   库中的 type 列、接口与推送中的 type 都不出现 PHP 类名，移动、重命名类不用迁移数据；
  * - toInbox()：内容（NotificationContentData：title、content、level、link、params、subject），toDatabase() / toArray() 由它生成，结构统一；
  * - via()：默认只有 database，模块可以追加 mail 等通道；项目装了 Reverb 后加上 broadcast 即可实时推送（载荷为 toArray()）；
@@ -42,12 +45,13 @@ abstract class InboxNotification extends Notification
     use Queueable;
 
     /**
-     * 类型名的格式：小写点分，至少两段（第一段是模块名）。
+     * 类型名的格式（对外标识，设计文档 §4.4）：snake_case，业务模块再加 `<模块>.` 前缀。
      */
-    public const string TYPE_PATTERN = '/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/';
+    public const string TYPE_PATTERN = '/^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$/';
 
     /**
-     * 对外的类型名：小写点分、以模块名开头、全局唯一，如 `message.announcement`、`content.article_approved`。
+     * 对外的类型名：`<事物>_<过去分词>`，Core 不带前缀（`announcement_published`），业务模块为 `<模块>.<snake>`
+     * （`content.article_approved`），全局唯一。
      */
     abstract public static function type(): string;
 

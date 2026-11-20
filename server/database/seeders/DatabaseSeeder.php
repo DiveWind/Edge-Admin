@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * 先同步各模块的声明（core:sync，各环境都执行）：菜单与权限节点并确保超管角色存在（§8.2）、字典与系统参数（§6.7）；
+     * 先同步各模块的声明（core:sync，各环境都执行）：节点并确保超管角色存在（§8.2）、字典与系统参数（§6.7）；
      * 再把调度定义同步到定时任务监控（schedule-monitor:sync，§6.6），后台的定时任务页才有数据。部署时两者同样执行（§11.4）。
      *
      * 演示账号的密码都是 password，只在本地与测试环境创建（php artisan migrate:fresh --seed）：

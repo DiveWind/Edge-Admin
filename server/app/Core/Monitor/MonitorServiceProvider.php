@@ -21,7 +21,7 @@ use Spatie\Health\Facades\Health;
  * 注册本模块的契约绑定、多态别名、命令、事件监听、语言包与视图，并通过 Core 的扩展点接入（设计文档 §4.3、§5.5）。
  * 多态别名与契约绑定由 core:make-model、core:make-contract 自动登记。
  *
- * - 菜单与权限节点（resources/menus.php）注册到 System 的 MenuRegistry；登录日志的枚举登记到 EnumRegistry（选项接口，§6.7）；
+ * - 节点（resources/menus.php）注册到 System 的 MenuRegistry；登录日志的枚举登记到 EnumRegistry（选项接口，§6.7）；
  * - 登录日志：RecordLoginActivity 订阅认证事件（设计文档 §7.3）；
  * - Sanctum 的 PersonalAccessToken 不在 app/ 中，Policy 无法按命名推断，这里显式绑定 PersonalAccessTokenPolicy；
  * - 健康检查的检查项（spatie/laravel-health，阈值见 config('core.monitor.health')，设计文档 §6.6）：只在启动时登记到 Health 单例，

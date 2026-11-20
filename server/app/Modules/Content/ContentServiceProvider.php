@@ -16,7 +16,7 @@ use Illuminate\Support\ServiceProvider;
  *
  * 只通过扩展点接入，不修改 Core 的任何文件（§5.3）：
  * - 多态别名 `content.article`（§4.5）；语言包（命名空间 `content::`，resources/lang）；
- * - 菜单与权限节点（resources/menus.php）→ MenuRegistry；字典类型 `content.article_category`（resources/dicts.php）→ DictRegistry；
+ * - 节点（resources/menus.php）→ MenuRegistry；字典类型 `content.article_category`（resources/dicts.php）→ DictRegistry；
  * - 文章状态枚举 `content.article_status`（resources/enums.php）→ EnumRegistry（/options/enums）；
  *   文章列表的导出 `content.article`（resources/exporters.php）→ ExporterRegistry。
  */

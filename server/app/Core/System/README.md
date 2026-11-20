@@ -9,7 +9,7 @@
   找回密码邮件中的前端链接（均在 `SystemServiceProvider` 中配置）；
 - 停用账号、修改密码时让已登录的会话与 token 失效；
 - 角色与菜单权限（设计文档 §8.1、§8.2）：`Models/Role`、`Models/Permission`（继承 spatie 的模型，菜单树建在 `permissions` 表上，
-  节点类型见 `Enums/PermissionType`）、菜单与权限节点的扩展点 `MenuRegistry`、同步命令 `core:sync-permissions`、
+  节点类型见 `Enums/PermissionType`）、节点的扩展点 `MenuRegistry`、同步命令 `core:sync-permissions`、
   有效权限码 `EffectivePermissions` 与 `Gate::before`；
 - 角色管理（设计文档 §6.5、§8.5、§8.6）：`Policies/RolePolicy` 与角色的 Action（下文“角色管理”）；
 - 用户管理（设计文档 §6.5、§8.5、§8.6）：`Policies/UserPolicy` 与用户的 Action（下文“用户管理”）；
@@ -38,10 +38,10 @@
 | `Actions/RevokeUserSessions` | 删除用户的会话（database 驱动，按 `sessions.user_id`，可保留一个）与全部 token |
 | `Actions/SyncPermissions` | 把声明的节点同步到 `permissions` 表（`core:sync-permissions` 调用，规则见下文） |
 | `Commands/SyncPermissionsCommand` | `php artisan core:sync-permissions`：调用 `SyncPermissions` 并输出变更（在 `SystemServiceProvider` 中登记） |
-| `Services/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册菜单与权限节点（下文） |
+| `Services/MenuRegistry` | 扩展点：各模块在 Provider 的 `boot()` 中注册节点（下文） |
 | `Data/MenuNodeData` | 已校验、已展开 `buttons` 的一个声明节点（`MenuRegistry::all()` 的元素）；`structuralMeta()` 为同步命令修正的 meta 键 |
-| `Models/Permission` | 菜单与权限节点；`isValidName()`（权限码格式，声明与写接口共用）、`META_KEYS`（meta 列白名单）、`LIFELINE_NAMES`（生命线节点） |
-| `Enums/PermissionType` | 5 种节点类型与按类型的规则：`canBeChildOf()` / `canContain()`（层级）、`isRoute()`（有 path）、`usesComponent()`、`requiredMetaKey()`、`allowsMetaKey()`、`routeComponent()`（`/menu/all` 的 component） |
+| `Models/Permission` | 节点（菜单树的一行，URL 资源为 `menus`）；`isValidName()`（权限码格式，声明与写接口共用）、`META_KEYS`（meta 列白名单）、`LIFELINE_NAMES`（生命线节点） |
+| `Enums/PermissionType` | 5 种节点类型与按类型的规则：`canBeChildOf()` / `canContain()`（层级）、`isRoute()`（有 path）、`usesComponent()`、`requiredMetaKey()`、`allowsMetaKey()` |
 | `Services/EffectivePermissions` | 请求级的有效权限码与菜单树计算器（`#[Scoped]`，不是注册表），`Gate::before`、`/auth/codes`、`/menu/all` 共用 |
 | `Services/PermissionHierarchy` | 菜单树的纯计算：`chain()`、`isSelfOrDescendant()`、`everyInChain()`、`isEffective()`（节点及全部祖先都启用）、`withAncestors()`、`tree()`；有效权限码、菜单管理与节点树共用（脏数据按不生效处理） |
 | `Enums/Status` | 通用的启用 / 停用状态，用户、角色、菜单节点共用 |
@@ -50,7 +50,7 @@
 | `Actions/CreateRole`、`UpdateRole`、`DeleteRole`、`ChangeRoleStatus` | 角色的新增、修改、删除、启用 / 停用（规则见下文“角色管理”） |
 | `Actions/SyncRolePermissions` | 保存角色的权限码：防提权、保留操作者管不到的授权、补齐祖先（由 CreateRole、UpdateRole 调用） |
 | `Queries/RoleList` | 角色列表的查询（筛选与排序白名单） |
-| `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`、`viewOptions` |
+| `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`（角色表单的授权树与数据范围） |
 | `Actions/CreateUser`、`UpdateUser`、`DeleteUser`、`ChangeUserStatus` | 用户的新增、修改、删除、启用 / 停用（规则见下文“用户管理”）；重置密码复用 `ResetUserPassword::handle()` |
 | `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管（由 CreateUser、UpdateUser 调用） |
 | `Services/SuperAdminGuard` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用）；`lock()` 是可能减少启用超管的事务的第一条语句（锁顺序） |
@@ -76,7 +76,7 @@
 | `Enums/SettingType` | 参数类型 `string`、`text`、`int`、`float`、`bool`、`json`：校验规则、输入转换、类型判断 |
 | `Policies/SettingPolicy` | 系统参数的授权：查看、修改值；新增、删除一律拒绝 |
 | `Services/EnumRegistry` | 可下发给前端的枚举（显式白名单，`/options/enums`；各模块的 `resources/enums.php`） |
-| `Contracts/HasColor` | 枚举的语义色（可选）：`color()` 为 antd 预设色名或 hex，`/options/enums` 据此输出 `color`；`Status` 已实现 |
+| `App\Support\Enums\HasColor`（Support） | 枚举的语义色（可选）：`color()` 为 antd 预设色名或 hex，`/options/enums` 据此输出 `color`；`Status` 已实现 |
 | `Models/Attachment` | 附件：`PREVIEWABLE_MIME_TYPES`（可预览、可作头像的图片白名单）、`isBound()`、`isBoundTo()`、`isPreviewable()`、`asciiFileName()`（下载的 ASCII 回退文件名）；`Prunable`（孤儿清理）；删除后在事务提交后删除文件 |
 | `Models/Concerns/HasAttachments` | 模型 trait：`attachments()`、`attachmentsIn()`、`attachmentIn()`；记录删除时一并删除附件（已用于 `User` 的头像 `avatar()`） |
 | `Actions/StoreAttachment` | 保存文件并登记为附件（随机文件名、服务端探测 MIME、sha256；上传时未绑定，导出文件直接绑定到导出记录），附件元数据规则的唯一实现 |
@@ -90,14 +90,15 @@
 | `Contracts/Exporter`、`Services/ExporterRegistry` | 扩展点：导出类（显示名、权限码、列、按“操作者 + 列表参数”构造查询、逐行映射）与其登记（各模块的 `resources/exporters.php`，下文“异步导出”） |
 | `Queries/ExportList` | “我的导出”的列表查询（只含本人的，筛选与排序白名单） |
 | `Queries/UserList` | 用户列表的查询（query-builder 白名单 + `visibleTo`），列表接口与 `UserExporter` 共用 |
-| `Exporters/UserExporter` | 用户列表的导出（`system.user`，权限码 `system.user.export`） |
+| `Exporters/UserExporter` | 用户列表的导出（导出名 `user`，权限码 `system.user.export`） |
+| `Queries/RoleOptions` | 角色下拉（启用角色 `[{ value, label }]`）：用户表单 `/system/users/role-options` 与公告表单共用，授权由使用它的资源的 `viewFormOptions` 决定 |
 | `Actions/CreateExport` | 发起导出：同步校验参数、并发上限（锁用户行，422）、入队 `RunExport` |
 | `Actions/GenerateExport`、`Jobs/RunExport` | 生成文件：复核权限、`lazy()` 分块、按发起时的语言、防公式注入（`Services/ExportWriter`）、存为附件、派发 `Events/ExportFinished` |
 | `Actions/FailExport`、`DeleteExport`、`DeleteUserExports` | 标记失败；删除（排队、进行中的即取消）；删除用户的全部导出（用户删除前） |
 | `Policies/ExportPolicy` | 导出只属于发起人：查看、下载、删除只限本人 |
 | `Events/ExportFinished` | 导出完成或失败（Message 据此通知发起人） |
 | `Policies/AttachmentPolicy` | 附件的授权：上传只需登录；访问权委托给绑定对象；附件管理按 `system.attachment` 与数据范围；已绑定的不能删 |
-| `Contracts/HasLabel` | 枚举的显示名（必须，`tests/Arch` 强制）：`label()` 按当前语言翻译 |
+| `App\Support\Enums\HasLabel`（Support） | 枚举的显示名（必须，`tests/Arch` 强制）：`label()` 按当前语言翻译 |
 | `Commands/SyncCommand` | `php artisan core:sync`：依次执行 `core:sync-permissions`、`core:sync-dicts`、`core:sync-settings`，任何一个失败即停止（非 0 退出）；`DatabaseSeeder` 与部署使用 |
 
 - 内部实现（不对外）：`Services/{AllDataScope, SelfDataScope}`（默认的数据范围）、`Services/ExportWriter`、`Observers/*`、`Data/{Dict*,Setting*}Data`、`Enums/Export*`、`Listeners/DeleteExportsOfUser`。
@@ -106,6 +107,16 @@
 - 受限的入口只通过 `Contracts` 与 `Data` 访问（`php artisan core:make-contract`）。
 - 停用账号的即时检查是多入口共用的中间件 `App\Http\Middleware\EnsureUserIsEnabled`（放在各入口的中间件组中）。
   会话为 database 以外的驱动时，停用后的会话由它在下一次请求时注销；修改密码后的其他会话由 Sanctum 的 `AuthenticateSession` 注销。
+
+**URL 资源 ↔ 模型**（Http 层按 URL 资源命名，领域层按模型命名，设计文档 §4.4）：
+
+| URL 资源 | Http 层 | 模型 / 领域层 |
+|---|---|---|
+| `/system/menus` | `MenuController`、`MenuRequest`、`MenuResource`；`/menu/all` 的 `MenuRouteResource` | `Permission`、`PermissionPolicy`、`Create/Update/DeletePermission`、`PermissionTree` |
+| `/system/users/role-options` | `UserRoleOptionsController`（`UserPolicy::viewFormOptions`） | `Role`、`Queries/RoleOptions` |
+| `/attachments`（个人）、`/system/attachments`（管理） | `MyAttachmentController`、`MyAttachmentRequest`；`AttachmentController`、`AttachmentIndexRequest` | `Attachment`、`AttachmentPolicy`、`StoreAttachment`、`AttachmentList` |
+| `/system/users/export` | `ExportUsersController`、`ExportUsersRequest` | `CreateExport`、`UserExporter`（导出名 `user`） |
+| `/exports`（我的导出） | `ExportController` | `Export`、`ExportPolicy`、`ExportList` |
 
 ## 菜单与权限
 
@@ -345,12 +356,12 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 - 同步 `php artisan core:sync-settings`：缺的参数新增（`value` 为 null）；结构性字段 `type`、`group`、`name`、`remark`、`is_public` 以声明为准，`value` 不动
   （类型改了、旧值不再符合时置为 null）；从声明中移除的参数取消 `is_builtin` 与 `is_public`，保留值，不删除（废弃的参数留在库中无害，不提供清理命令）。
 - 接口只能修改已声明参数的值，不能新增、删除（`SettingPolicy`）；未声明的键或分组 404，值不符合类型或规则 422。
-- 登录与两步验证的限流次数读取 `auth.login_rate_limit`（`SystemServiceProvider::loginRateLimit()`，每次请求时读取），默认值来自 `config('core.auth.login_rate_limit')`。
+- 登录与两步验证的限流次数读取 `auth.login_rate_limit`（`SystemServiceProvider::loginRateLimit()`，每次请求时读取），默认值来自 `config('core.system.auth.login_rate_limit')`。
 
 ## 枚举选项
 
 `Services/EnumRegistry`（`#[Singleton]`）是可下发给前端的枚举的**显式白名单**：`/options/enums?names=...` 只下发登记过的名称（未登记 422），
-label 为 `HasLabel::label()`，按 `Accept-Language` 翻译；枚举另外实现了 `Contracts/HasColor` 时每个选项再输出 `color`（登记时校验，规则同字典项的 color）。本模块登记 `status`、`permission_type`、`setting_type`、`export_status`、`export_format`；Monitor 登记 `login_event`、`login_failure_reason`；
+label 为 `HasLabel::label()`，按 `Accept-Language` 翻译；枚举另外实现了 `HasColor`（`App\Support\Enums`）时每个选项再输出 `color`（登记时校验，规则同字典项的 color）。本模块登记 `status`、`permission_type`、`setting_type`、`export_status`、`export_format`；Monitor 登记 `login_event`、`login_failure_reason`；
 Message 登记 `notification_level`、`announcement_status`、`announcement_target`（各自的 `resources/enums.php`）。
 业务模块同样在 `resources/enums.php` 中声明（名称以模块名开头），在 Provider 的 `boot()` 中注册：
 
@@ -368,8 +379,8 @@ public function boot(EnumRegistry $enums): void
 
 接口见设计文档 §6.8（`/attachments`、`/system/attachments`）。附件是“上传的文件 + 一条记录”，由业务表单提交附件 id 引用。
 
-- 存储：`config('core.attachments.disk')`（默认私有的 `local` 盘），路径 `attachments/<年>/<月>/<日>/<40 位随机串>.<扩展名>`（`hashName()`，扩展名由服务端探测的 MIME 推断），
-  不使用客户端的文件名；不按 sha256 去重。下载、预览只经过入口签发的签名临时 URL（过期时间对齐到 `core.attachments.url_ttl` 分钟的窗口，头像为 `avatar_url_ttl`），本模块不签发 URL；
+- 存储：`config('core.system.attachment.disk')`（默认私有的 `local` 盘），路径 `attachments/<年>/<月>/<日>/<40 位随机串>.<扩展名>`（`hashName()`，扩展名由服务端探测的 MIME 推断），
+  不使用客户端的文件名；不按 sha256 去重。下载、预览只经过入口签发的签名临时 URL（过期时间对齐到 `core.system.attachment.url_ttl_minutes` 分钟的窗口，头像为 `avatar_url_ttl`），本模块不签发 URL；
   下载的 ASCII 回退文件名见 `Attachment::asciiFileName()`。跨记录复用文件应复制附件，不能引用别处已绑定的附件。
 - 上传：`'file' => ['required', new AllowedUpload]`——白名单 `attachment.allowed_extensions` 与上限 `attachment.max_size`（KB）是本模块 `resources/settings.php`
   的系统参数，内容探测的扩展名（`mimes`）与客户端扩展名（`extensions`）都必须在白名单中。PHP 的 `upload_max_filesize`、`post_max_size` 须不小于上限。
@@ -394,7 +405,7 @@ public function boot(EnumRegistry $enums): void
   已绑定的附件，访问权委托给记录的 Policy（`can('view', $article)`），业务模块不需要为附件写授权代码；删除文章时它的附件一并删除。
   目前 `attachable_id` 是整数列，绑定对象须为自增整数主键的模型。
 - 删除：记录删除后（事务提交后）删除文件，回滚时文件保留；附件管理中已绑定的附件不能删除（403）。
-- 孤儿清理：`model:prune` 删除未绑定、创建于 `core.attachments.orphan_ttl` 小时之前的附件（`routes/console.php` 每天执行）。
+- 孤儿清理：`model:prune` 删除未绑定、创建于 `core.system.attachment.orphan_ttl_hours` 小时之前的附件（`routes/console.php` 每天执行）。
 - 头像：`User` 在 `avatar` 用途上绑定的附件，本人在个人资料中提交 `avatar_id` 设置（`OwnedAttachment`，限图片），`null` 去掉；用户管理不能设置他人头像。
 
 | 规则 | 结果 | 在哪 |
@@ -421,13 +432,13 @@ public function boot(EnumRegistry $enums): void
 |---|---|---|
 | 没有导出权限码 | 403 | 导出入口的 `#[Authorize]` |
 | 筛选、排序不在列表的白名单 / 格式不对 | 422 | 列表请求、Query 类（`CreateExport` 同步构造一次） |
-| 同一用户排队与进行中的导出超过 `core.exports.max_active` | 422（`message`） | `CreateExport`（锁用户行） |
+| 同一用户排队与进行中的导出超过 `core.system.export.max_active` | 422（`message`） | `CreateExport`（锁用户行） |
 | 查看、下载、删除他人的导出（超管也一样） | 403 | `ExportPolicy`、`AttachmentPolicy`（`PrivateAttachable`） |
 | 执行时发起人已停用或失去权限码 | 导出失败，不写出数据 | `GenerateExport` |
 
 ## 依赖 Core 的能力
 
-无。`Contracts/HasLabel` 是本模块提供给 Core 与业务模块的枚举接口。
+无。枚举接口 `HasLabel` / `HasColor` 在 `App\Support\Enums`（与业务无关的通用契约）。
 
 ## 配置
 

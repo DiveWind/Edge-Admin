@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * 修改菜单与权限节点（PUT /system/menus/{menu}，设计文档 §6.5、§8.2、§8.6），以下违规都返回 422，错误挂在对应字段上：
+ * 修改节点（PUT /system/menus/{menu}，设计文档 §6.5、§8.2、§8.6），以下违规都返回 422，错误挂在对应字段上：
  *
  * - 内置节点：name、type、path、component 与 meta.link、meta.iframeSrc 是结构性字段，只能由同步命令修改（§8.2）——
  *   提交的值与库中不同 → 422（name / type / path / component / meta.link / meta.iframeSrc）；

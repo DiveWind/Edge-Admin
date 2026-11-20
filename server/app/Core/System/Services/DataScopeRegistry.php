@@ -46,7 +46,7 @@ class DataScopeRegistry
 
     /**
      * 登记提供者：提供者类（由容器解析）或实例的列表，key 由提供者给出。不是列表、类没有实现 DataScopeProvider、
-     * key 不是小写标识或与已登记的重复时抛出异常：这是开发期错误。
+     * key 不是对外标识（§4.4）或与已登记的重复时抛出异常：这是开发期错误。
      *
      * @param  mixed  $providers  list<class-string<DataScopeProvider>|DataScopeProvider>
      *
@@ -67,8 +67,8 @@ class DataScopeRegistry
 
             $key = $provider->key();
 
-            if (preg_match('/^[a-z0-9_-]{1,64}$/', $key) !== 1) {
-                throw new InvalidArgumentException('数据范围 ['.$provider::class."] 的 key “{$key}”不合法：应为 1–64 位小写字母、数字、下划线或短横线。");
+            if (strlen($key) > 64 || preg_match('/^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$/', $key) !== 1) {
+                throw new InvalidArgumentException('数据范围 ['.$provider::class."] 的 key “{$key}”不合法：应为不超过 64 个字符的 snake_case 标识，业务模块加模块名前缀（如 all、organization.department，设计文档 §4.4）。");
             }
 
             if (isset($this->providers[$key])) {

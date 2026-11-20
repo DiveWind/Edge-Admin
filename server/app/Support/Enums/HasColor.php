@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Core\System\Contracts;
+namespace App\Support\Enums;
 
 /**
  * 有语义色的枚举（设计文档 §10.1）：可选，与 HasLabel 一起实现。

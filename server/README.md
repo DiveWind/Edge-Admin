@@ -44,7 +44,7 @@ php artisan schedule:work
 | `GET /sanctum/csrf-cookie` | Sanctum | 下发 `XSRF-TOKEN` Cookie；之后的写请求带 `X-XSRF-TOKEN` 请求头 |
 | `POST /login`、`POST /logout` | Fortify | 字段 `username`、`password`、`remember`；开启两步验证时返回 `data: { two_factor: true }` |
 | `POST /two-factor-challenge` | Fortify | `code`（动态验证码）或 `recovery_code`（恢复码） |
-| `POST /forgot-password`、`POST /reset-password` | Fortify | 重置链接指向前端页面（`CORE_FRONTEND_URL` + `CORE_RESET_PASSWORD_PATH`） |
+| `POST /forgot-password`、`POST /reset-password` | Fortify | 重置链接指向前端页面（`CORE_AUTH_FRONTEND_URL` + `CORE_AUTH_RESET_PASSWORD_PATH`） |
 | `PUT /user/profile-information`、`PUT /user/password` | Fortify | 修改资料（`name`、`email`、`avatar`）；修改密码后其他会话与 token 失效 |
 | `GET /user/confirmed-password-status`、`POST /user/confirm-password` | Fortify | 确认密码（两步验证的管理接口需要，否则 423） |
 | `/user/two-factor-*` | Fortify | 开启、确认、关闭两步验证，二维码、密钥与恢复码 |
@@ -74,7 +74,7 @@ php artisan schedule:work
 app/
 ├── Core/                             内核模块
 │   ├── Generator/                    core:make-* 生成命令（只在命令行下注册），见下文“代码生成”
-│   └── System/                       用户与账号状态、认证（Fortify 的 Action、限流器）；Contracts/HasLabel（枚举的显示名称）
+│   └── System/                       用户与账号状态、认证（Fortify 的 Action、限流器）（Monitor、Message 见各自 README）
 ├── Http/
 │   ├── Admin/                        后台入口（给 Vben 用）
 │   │   ├── AdminServiceProvider.php  路由、中间件组（含 Sanctum 会话）、限流、Vben 响应与异常格式
@@ -85,8 +85,8 @@ app/
 │   │   └── routes.php
 │   └── Middleware/                   多入口共用：AssignRequestId（X-Request-Id）、EnsureUserIsEnabled（停用账号立即失效）、
 │                                     RedirectIfAuthenticated（guest：已登录时 JSON 请求返回 409）
-├── Providers/AppServiceProvider.php  全局默认（morph map、严格模式、密码规则等）
-└── Support/Eloquent/Concerns/UsesAppTimezone.php
+├── Providers/AppServiceProvider.php  全局默认（强制多态别名、严格模式、密码规则等）
+└── Support/                          与业务无关的共享件（Enums/HasLabel、HasColor，Exceptions/BusinessRuleViolation，Database/UniqueConstraint 等）
 config/core.php                       入口清单与部署级配置
 tests/                                与 app/ 对应；tests/Arch 为边界与约定测试
 ```
@@ -115,11 +115,11 @@ php artisan core:make-contract DeviceConfig --module=Content           # 受限�
 | `core:make-app {name} [--restricted]` | `app/Http/<Name>/<Name>ServiceProvider.php`、`routes.php`、`tests/Http/<Name>/<Name>ServiceProviderTest.php`；登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml` 与 `.env.example` 的 `CORE_APPS`。路由默认要求登录（`auth:sanctum`），受信任的入口与后台相同使用 Sanctum 会话。`--restricted`：`trusted=false`，前缀 `api/<name>/v1`，只用 Bearer token（无状态） |
 | `core:make-module {name} [--core] [--crud=<模型> …]` | `app/Modules/<Name>/<Name>ServiceProvider.php`（登记到 `bootstrap/providers.php`；`boot()` 已接上语言包、`MenuRegistry`、`DictRegistry`）、空的 `resources/menus.php` 与 `resources/dicts.php`、`README.md`（含“删除本模块”）；`--core` 生成到 `app/Core/<Name>`。入口中的同名目录在生成控制器等时创建，不建空目录。`--crud=<模型>` 接着执行 `core:make-crud`（`--soft-deletes` 等选项原样传过去） |
 | `core:make-crud {model} --module= [--app=admin] [--soft-deletes] [--export] [--audit] [--no-data-scope]` | 一个模型的完整增删改查（写法同 Content，设计文档 §10.4）：模型、迁移、工厂、Policy、Action（新增 / 修改 / 删除，软删除另有恢复 / 彻底删除，`--audit` 另有审计日志）、列表 Query、[导出类]、资源与单动作控制器、Request、Resource、语言包；菜单节点写入模块的 `resources/menus.php`，路由写入入口 `routes.php` 的模块分组，授权测试写入 `tests/Http/<入口>/<模块>`，模块 README 加入该模型一节（含“加字段时要改的地方”）。字段只有占位字段 `name` |
-| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope] [--audit]` | `Models/<Name>.php`（占位字段 `name`、`created_by` 与 `creator()`、`HasDataScope`、可选 `SoftDeletes`、`--audit` 时实现 `Auditable`）、建表迁移、工厂、`Policies/<Name>Policy.php`（§8.3 的标准写法：权限码 → 业务保护 → 数据范围，软删除的规则随模型生成）、语言包 `resources/lang/<语言>/<模型>.php`；在模块 Provider 中登记多态别名 `<模块>.<模型>` 与语言包。只提示还没在 `resources/menus.php` 中声明的权限码 |
+| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope] [--audit]` | `Models/<Name>.php`（占位字段 `name`、`created_by` 与 `creator()`、`HasDataScope`、可选 `SoftDeletes`、`--audit` 时实现 `Auditable`）、建表迁移、工厂、`Policies/<Name>Policy.php`（§8.3 的标准写法：权限码 → 业务保护 → 数据范围，软删除的规则随模型生成）、语言包 `resources/lang/<语言>/<模型>.php`；在模块 Provider 中登记多态别名（业务模块 `<模块>.<模型>`，`--core` 时为 `<模型>`）与语言包。只提示还没在 `resources/menus.php` 中声明的权限码 |
 | `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy，按模型文件的写法（`core:make-policy --model=` 可指定模型，`--permission=` 指定权限码） |
 | `core:make-action` / `core:make-query` / `core:make-exporter` / `core:make-enum` / `core:make-data {name} --module=` | `Actions/`（`--model=` 时按名称识别 `Create` / `Update` / `Delete` / `Restore` / `ForceDelete<模型>`，模型实现 `Auditable`（`core:make-model --audit`）时写审计日志）、`Queries/`（`<模型>List` 为 `builder(User $actor, array $parameters): QueryBuilder`）、`Exporters/<模型>Exporter`（登记到模块的 `resources/exporters.php`）、`Enums/`（实现 `HasLabel`，`--color` 另实现 `HasColor`）、`Data/<Name>Data`（只读数据对象） |
 | `core:make-contract {name} --module=` | `Contracts/<Name>`（接口）、`Data/<Name>Data`、`Services/<Name>Service`（实现），并在模块 Provider 的 `$bindings` 中绑定 |
-| `core:make-controller {name} --module= [--app=admin] [--model=] [--invokable]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成资源控制器的五个方法（`#[Authorize]`、列表走 `<模型>List`、写操作调用 Action 并传入 `#[CurrentUser]`），并补上缺少的请求、Resource、Query 与 Action；`--invokable` 生成单动作控制器（`<模型>Export`、`ForceDelete<模型>`、其他 `<动作><模型>`）。控制器还没登记时打印要添加的路由 |
+| `core:make-controller {name} --module= [--app=admin] [--model=] [--invokable]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成资源控制器的五个方法（`#[Authorize]`、列表走 `<模型>List`、写操作调用 Action 并传入 `#[CurrentUser]`），并补上缺少的请求、Resource、Query 与 Action；`--invokable` 生成单动作控制器（`Export<模型复数>`（导出）、`ForceDelete<模型>`、其他 `<动作><模型>`）。控制器还没登记时打印要添加的路由 |
 | `core:make-request {name} --module= [--app=admin] [--list\|--export] [--model=]` | `…/Requests/<Name>Request.php`；`--list` 继承入口的 `ListRequest`（按模型校验筛选值），`--export` 继承同模块的列表请求（去掉分页、加 `format`），只有 `--model` 时为表单请求 |
 | `core:make-resource {name} --module= [--app=admin] [--model=]` | `…/Resources/<Name>Resource.php`；`--model` 按模型逐个列出字段，`relations()` 返回需要预加载的关联 |
 
@@ -136,10 +136,10 @@ php artisan core:make-contract DeviceConfig --module=Content           # 受限�
 | `CORE_APPS` | 未设置时加载全部入口 | 本进程加载的入口，逗号分隔，如 `admin`；设为空则不加载任何入口（只跑队列、调度的进程） |
 | `CORE_ADMIN_PREFIX` | `api/admin` | 后台入口的 URL 前缀 |
 | `CORE_ADMIN_RATE_LIMIT` | `120` | 后台入口每分钟请求上限（已登录按用户、未登录按 IP） |
-| `CORE_ADMIN_PAGE_SIZE` / `CORE_ADMIN_MAX_PAGE_SIZE` | `20` / `100` | 列表默认每页条数与上限（超过上限返回 422） |
+| `CORE_ADMIN_PAGINATION_PAGE_SIZE` / `CORE_ADMIN_PAGINATION_MAX_PAGE_SIZE` | `20` / `100` | 列表默认每页条数与上限（超过上限返回 422） |
 | `CORE_ADMIN_HOME_PATH` | `/analytics` | `GET /user/info` 的 `homePath`：登录后进入的前端页面 |
-| `CORE_LOGIN_RATE_LIMIT` | `5` | 每分钟登录次数（同一用户名 + IP；两步验证按待验证的用户） |
-| `CORE_FRONTEND_URL` / `CORE_RESET_PASSWORD_PATH` | `http://localhost:5999` / `/#/auth/reset-password` | 找回密码邮件中的重置链接：`<地址><路径>?token=…&email=…` |
+| `CORE_AUTH_LOGIN_RATE_LIMIT` | `5` | 每分钟登录次数（同一用户名 + IP；两步验证按待验证的用户） |
+| `CORE_AUTH_FRONTEND_URL` / `CORE_AUTH_RESET_PASSWORD_PATH` | `http://localhost:5999` / `/#/auth/reset-password` | 找回密码邮件中的重置链接：`<地址><路径>?token=…&email=…` |
 | `CORE_EMAIL_VERIFICATION` | `false` | 邮箱验证（Fortify） |
 | `SANCTUM_STATEFUL_DOMAINS` | 本地开发地址 + `APP_URL` 的域名 | 使用会话 Cookie 的前端域名（带端口时写上端口） |
 | `SESSION_SECURE_COOKIE` | 生产环境 `true` | 会话 Cookie 只经 HTTPS 发送 |

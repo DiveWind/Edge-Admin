@@ -257,7 +257,7 @@ class SettingRegistry
         }
 
         if (array_key_exists('config', $setting) && (! is_string($config) || $config === '')) {
-            $this->fail($key, 'config 必须是 config 键，如 core.auth.login_rate_limit');
+            $this->fail($key, 'config 必须是 config 键，如 core.system.auth.login_rate_limit');
         }
 
         if ($dict !== null && (! is_string($dict) || ! DictType::isValidCode($dict))) {

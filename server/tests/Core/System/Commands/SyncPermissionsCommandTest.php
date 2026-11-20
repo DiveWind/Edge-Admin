@@ -7,7 +7,7 @@ use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
-| core:sync-permissions：同步声明的菜单与权限节点（设计文档 §8.2）
+| core:sync-permissions：同步声明的节点（设计文档 §8.2）
 |--------------------------------------------------------------------------
 |
 | 每个测试用一个只含测试声明的 MenuRegistry，System 自己的节点见“同步 System 的节点”。
@@ -105,7 +105,7 @@ it('is idempotent', function (): void {
     $before = Permission::query()->orderBy('id')->get()->toArray();
 
     $this->artisan('core:sync-permissions')
-        ->expectsOutputToContain('菜单与权限节点已是最新，没有变更')
+        ->expectsOutputToContain('节点已是最新，没有变更')
         ->assertSuccessful();
 
     expect(Permission::query()->orderBy('id')->get()->toArray())->toBe($before)

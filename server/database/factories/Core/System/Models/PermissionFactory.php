@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * 菜单与权限节点。默认是根上的目录（自定义节点）；子节点用 childOf()，类型用 menu()、button() 等状态。
+ * 节点。默认是根上的目录（自定义节点）；子节点用 childOf()，类型用 menu()、button() 等状态。
  *
  * @extends Factory<Permission>
  */

@@ -2,10 +2,10 @@
 
 namespace App\Core\System\Enums;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
- * 菜单与权限节点的类型（设计文档 §6.2、§8.2），采用 Vben 的 5 种：
+ * 节点的类型（设计文档 §6.2、§8.2），采用 Vben 的 5 种：
  *
  * | 类型 | 含义 | /menu/all 中的输出 |
  * |---|---|---|
@@ -26,11 +26,6 @@ enum PermissionType: string implements HasLabel
     case Embedded = 'embedded';
     case Link = 'link';
     case Button = 'button';
-
-    /**
-     * Vben 内嵌页与外链使用的前端组件。
-     */
-    public const string IFRAME_COMPONENT = 'IFrameView';
 
     /**
      * 显示名称（多语言）。
@@ -89,18 +84,6 @@ enum PermissionType: string implements HasLabel
     public function usesComponent(): bool
     {
         return $this === self::Menu;
-    }
-
-    /**
-     * /menu/all 中输出的 component：目录不输出（null），菜单为节点的 component，内嵌页与外链为 IFrameView。
-     */
-    public function routeComponent(?string $component): ?string
-    {
-        return match ($this) {
-            self::Menu => $component,
-            self::Embedded, self::Link => self::IFRAME_COMPONENT,
-            self::Catalog, self::Button => null,
-        };
     }
 
     /**

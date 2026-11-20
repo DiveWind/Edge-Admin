@@ -2,7 +2,7 @@
 
 namespace App\Core\Message\Listeners;
 
-use App\Core\Message\Notifications\ExportFinished as ExportFinishedNotification;
+use App\Core\Message\Notifications\ExportFinishedNotification;
 use App\Core\System\Events\ExportFinished;
 
 /**

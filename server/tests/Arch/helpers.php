@@ -173,3 +173,13 @@ function archStringArgumentCalls(string $code, array $names): array
 
     return $calls;
 }
+
+/**
+ * 类所在模块的对外标识（设计文档 §4.4）：Core 的模块不带前缀，业务模块为 `<模块 snake>.<名称>`。
+ */
+function archIdentifier(string $class, string $name): string
+{
+    return preg_match('/^App\\\\Modules\\\\(?<module>[^\\\\]+)\\\\/', $class, $match) === 1
+        ? Str::snake($match['module']).'.'.$name
+        : $name;
+}

@@ -56,7 +56,7 @@ it('creates a queued export and returns 201 at once', function (): void {
         ->withHeader('Accept-Language', 'zh-CN')
         ->postJson('/api/admin/system/users/export', ['format' => 'csv', 'filter' => ['status' => 'enabled'], 'sort' => '-created_at'])
         ->assertCreated()
-        ->assertJsonPath('data.name', 'system.user')
+        ->assertJsonPath('data.name', 'user')
         ->assertJsonPath('data.title', '用户')
         ->assertJsonPath('data.format', 'csv')
         ->assertJsonPath('data.status', 'queued')
@@ -67,7 +67,7 @@ it('creates a queued export and returns 201 at once', function (): void {
 
     expect($export)
         ->user_id->toBe($actor->id)
-        ->exporter->toBe('system.user')
+        ->exporter->toBe('user')
         ->format->toBe(ExportFormat::Csv)
         ->status->toBe(ExportStatus::Queued)
         ->locale->toBe('zh_CN')
@@ -127,7 +127,7 @@ it('rejects filters and sorts outside of the list whitelist, like the list does'
 ]);
 
 it('limits the exports in progress per user', function (): void {
-    config(['core.exports.max_active' => 2]);
+    config(['core.system.export.max_active' => 2]);
     Queue::fake();
     $actor = userWithPermissions('system.user.export');
     Export::factory()->for($actor)->running()->create();
@@ -148,7 +148,7 @@ it('limits the exports in progress per user', function (): void {
 });
 
 it('throttles starting exports per user with the export limiter', function (): void {
-    config(['core.apps.admin.export_rate_limit' => 1, 'core.exports.max_active' => 10]);
+    config(['core.apps.admin.export_rate_limit' => 1, 'core.system.export.max_active' => 10]);
     Queue::fake();
     $actor = userWithPermissions('system.user.export');
 
@@ -165,6 +165,6 @@ it('notifies the actor when the export is ready', function (): void {
     $export = Export::query()->sole();
 
     expect(Notification::query()->ownedBy($actor)->sole())
-        ->type->toBe('message.export')
+        ->type->toBe('export_finished')
         ->and(Notification::query()->about($export)->count())->toBe(1);
 });

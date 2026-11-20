@@ -18,8 +18,8 @@ use InvalidArgumentException;
  * }
  * ```
  *
- * 对外名称存入导出记录（exports.exporter），不存类名：移动、重命名类不用迁移数据。格式与通知的类型名相同：
- * 小写点分、以模块名开头（至少两段），全局唯一。
+ * 对外名称存入导出记录（exports.exporter），不存类名：移动、重命名类不用迁移数据。格式是对外标识（设计文档 §4.4）：
+ * snake_case，Core 不带前缀（`user`），业务模块为 `<模块>.<snake>`（`content.article`），全局唯一。
  */
 #[Singleton]
 class ExporterRegistry
@@ -27,7 +27,7 @@ class ExporterRegistry
     /**
      * 对外名称的格式。
      */
-    public const string NAME_PATTERN = '/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/';
+    public const string NAME_PATTERN = '/^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*$/';
 
     /**
      * 对外名称 => 导出类（按登记顺序）。
@@ -55,7 +55,7 @@ class ExporterRegistry
             $name = (string) $name;
 
             if (preg_match(self::NAME_PATTERN, $name) !== 1) {
-                throw new InvalidArgumentException("导出的对外名称“{$name}”不合法：应为小写点分、以模块名开头的标识，如 content.article。");
+                throw new InvalidArgumentException("导出的对外名称“{$name}”不合法：应为 snake_case 的标识，业务模块加模块名前缀，如 user、content.article。");
             }
 
             if (isset($this->exporters[$name]) || isset($declared[$name])) {

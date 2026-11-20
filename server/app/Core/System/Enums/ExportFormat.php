@@ -2,7 +2,7 @@
 
 namespace App\Core\System\Enums;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
  * 导出文件的格式（设计文档 §6.10）：值即文件的扩展名。默认 xlsx。

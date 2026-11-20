@@ -2,7 +2,7 @@
 
 namespace App\Core\Message\Enums;
 
-use App\Core\System\Contracts\{HasColor, HasLabel};
+use App\Support\Enums\{HasColor, HasLabel};
 
 /**
  * 通知与公告的级别（设计文档 §6.9）：接口中为字符串 `info` / `success` / `warning` / `error`，前端据此显示图标与颜色。

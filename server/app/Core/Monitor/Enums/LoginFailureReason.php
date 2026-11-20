@@ -2,7 +2,7 @@
 
 namespace App\Core\Monitor\Enums;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
  * 登录失败（LoginEvent::Failed）的原因（登录日志的 properties.reason，设计文档 §6.6、§7.3）。

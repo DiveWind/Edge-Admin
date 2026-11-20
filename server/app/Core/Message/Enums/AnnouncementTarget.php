@@ -2,7 +2,7 @@
 
 namespace App\Core\Message\Enums;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
  * 公告的目标范围（设计文档 §6.9）：全部用户，或拥有任一目标角色（启用的角色）的用户。只发给启用的用户。

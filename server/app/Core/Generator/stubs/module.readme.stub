@@ -18,7 +18,7 @@ TODO：本模块负责什么、不负责什么。
 
 | Core 的能力 | 本模块怎么用 |
 |---|---|
-| 菜单与权限节点（`MenuRegistry`，§8.2） | `resources/menus.php` |
+| 节点（`MenuRegistry`，§8.2） | `resources/menus.php` |
 | 字典（`DictRegistry`，§6.7） | `resources/dicts.php` |
 | 语言包（§4.5） | `resources/lang`，命名空间 `{{ translationNamespace }}::` |
 | 多态别名（§4.5） | `Relation::morphMap()`，别名 `{{ morphPrefix }}<模型>` |

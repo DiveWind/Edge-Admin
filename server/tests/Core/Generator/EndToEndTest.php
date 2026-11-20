@@ -70,7 +70,7 @@ it('generates CRUD modules that pass every check without manual edits', function
         expect($generated)->toContain(
             'app/Modules/Blog/Actions/RestorePost.php', 'app/Modules/Blog/Exporters/PostExporter.php', 'app/Modules/Blog/resources/exporters.php',
             'app/Http/Admin/Blog/Controllers/TagController.php', 'app/Http/Admin/Shop/Controllers/ProductController.php',
-            'tests/Http/Admin/Blog/Controllers/PostExportControllerTest.php', 'tests/Modules/Blog/Actions/PostActivityTest.php',
+            'tests/Http/Admin/Blog/Controllers/ExportPostsControllerTest.php', 'tests/Modules/Blog/Actions/PostAuditTest.php',
         );
 
         foreach ($generated as $file) {

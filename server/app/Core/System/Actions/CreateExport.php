@@ -17,7 +17,7 @@ use Spatie\QueryBuilder\Exceptions\InvalidQuery;
  *
  * - 同步构造一次查询（不执行）：筛选、排序不在列表的白名单内 → InvalidQuery，时间区间格式错误 → ValidationException（都是 422），
  *   与列表的行为一致，不会等到队列中才失败；
- * - 并发上限：同一用户排队与进行中的导出不超过 config('core.exports.max_active')，超过 → 422（message）。
+ * - 并发上限：同一用户排队与进行中的导出不超过 config('core.system.export.max_active')，超过 → 422（message）。
  *   检查与写入在一个事务中，先锁住操作者的用户行，同一用户的并发请求串行化；
  * - 记录 locale（当前请求的语言，生成文件时按它翻译）与 params（`{ filter, sort }`）；
  * - RunExport 实现 ShouldQueueAfterCommit：事务提交后才入队。
@@ -46,9 +46,9 @@ class CreateExport
         return DB::transaction(function () use ($actor, $exporter, $format, $parameters): Export {
             User::query()->whereKey($actor->id)->lockForUpdate()->first();
 
-            if (Export::query()->ownedBy($actor)->active()->count() >= config()->integer('core.exports.max_active')) {
+            if (Export::query()->ownedBy($actor)->active()->count() >= config()->integer('core.system.export.max_active')) {
                 throw new BusinessRuleViolation(__('You can have at most :count exports in progress. Please wait for them to finish.', [
-                    'count' => config()->integer('core.exports.max_active'),
+                    'count' => config()->integer('core.system.export.max_active'),
                 ]));
             }
 

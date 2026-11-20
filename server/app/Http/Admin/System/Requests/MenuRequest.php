@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * 新增、修改菜单与权限节点（POST /system/menus、PUT /system/menus/{menu}，设计文档 §6.5、§8.2）。
+ * 新增、修改节点（POST /system/menus、PUT /system/menus/{menu}，设计文档 §6.5、§8.2）。
  *
  * 只做输入格式校验，按 type 决定各字段必填还是不允许提交（与类型不符的字段一律拒绝，不静默清空；null 视为未提交）：
  *

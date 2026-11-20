@@ -24,7 +24,7 @@ class NotificationIndexRequest extends ListRequest
         return [
             ...parent::rules(),
             'filter.is_read' => ['sometimes', 'string', 'in:true,false,1,0'],
-            'filter.type' => ['sometimes', 'string', 'max:1000', 'regex:/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+(,[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+)*$/'],
+            'filter.type' => ['sometimes', 'string', 'max:1000', 'regex:/^([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*(,([a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*)*$/'],
             'filter.created_at' => ['sometimes', 'string', 'max:100'],
         ];
     }

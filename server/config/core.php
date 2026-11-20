@@ -69,8 +69,8 @@ return [
 
             // 列表分页（设计文档 §6.3）：page 从 1 开始；pageSize 缺省时取 page_size，超过 max_page_size 返回 422
             'pagination' => [
-                'page_size' => (int) env('CORE_ADMIN_PAGE_SIZE', 20),
-                'max_page_size' => (int) env('CORE_ADMIN_MAX_PAGE_SIZE', 100),
+                'page_size' => (int) env('CORE_ADMIN_PAGINATION_PAGE_SIZE', 20),
+                'max_page_size' => (int) env('CORE_ADMIN_PAGINATION_MAX_PAGE_SIZE', 100),
             ],
 
             // GET /user/info 的 homePath：登录后进入的前端页面（Vben 路由路径，设计文档 §6.2）
@@ -93,28 +93,76 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | 认证（设计文档 §7）
+    | 内核与业务模块的配置
     |--------------------------------------------------------------------------
     |
-    | 后台使用 Sanctum SPA 模式（会话 Cookie）+ Fortify 登录流程；Fortify 的路由挂在后台入口下（config/fortify.php），
-    | 限流器、找回密码链接等在 App\Core\System\SystemServiceProvider 中配置。
+    | 部署级配置（改动需重新部署；运行时可调的开关用系统参数，设计文档 §5.8、§6.7）。命名规则（设计文档 §4.4）：
+    | - 键：`core.<模块 snake>.<功能 snake 单数>.<键>`；入口的配置在 `core.apps.<入口>`；与业务无关的共享件（Support）在 `core.<功能>`（如 html）；
+    | - 时长的键名带单位：`_minutes`、`_hours`、`_days`；以秒计的超时沿用框架的 `timeout`；
+    | - 环境变量：`CORE_<功能>_<键>`（去掉模块段，入口为 `CORE_<入口>_<键>`，嵌套的键用下划线连接，全大写），如
+    |   `core.system.attachment.orphan_ttl_hours` ↔ `CORE_ATTACHMENT_ORPHAN_TTL_HOURS`、`core.apps.admin.pagination.page_size` ↔
+    |   `CORE_ADMIN_PAGINATION_PAGE_SIZE`。唯一的例外是富文本档位内的 `CORE_HTML_MEDIA_HOSTS`（只作用于 rich 档位）。
+    |   tests/Arch/ConventionsTest.php 检查本文件的环境变量名。
     |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | System：认证、附件、异步导出
+    |--------------------------------------------------------------------------
+    |
+    | auth（设计文档 §7）：后台使用 Sanctum SPA 模式（会话 Cookie）+ Fortify 登录流程；Fortify 的路由挂在后台入口下（config/fortify.php），
+    | 限流器、找回密码链接等在 App\Core\System\SystemServiceProvider 中配置。
     | - login_rate_limit：系统参数 `auth.login_rate_limit` 的默认值（同一“用户名 + IP”每分钟最多登录几次，两步验证同样按此次数）。
     |   限流次数由后台的系统参数控制（设计文档 §7.2、§6.7）：管理员没有改过时使用这里的值，改过后以系统参数为准；
     | - frontend_url、reset_password_path：找回密码邮件中的重置链接指向前端页面
     |   `<frontend_url><reset_password_path>?token=…&email=…`（Vben 默认 hash 路由，故路径以 /#/ 开头）。
     |
+    | attachment（设计文档 §6.8）：上传的类型白名单与大小上限是后台可调的系统参数（attachment.allowed_extensions、attachment.max_size）。
+    | - disk：存储盘（config/filesystems.php 中的盘名）。默认 local（storage/app/private，不在 Web 根目录下）；
+    |   生产可换成 S3 等私有盘，不要用 public 盘。下载、预览一律经过后台入口的签名路由；
+    | - url_ttl_minutes：签名的下载、预览地址的时间窗口（分钟）：过期时间对齐到窗口，`expires = (floor(now / ttl) + 2) * ttl`，
+    |   同一窗口内签出的地址相同（浏览器可以缓存），有效期在 ttl 与 2 × ttl 之间；
+    | - avatar_url_ttl_minutes：头像地址（/user/info 的 avatar）的时间窗口（分钟），默认 24 小时；
+    | - orphan_ttl_hours：上传后一直没有绑定的附件，超过多少小时由 model:prune 连同文件删除。
+    | 上传大小同时受 PHP 的 upload_max_filesize、post_max_size 与 Web 服务器的请求体上限约束，它们须不小于 attachment.max_size。
+    |
+    | export（设计文档 §6.10）：导出的文件存为附件（core.system.attachment.disk），只有发起人能下载。
+    | - ttl_hours：导出任务与文件保留多少小时（按创建时间，不论状态），之后由 model:prune 连同文件删除（每小时执行）；
+    | - max_active：同一用户同时排队与进行中的导出上限，超过时发起导出返回 422；
+    | - chunk_size：生成文件时每次从数据库读取的行数（lazy() 分块，不一次读入全部数据）；
+    | - timeout：导出队列任务的超时（秒），超时即失败。必须小于队列连接的 retry_after（默认 90）并留出余量，
+    |   否则任务仍在执行时会被另一个 worker 再次取出；调大时同时调大 retry_after；
+    | - link：完成 / 失败通知的链接（前端的“我的导出”路由，可含 `{id}`）。
+    |
     */
 
-    'auth' => [
-        'login_rate_limit' => (int) env('CORE_LOGIN_RATE_LIMIT', 5),
-        'frontend_url' => env('CORE_FRONTEND_URL', 'http://localhost:5999'),
-        'reset_password_path' => env('CORE_RESET_PASSWORD_PATH', '/#/auth/reset-password'),
+    'system' => [
+        'auth' => [
+            'login_rate_limit' => (int) env('CORE_AUTH_LOGIN_RATE_LIMIT', 5),
+            'frontend_url' => env('CORE_AUTH_FRONTEND_URL', 'http://localhost:5999'),
+            'reset_password_path' => env('CORE_AUTH_RESET_PASSWORD_PATH', '/#/auth/reset-password'),
+        ],
+
+        'attachment' => [
+            'disk' => env('CORE_ATTACHMENT_DISK', 'local'),
+            'url_ttl_minutes' => (int) env('CORE_ATTACHMENT_URL_TTL_MINUTES', 30),
+            'avatar_url_ttl_minutes' => (int) env('CORE_ATTACHMENT_AVATAR_URL_TTL_MINUTES', 1440),
+            'orphan_ttl_hours' => (int) env('CORE_ATTACHMENT_ORPHAN_TTL_HOURS', 24),
+        ],
+
+        'export' => [
+            'ttl_hours' => (int) env('CORE_EXPORT_TTL_HOURS', 24),
+            'max_active' => (int) env('CORE_EXPORT_MAX_ACTIVE', 3),
+            'chunk_size' => (int) env('CORE_EXPORT_CHUNK_SIZE', 500),
+            'timeout' => (int) env('CORE_EXPORT_TIMEOUT', 60),
+            'link' => env('CORE_EXPORT_LINK', '/exports'),
+        ],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | 监控（设计文档 §6.6）
+    | Monitor：监控（设计文档 §6.6）
     |--------------------------------------------------------------------------
     |
     | masked_keys：需要脱敏的键名（不区分大小写，支持 * 通配，递归匹配嵌套的键），值替换为 `******`。
@@ -159,16 +207,16 @@ return [
 
         'health' => [
             'disk_space' => [
-                'enabled' => (bool) env('CORE_HEALTH_DISK_SPACE', PHP_OS_FAMILY !== 'Windows'),
-                'warning_percentage' => (int) env('CORE_HEALTH_DISK_WARNING', 70),
-                'failure_percentage' => (int) env('CORE_HEALTH_DISK_FAILURE', 90),
+                'enabled' => (bool) env('CORE_HEALTH_DISK_SPACE_ENABLED', PHP_OS_FAMILY !== 'Windows'),
+                'warning_percentage' => (int) env('CORE_HEALTH_DISK_SPACE_WARNING_PERCENTAGE', 70),
+                'failure_percentage' => (int) env('CORE_HEALTH_DISK_SPACE_FAILURE_PERCENTAGE', 90),
             ],
             'database_connections' => [
-                'warning' => (int) env('CORE_HEALTH_DB_CONNECTIONS_WARNING', 50),
-                'failure' => (int) env('CORE_HEALTH_DB_CONNECTIONS_FAILURE', 100),
+                'warning' => (int) env('CORE_HEALTH_DATABASE_CONNECTIONS_WARNING', 50),
+                'failure' => (int) env('CORE_HEALTH_DATABASE_CONNECTIONS_FAILURE', 100),
             ],
-            'queue_heartbeat_minutes' => (int) env('CORE_HEALTH_QUEUE_MINUTES', 5),
-            'schedule_heartbeat_minutes' => (int) env('CORE_HEALTH_SCHEDULE_MINUTES', 2),
+            'queue_heartbeat_minutes' => (int) env('CORE_HEALTH_QUEUE_HEARTBEAT_MINUTES', 5),
+            'schedule_heartbeat_minutes' => (int) env('CORE_HEALTH_SCHEDULE_HEARTBEAT_MINUTES', 2),
             'environment' => env('CORE_HEALTH_ENVIRONMENT', 'production'),
         ],
 
@@ -179,75 +227,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | 附件（设计文档 §6.8）
+    | Message：通知中心与公告（设计文档 §6.9）
     |--------------------------------------------------------------------------
     |
-    | 部署级配置；上传的类型白名单与大小上限是后台可调的系统参数（attachment.allowed_extensions、attachment.max_size）。
-    |
-    | - disk：存储盘（config/filesystems.php 中的盘名）。默认 local（storage/app/private，不在 Web 根目录下）；
-    |   生产可换成 S3 等私有盘，不要用 public 盘。下载、预览一律经过后台入口的签名路由；
-    | - url_ttl：签名的下载、预览地址的时间窗口（分钟）：过期时间对齐到窗口，`expires = (floor(now / ttl) + 2) * ttl`，
-    |   同一窗口内签出的地址相同（浏览器可以缓存），有效期在 ttl 与 2 × ttl 之间；
-    | - avatar_url_ttl：头像地址（/user/info 的 avatar）的时间窗口（分钟），默认 24 小时；
-    | - orphan_ttl：上传后一直没有绑定的附件，超过多少小时由 model:prune 连同文件删除。
-    |
-    | 上传大小同时受 PHP 的 upload_max_filesize、post_max_size 与 Web 服务器的请求体上限约束，它们须不小于 attachment.max_size。
-    |
-    */
-
-    'attachments' => [
-        'disk' => env('CORE_ATTACHMENT_DISK', 'local'),
-        'url_ttl' => (int) env('CORE_ATTACHMENT_URL_TTL', 30),
-        'avatar_url_ttl' => (int) env('CORE_ATTACHMENT_AVATAR_URL_TTL', 1440),
-        'orphan_ttl' => (int) env('CORE_ATTACHMENT_ORPHAN_HOURS', 24),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | 消息：通知中心与公告（设计文档 §6.9）
-    |--------------------------------------------------------------------------
-    |
-    | 部署级配置（改动需重新部署，不做成系统参数）。
-    |
-    | - notifications.read_ttl：已读的通知保留多少天（按创建时间），之后由 model:prune 删除；未读的不清理；
-    | - announcements.batch_size：发布公告后每批给多少个用户发送站内通知（Bus::batch 中的一个任务）；
-    | - announcements.link：公告通知的链接（前端的公告详情路由，`{id}` 替换为公告 id），与 auth.reset_password_path 一样依赖前端路由。
+    | - notification.read_ttl_days：已读的通知保留多少天（按创建时间），之后由 model:prune 删除；未读的不清理；
+    | - announcement.batch_size：发布公告后每批给多少个用户发送站内通知（Bus::batch 中的一个任务）；
+    | - announcement.link：公告通知的链接（前端的公告详情路由，`{id}` 替换为公告 id），与 system.auth.reset_password_path 一样依赖前端路由。
     |
     */
 
     'message' => [
-        'notifications' => [
-            'read_ttl' => (int) env('CORE_NOTIFICATION_READ_DAYS', 90),
+        'notification' => [
+            'read_ttl_days' => (int) env('CORE_NOTIFICATION_READ_TTL_DAYS', 90),
         ],
 
-        'announcements' => [
+        'announcement' => [
             'batch_size' => (int) env('CORE_ANNOUNCEMENT_BATCH_SIZE', 500),
             'link' => env('CORE_ANNOUNCEMENT_LINK', '/announcements/{id}'),
         ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | 异步导出（设计文档 §6.10）
-    |--------------------------------------------------------------------------
-    |
-    | 部署级配置。导出的文件存为附件（core.attachments.disk），只有发起人能下载。
-    |
-    | - ttl：导出任务与文件保留多少小时（按创建时间，不论状态），之后由 model:prune 连同文件删除（每小时执行）；
-    | - max_active：同一用户同时排队与进行中的导出上限，超过时发起导出返回 422；
-    | - chunk_size：生成文件时每次从数据库读取的行数（lazy() 分块，不一次读入全部数据）；
-    | - timeout：导出队列任务的超时（秒），超时即失败。必须小于队列连接的 retry_after（默认 90）并留出余量，
-    |   否则任务仍在执行时会被另一个 worker 再次取出；调大时同时调大 retry_after；
-    | - link：完成 / 失败通知的链接（前端的“我的导出”路由，可含 `{id}`）。
-    |
-    */
-
-    'exports' => [
-        'ttl' => (int) env('CORE_EXPORT_TTL_HOURS', 24),
-        'max_active' => (int) env('CORE_EXPORT_MAX_ACTIVE', 3),
-        'chunk_size' => (int) env('CORE_EXPORT_CHUNK_SIZE', 500),
-        'timeout' => (int) env('CORE_EXPORT_TIMEOUT', 60),
-        'link' => env('CORE_EXPORT_LINK', '/exports'),
     ],
 
     /*

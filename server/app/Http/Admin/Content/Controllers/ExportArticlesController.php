@@ -4,7 +4,7 @@ namespace App\Http\Admin\Content\Controllers;
 
 use App\Core\System\Actions\CreateExport;
 use App\Core\System\Models\User;
-use App\Http\Admin\Content\Requests\ArticleExportRequest;
+use App\Http\Admin\Content\Requests\ExportArticlesRequest;
 use App\Http\Admin\System\Resources\ExportResource;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
@@ -16,10 +16,10 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
  * 不合法 422、查看已删除没有授权 403；同时进行的导出超过上限 422（CreateExport）；路由另经过 admin-exports 限流。
  * 文件在“我的导出”（/exports）中下载。
  */
-class ArticleExportController
+class ExportArticlesController
 {
     #[Authorize('content.article.export')]
-    public function __invoke(ArticleExportRequest $request, CreateExport $action, #[CurrentUser] User $actor): ExportResource
+    public function __invoke(ExportArticlesRequest $request, CreateExport $action, #[CurrentUser] User $actor): ExportResource
     {
         return new ExportResource($action->handle($actor, 'content.article', $request->exportFormat(), $request->listParameters()));
     }

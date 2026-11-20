@@ -34,7 +34,7 @@ it('deletes the notifications of a deleted user', function (): void {
 });
 
 it('prunes the read notifications older than the configured days every day', function (): void {
-    config(['core.message.notifications.read_ttl' => 30]);
+    config(['core.message.notification.read_ttl_days' => 30]);
     $oldRead = Notification::factory()->read()->create(['created_at' => now()->subDays(31)]);
     $oldUnread = Notification::factory()->create(['created_at' => now()->subDays(31)]);
     $recentRead = Notification::factory()->read()->create(['created_at' => now()->subDays(29)]);

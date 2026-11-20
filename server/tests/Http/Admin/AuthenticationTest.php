@@ -110,7 +110,7 @@ describe('login', function (): void {
 
     it('throttles login attempts per username and IP address', function (): void {
         $this->freezeTime();
-        config(['core.auth.login_rate_limit' => 2]);
+        config(['core.system.auth.login_rate_limit' => 2]);
         User::factory()->create(['username' => 'alice']);
 
         $this->client->login('alice', 'wrong-password')->assertUnprocessable();
@@ -131,7 +131,7 @@ describe('login', function (): void {
 
     it('reads the login limit from the auth.login_rate_limit setting, overriding the config default', function (): void {
         $this->freezeTime();
-        config(['core.auth.login_rate_limit' => 5]);
+        config(['core.system.auth.login_rate_limit' => 5]);
         resolve(UpdateSettings::class)->handle(['auth.login_rate_limit' => 1]);
         User::factory()->create(['username' => 'alice']);
 

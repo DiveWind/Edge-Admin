@@ -20,6 +20,6 @@ class {{ class }}
     #[Authorize('{{ permission }}.export')]
     public function __invoke({{ exportRequest }} $request, CreateExport $action, #[CurrentUser] {{ userModel }} $actor): ExportResource
     {
-        return new ExportResource($action->handle($actor, '{{ permission }}', $request->exportFormat(), $request->listParameters()));
+        return new ExportResource($action->handle($actor, '{{ identifier }}', $request->exportFormat(), $request->listParameters()));
     }
 }

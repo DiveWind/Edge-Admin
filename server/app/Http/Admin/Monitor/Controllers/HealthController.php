@@ -10,7 +10,7 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
  *
  * 没有模型：直接声明菜单节点的权限码 monitor.health，由 Gate::before 判定（§8.1）。
  */
-class HealthResultController
+class HealthController
 {
     /**
      * @return array{finished_at: string|null, checks: list<array<string, mixed>>}

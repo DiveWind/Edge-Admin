@@ -115,6 +115,14 @@ class UserPolicy
     }
 
     /**
+     * 用户表单的选项（角色下拉 GET /system/users/role-options）：新增或修改用户的权限。
+     */
+    public function viewFormOptions(User $actor): Response
+    {
+        return $actor->can('system.user.create') || $actor->can('system.user.update') ? Response::allow() : Response::deny();
+    }
+
+    /**
      * Determine whether the user can restore the model.
      */
     public function restore(User $actor, User $user): Response

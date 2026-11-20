@@ -99,14 +99,6 @@ class RolePolicy
     }
 
     /**
-     * 角色下拉（GET /system/roles/options）：用户表单中分配角色时使用，因此看的是用户的新增 / 修改权限码。
-     */
-    public function viewOptions(User $actor): Response
-    {
-        return $actor->can('system.user.create') || $actor->can('system.user.update') ? Response::allow() : Response::deny();
-    }
-
-    /**
      * super-admin 角色只有超管能修改、启停（§8.6）；不涉及时返回 null。
      */
     private function protectSuperAdminRole(User $actor, Role $role): ?Response

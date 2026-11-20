@@ -20,7 +20,7 @@ use Illuminate\Notifications\DatabaseNotification;
  * - data：NotificationContentData 的内容（title、content、level、link、params，以及只供后端使用的 subject）；
  * - notifiable：接收人（多态别名 `user`）；ownedBy($user) / isOwnedBy($user)：是否属于某人（接口只让本人访问）；
  * - about($record)：关于某条记录的通知（data->subject），如撤回公告时删除已发出的通知；
- * - 已读、创建超过 config('core.message.notifications.read_ttl') 天的通知由 `model:prune` 删除（MassPrunable，未读的不清理）。
+ * - 已读、创建超过 config('core.message.notification.read_ttl_days') 天的通知由 `model:prune` 删除（MassPrunable，未读的不清理）。
  *
  * 写入（标记已读、删除）只在 Message 模块的 Action 中进行（设计文档 §5.2）。
  *
@@ -106,7 +106,7 @@ class Notification extends DatabaseNotification
     {
         return static::query()
             ->whereNotNull('read_at')
-            ->where('created_at', '<=', now()->subDays(config()->integer('core.message.notifications.read_ttl')));
+            ->where('created_at', '<=', now()->subDays(config()->integer('core.message.notification.read_ttl_days')));
     }
 
     /**

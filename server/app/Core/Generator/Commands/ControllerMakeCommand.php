@@ -13,7 +13,7 @@ use Override;
  *
  * - `--model=`：资源控制器的五个方法 index（列表请求 + `<模型>List`）、show（预加载）、store（201）、update、destroy，
  *   写操作调用 Action 并传入 `#[CurrentUser]`，授权写在方法的 `#[Authorize]` 上；
- * - `--invokable`：单动作控制器（`__invoke`）。带 `--model=` 时按名称识别：`<模型>Export`（导出，CreateExport）、
+ * - `--invokable`：单动作控制器（`__invoke`）。带 `--model=` 时按名称识别：`Export<模型复数>`（导出，CreateExport）、
  *   `ForceDelete<模型>`（返回 data: null）、其他 `<动作><模型>`（调用同名 Action、返回 Resource，ability 为动作名的 camelCase）。
  *
  * 缺少的列表请求、表单请求、导出请求、Resource、Query、Action 与导出类一并生成（已存在的不覆盖）。
@@ -46,7 +46,7 @@ class ControllerMakeCommand extends EntryGeneratorCommand
 
         return match (true) {
             $model === null => 'controller.invokable',
-            $this->baseName() === "{$model}Export" => 'controller.export',
+            $this->baseName() === self::exportName($model) => 'controller.export',
             $this->baseName() === "ForceDelete{$model}" => 'controller.force-delete',
             default => 'controller.invokable.model',
         };
@@ -168,8 +168,8 @@ class ControllerMakeCommand extends EntryGeneratorCommand
             'namespacedIndexRequest' => $namespace.'\\Requests\\'.$model.'IndexRequest',
             'request' => $model.'Request',
             'namespacedRequest' => $namespace.'\\Requests\\'.$model.'Request',
-            'exportRequest' => $model.'ExportRequest',
-            'namespacedExportRequest' => $namespace.'\\Requests\\'.$model.'ExportRequest',
+            'exportRequest' => self::exportName($model).'Request',
+            'namespacedExportRequest' => $namespace.'\\Requests\\'.self::exportName($model).'Request',
             'resource' => $model.'Resource',
             'namespacedResource' => $namespace.'\\Resources\\'.$model.'Resource',
             'action' => $this->baseName(),
@@ -210,7 +210,7 @@ class ControllerMakeCommand extends EntryGeneratorCommand
             ],
             'controller.export' => [
                 ['core:make-request', ['name' => "{$model}Index", '--list' => true, '--model' => $model, ...$entry], "Requests/{$model}IndexRequest.php"],
-                ['core:make-request', ['name' => "{$model}Export", '--export' => true, ...$entry], "Requests/{$model}ExportRequest.php"],
+                ['core:make-request', ['name' => self::exportName($model), '--export' => true, ...$entry], 'Requests/'.self::exportName($model).'Request.php'],
                 ['core:make-exporter', ['name' => $model, '--module' => $this->moduleName(), '--core' => (bool) $this->option('core')], "module:Exporters/{$model}Exporter.php"],
             ],
             'controller.force-delete' => [

@@ -24,7 +24,7 @@ function storeSetting(string $key, mixed $value): void
 }
 
 it('returns the declared defaults while the settings are not customized', function (): void {
-    config(['core.auth.login_rate_limit' => 7]);
+    config(['core.system.auth.login_rate_limit' => 7]);
     $settings = resolve(Settings::class);
 
     expect($settings->string('demo.name'))->toBe('Demo')
@@ -64,9 +64,9 @@ it('rejects undeclared keys and typed reads of another type', function (): void 
 });
 
 it('rejects a config default of another type', function (): void {
-    config(['core.auth.login_rate_limit' => '5']);
+    config(['core.system.auth.login_rate_limit' => '5']);
 
-    expect(fn () => resolve(Settings::class)->get('demo.limit'))->toThrow(LogicException::class, "config('core.auth.login_rate_limit') 不是 int 类型");
+    expect(fn () => resolve(Settings::class)->get('demo.limit'))->toThrow(LogicException::class, "config('core.system.auth.login_rate_limit') 不是 int 类型");
 });
 
 it('returns only the settings declared public, whatever the database says', function (): void {

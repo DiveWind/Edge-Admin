@@ -189,20 +189,20 @@ describe('retry', function (): void {
 
         $this->actingAs($actor)->postJson("/api/admin/monitor/failed-jobs/{$first->uuid}/retry")->assertOk();
         $this->actingAs($actor)->postJson("/api/admin/monitor/failed-jobs/{$second->uuid}/retry")->assertTooManyRequests();
-        $this->actingAs($actor)->postJson('/api/admin/monitor/failed-jobs/retry')->assertTooManyRequests();
+        $this->actingAs($actor)->postJson('/api/admin/monitor/failed-jobs/retry-all')->assertTooManyRequests();
     });
 });
 
 describe('retry all', function (): void {
     it('returns 401 for guests', function (): void {
-        $this->postJson('/api/admin/monitor/failed-jobs/retry')->assertUnauthorized();
+        $this->postJson('/api/admin/monitor/failed-jobs/retry-all')->assertUnauthorized();
     });
 
     it('returns 403 without the monitor.failed-job.retry code', function (): void {
         FailedJob::factory()->create();
 
         $this->actingAs(userWithPermissions('monitor.failed-job'))
-            ->postJson('/api/admin/monitor/failed-jobs/retry')
+            ->postJson('/api/admin/monitor/failed-jobs/retry-all')
             ->assertForbidden();
 
         expect(FailedJob::query()->count())->toBe(1);
@@ -210,7 +210,7 @@ describe('retry all', function (): void {
 
     it('rejects an invalid queue and unknown fields with 422', function (array $body): void {
         $this->actingAs(userWithPermissions('monitor.failed-job.retry'))
-            ->postJson('/api/admin/monitor/failed-jobs/retry', $body)
+            ->postJson('/api/admin/monitor/failed-jobs/retry-all', $body)
             ->assertUnprocessable();
     })->with([[['queue' => ['mail']]], [['ids' => ['all']]]]);
 
@@ -220,7 +220,7 @@ describe('retry all', function (): void {
         FailedJob::factory()->count(2)->create();
 
         $this->actingAs(userWithPermissions('monitor.failed-job.retry'))
-            ->postJson('/api/admin/monitor/failed-jobs/retry')
+            ->postJson('/api/admin/monitor/failed-jobs/retry-all')
             ->assertOk();
 
         Event::assertDispatchedTimes(JobRetryRequested::class, 2);
@@ -234,7 +234,7 @@ describe('retry all', function (): void {
         $default = FailedJob::factory()->create();
 
         $this->actingAs(userWithPermissions('monitor.failed-job.retry'))
-            ->postJson('/api/admin/monitor/failed-jobs/retry', ['queue' => 'mail'])
+            ->postJson('/api/admin/monitor/failed-jobs/retry-all', ['queue' => 'mail'])
             ->assertOk();
 
         expect(Queue::rawPushes())->toHaveCount(1)
@@ -283,14 +283,14 @@ describe('destroy', function (): void {
 
 describe('flush', function (): void {
     it('returns 401 for guests', function (): void {
-        $this->deleteJson('/api/admin/monitor/failed-jobs')->assertUnauthorized();
+        $this->deleteJson('/api/admin/monitor/failed-jobs/flush')->assertUnauthorized();
     });
 
     it('returns 403 without the monitor.failed-job.delete code', function (): void {
         FailedJob::factory()->create();
 
         $this->actingAs(userWithPermissions('monitor.failed-job.retry'))
-            ->deleteJson('/api/admin/monitor/failed-jobs')
+            ->deleteJson('/api/admin/monitor/failed-jobs/flush')
             ->assertForbidden();
 
         expect(FailedJob::query()->count())->toBe(1);
@@ -300,7 +300,7 @@ describe('flush', function (): void {
         FailedJob::factory()->count(3)->create();
 
         $this->actingAs(userWithPermissions('monitor.failed-job.delete'))
-            ->deleteJson('/api/admin/monitor/failed-jobs')
+            ->deleteJson('/api/admin/monitor/failed-jobs/flush')
             ->assertOk()
             ->assertExactJson(['code' => 0, 'data' => null, 'message' => 'ok']);
 

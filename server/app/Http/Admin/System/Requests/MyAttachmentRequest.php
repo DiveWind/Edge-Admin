@@ -12,7 +12,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * 类型白名单与大小上限由 System 模块的 AllowedUpload 按系统参数校验（内容探测的 MIME 与客户端扩展名都在白名单中，
  * 不信任客户端的 Content-Type）。未声明的字段一律拒绝（failOnUnknownFields）；授权写在控制器的 #[Authorize] 上。
  */
-class AttachmentUploadRequest extends FormRequest
+class MyAttachmentRequest extends FormRequest
 {
     /**
      * Get the validation rules that apply to the request.

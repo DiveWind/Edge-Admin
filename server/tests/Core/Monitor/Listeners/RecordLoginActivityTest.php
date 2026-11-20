@@ -97,7 +97,7 @@ it('records a login to a disabled account with the right password', function ():
 
 it('records a lockout when the login is throttled', function (): void {
     $this->freezeTime();
-    config(['core.auth.login_rate_limit' => 1]);
+    config(['core.system.auth.login_rate_limit' => 1]);
     $alice = User::factory()->create(['username' => 'alice']);
 
     $this->client->login('alice', 'wrong-password')->assertUnprocessable();

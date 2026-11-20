@@ -11,7 +11,7 @@ use Illuminate\Routing\Attributes\Controllers\Authorize;
  *
  * 直接声明按钮的权限码 monitor.health.check，由 Gate::before 判定（§8.1）；路由另经过 admin-ops 限流。
  */
-class RunHealthChecksController
+class CheckHealthController
 {
     /**
      * @return array{finished_at: string|null, checks: list<array<string, mixed>>}

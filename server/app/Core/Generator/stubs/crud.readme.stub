@@ -21,9 +21,9 @@
 
 - 授权：`Policies/{{ model }}Policy`（§8.3）{{#dataScope}}；数据范围按 `created_by`（`HasDataScope`，§8.4）：“仅本人”的操作者只能看到、修改、删除{{#softDeletes}}、恢复、彻底删除{{/softDeletes}}{{#export}}、导出{{/export}}自己创建的记录{{/dataScope}}{{^dataScope}}；不使用数据范围{{/dataScope}}。
 - 写操作：`Actions/Create{{ model }}`、`Update{{ model }}`、`Delete{{ model }}`{{#softDeletes}}、`Restore{{ model }}`、`ForceDelete{{ model }}`（软删除整套，§10.1）{{/softDeletes}}{{#audit}}；审计日志由 Monitor 的 `LogAudit` 在同一事务中写入（模型实现 `Auditable`，日志名 `{{ logName }}`）{{/audit}}。
-- 列表查询：`Queries/{{ model }}List`{{#export}}，导出 `Exporters/{{ model }}Exporter`（对外名称 `{{ permission }}`）共用它{{/export}}。
+- 列表查询：`Queries/{{ model }}List`{{#export}}，导出 `Exporters/{{ model }}Exporter`（对外名称 `{{ identifier }}`）共用它{{/export}}。
 - 后端文案：`resources/lang/<语言>/{{ modelSnake }}.php`（`{{ lang }}`）；菜单与目录的标题是前端 i18n key `{{ permission }}.title`、`{{ catalog }}.title`。
-- 测试：`tests/Http/{{ app }}/{{ module }}/Controllers/{{ model }}*Test.php`{{#audit}}、`tests/{{ kindDir }}/{{ module }}/Actions/{{ model }}ActivityTest.php`{{/audit}}。
+- 测试：`tests/Http/{{ app }}/{{ module }}/Controllers/{{ model }}*Test.php`{{#audit}}、`tests/{{ kindDir }}/{{ module }}/Actions/{{ model }}AuditTest.php`{{/audit}}。
 
 **加字段时要改的地方**（占位字段 `name` 也按这张清单改名）：
 

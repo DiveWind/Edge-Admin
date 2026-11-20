@@ -19,7 +19,7 @@ it('runs the three syncs in order and is idempotent', function (): void {
         ->and(Setting::query()->pluck('key')->all())->toContain('auth.login_rate_limit');
 
     $this->artisan('core:sync')
-        ->expectsOutputToContain('菜单与权限节点已是最新，没有变更')
+        ->expectsOutputToContain('节点已是最新，没有变更')
         ->expectsOutputToContain('字典已是最新，没有变更')
         ->expectsOutputToContain('系统参数已是最新，没有变更')
         ->assertSuccessful();

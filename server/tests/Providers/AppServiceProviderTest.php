@@ -16,7 +16,7 @@ use Illuminate\Validation\Rules\Password;
 |--------------------------------------------------------------------------
 */
 
-it('enforces the morph map', function (): void {
+it('enforces the morph map (aliases are registered by the module providers)', function (): void {
     expect((new User)->getMorphClass())->toBe('user')
         ->and(Relation::getMorphedModel('user'))->toBe(User::class);
 

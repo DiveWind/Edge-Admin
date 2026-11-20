@@ -39,7 +39,7 @@
 | Core 的能力 | 本模块怎么用 |
 |---|---|
 | 业务规则异常（`BusinessRuleViolation`，§5.4） | 状态不允许（只有草稿能发布、并发时已被删除等）抛出它，后台入口映射为 422 |
-| 菜单与权限节点（`MenuRegistry`，§8.2） | `resources/menus.php`：目录 `content`、菜单 `content.article` 与按钮 `create`、`update`、`delete`、`publish`、`restore`、`force-delete`、`export` |
+| 节点（`MenuRegistry`，§8.2） | `resources/menus.php`：目录 `content`、菜单 `content.article` 与按钮 `create`、`update`、`delete`、`publish`、`restore`、`force-delete`、`export` |
 | 权限判定（`Gate::before`、Policy，§8.1、§8.3） | `ArticlePolicy`（按 `\Models\` → `\Policies\` 自动发现），控制器 `#[Authorize]` |
 | 数据权限（`HasDataScope`，§8.4） | `Article` 使用它，归属列为默认的 `created_by`；列表、详情、写操作、导出都经过它 |
 | 字典（`DictRegistry`、`InDict`，§6.7） | `resources/dicts.php` 声明 `content.article_category` 与初始项；`category` 用 `InDict` 校验：只接受启用项，修改时文章当前的分类即使已停用也可原样提交（`allowing()`，保持原值不拦） |
@@ -47,7 +47,7 @@
 | 富文本净化（`SanitizedHtml`，§9） | `content` 列的 cast（默认档位 `rich`） |
 | 附件（`HasAttachments`、`OwnedAttachment`、`SyncAttachments`，§6.8） | 封面：`cover` 用途的图片附件；归属校验、绑定、彻底删除时连同文件删除；访问权委托给 `ArticlePolicy::view` |
 | 异步导出（`Exporter`、`ExporterRegistry`、`CreateExport`，§6.10） | `resources/exporters.php` 登记 `content.article`；入口 `POST /content/articles/export` |
-| 审计日志（Monitor 的 `Auditable`、`LogAudit`，§5.5、§6.6） | 日志名 `content`（多态别名的模块段）；差异、大字段摘要、`description` 由 `LogAudit` 统一处理；`request_id` 由 Monitor 的 `Activity` 自动写入。审计与业务写入在**同一个事务**中，失败一起回滚；这与操作日志不同（操作日志在响应后写入、失败只 `report()`），审计记录的是数据变更本身，必须与数据一致 |
+| 审计日志（Monitor 的 `Auditable`、`LogAudit`，§5.5、§6.6） | 日志名 `content`（模块标识）；差异、大字段摘要、`description` 由 `LogAudit` 统一处理；`request_id` 由 Monitor 的 `Activity` 自动写入。审计与业务写入在**同一个事务**中，失败一起回滚；这与操作日志不同（操作日志在响应后写入、失败只 `report()`），审计记录的是数据变更本身，必须与数据一致 |
 | 多态别名（§4.5） | `content.article`（附件的 `attachable_type`、日志的 `subject_type`） |
 | 语言包（§4.5） | `resources/lang`，命名空间 `content::`（枚举显示名、提示文案、导出表头） |
 
@@ -68,7 +68,7 @@
    绑定在文章上的封面附件（`attachable_type = content.article`）随表一起失去宿主，用同一个迁移删除这些附件记录与文件，或保留由管理员处理。
    `activity_log` 中 `log_name = content` 的审计日志按保留天数自动清理，也可在迁移中删除。
 5. 同步声明：执行 `php artisan core:sync`。
-   - 菜单与权限节点 `content`、`content.article.*`：内置节点**转为自定义节点**（保留角色的授权，不删除），在菜单管理中删除即可（先删按钮、再删菜单与目录：有子节点的不能删）；
+   - 节点 `content`、`content.article.*`：内置节点**转为自定义节点**（保留角色的授权，不删除），在菜单管理中删除即可（先删按钮、再删菜单与目录：有子节点的不能删）；
    - 字典 `content.article_category`：内置类型与字典项**转为自定义**，在字典管理中删除即可；
    - 不想手工清理时，可在第 4 步的迁移中按 name / code 删除这些节点与字典（角色授权随节点级联删除）。
 6. 执行 `composer ci`：其余测试应全部通过。

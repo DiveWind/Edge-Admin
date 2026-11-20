@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\{BelongsTo, MorphOne};
  * - locale：发起时的语言，生成文件时按它翻译表头与显示名；
  * - status：ExportStatus（queued → running → completed / failed），row_count：完成时写出的行数；
  * - 生成的文件是绑定在 `file` 用途上的附件（HasAttachments，签名下载，§6.8）；实现 PrivateAttachable：附件管理员也不能访问；
- * - 创建超过 config('core.exports.ttl') 小时的导出（不论状态）由 `model:prune` 逐条删除（Prunable，连同文件）。
+ * - 创建超过 config('core.system.export.ttl_hours') 小时的导出（不论状态）由 `model:prune` 逐条删除（Prunable，连同文件）。
  *
  * 写入只在 System 模块的 Action 中进行（CreateExport、GenerateExport、FailExport、DeleteExport，设计文档 §5.2）。
  *
@@ -76,7 +76,7 @@ class Export extends Model implements PrivateAttachable
      */
     public function expiresAt(): ?CarbonInterface
     {
-        return $this->created_at?->addHours(config()->integer('core.exports.ttl'));
+        return $this->created_at?->addHours(config()->integer('core.system.export.ttl_hours'));
     }
 
     /**
@@ -118,7 +118,7 @@ class Export extends Model implements PrivateAttachable
      */
     public function prunable(): Builder
     {
-        return static::query()->where('created_at', '<=', now()->subHours(config()->integer('core.exports.ttl')));
+        return static::query()->where('created_at', '<=', now()->subHours(config()->integer('core.system.export.ttl_hours')));
     }
 
     /**

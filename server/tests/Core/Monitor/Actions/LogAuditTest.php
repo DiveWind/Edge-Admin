@@ -12,7 +12,7 @@ use Tests\Core\Monitor\Actions\Fixtures\AuditedUser;
 |--------------------------------------------------------------------------
 |
 | 模型实现 Auditable 提供快照；日志名、description、按事件记录的字段、差异与大字段摘要都由 LogAudit 处理。
-| 业务模块的完整用例见 tests/Modules/Content/Actions/ArticleActivityTest.php。
+| 业务模块的完整用例见 tests/Modules/Content/Actions/ArticleAuditTest.php。
 |
 */
 
@@ -21,12 +21,12 @@ beforeEach(function (): void {
     $this->subject = AuditedUser::query()->findOrFail(User::factory()->create(['username' => 'bob', 'name' => 'Bob'])->id);
 });
 
-it('logs the snapshot on creation, under the module segment of the morph alias, with large fields as digests', function (): void {
+it('logs the snapshot on creation, under the log name of its module, with large fields as digests', function (): void {
     $activity = resolve(LogAudit::class)->handle($this->actor, $this->subject, 'created');
 
     expect($activity)->toBeInstanceOf(Activity::class)
-        ->and($activity?->log_name)->toBe('user')
-        ->and($activity?->description)->toBe('user.created')
+        ->and($activity?->log_name)->toBe('system')
+        ->and($activity?->description)->toBe('system.user.created')
         ->and($activity?->event)->toBe('created')
         ->and($activity?->properties->all())->toBe([
             'username' => 'alice',

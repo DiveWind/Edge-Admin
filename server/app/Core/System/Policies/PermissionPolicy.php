@@ -6,7 +6,7 @@ use App\Core\System\Models\{Permission, User};
 use Illuminate\Auth\Access\Response;
 
 /**
- * Permission（菜单与权限节点）的授权规则（设计文档 §8.3）：标准方法齐全，默认拒绝。
+ * Permission（节点）的授权规则（设计文档 §8.3）：标准方法齐全，默认拒绝。
  *
  * 标准写法：先检查权限码 `$actor->can('<权限码>')`，再做业务保护；不通过时返回带提示文案的 Response::deny()（403）。
  * 权限码在 resources/menus.php 中声明：菜单节点 `system.menu` 是查看 / 列表权限，按钮 `system.menu.create`、`.update`、`.delete`

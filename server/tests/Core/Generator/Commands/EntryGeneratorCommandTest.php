@@ -77,18 +77,18 @@ describe('controller', function (): void {
         $this->project->put('app/Http/Admin/System/Resources/ExportResource.php', '<?php');
         $this->project->put('app/Http/Admin/AdminServiceProvider.php', "<?php\n\nnamespace App\\Http\\Admin;\n\nclass AdminServiceProvider { public const string EXPORT_LIMITER = 'admin-exports'; }\n");
 
-        $this->artisan('core:make-controller', ['name' => 'ArticleExport', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
-            ->expectsOutputToContain("Route::post('articles/export', ArticleExportController::class)->middleware('throttle:'.AdminServiceProvider::EXPORT_LIMITER)->name('articles.export');")
+        $this->artisan('core:make-controller', ['name' => 'ExportArticles', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
+            ->expectsOutputToContain("Route::post('articles/export', ExportArticlesController::class)->middleware('throttle:'.AdminServiceProvider::EXPORT_LIMITER)->name('articles.export');")
             ->assertSuccessful();
 
-        expect($this->project->read('app/Http/Admin/Content/Controllers/ArticleExportController.php'))->toContain("#[Authorize('content.article.export')]", "\$action->handle(\$actor, 'content.article',")
-            ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleExportRequest.php'))->toContain('class ArticleExportRequest extends ArticleIndexRequest', "unset(\$rules['page'], \$rules['pageSize']);")
+        expect($this->project->read('app/Http/Admin/Content/Controllers/ExportArticlesController.php'))->toContain("#[Authorize('content.article.export')]", "\$action->handle(\$actor, 'content.article',")
+            ->and($this->project->read('app/Http/Admin/Content/Requests/ExportArticlesRequest.php'))->toContain('class ExportArticlesRequest extends ArticleIndexRequest', "unset(\$rules['page'], \$rules['pageSize']);")
             ->and($this->project->read('app/Modules/Content/Exporters/ArticleExporter.php'))->toContain('private readonly ArticleList $list')
             ->and($this->project->read('app/Modules/Content/resources/exporters.php'))->toContain("'content.article' => ArticleExporter::class,");
     });
 
     it('rejects an export controller in an entry without exports', function (): void {
-        $this->artisan('core:make-controller', ['name' => 'ArticleExport', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
+        $this->artisan('core:make-controller', ['name' => 'ExportArticles', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
             ->expectsOutputToContain('不支持导出')
             ->assertFailed();
     });
@@ -159,7 +159,7 @@ describe('request', function (): void {
     });
 
     it('requires the list request for an export request', function (): void {
-        $this->artisan('core:make-request', ['name' => 'ArticleExport', '--export' => true, '--module' => 'Content'])
+        $this->artisan('core:make-request', ['name' => 'ExportArticles', '--export' => true, '--module' => 'Content'])
             ->expectsOutputToContain('请先执行 php artisan core:make-request ArticleIndex --list')
             ->assertFailed();
     });

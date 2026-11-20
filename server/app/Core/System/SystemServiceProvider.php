@@ -37,7 +37,7 @@ use Spatie\Permission\PermissionRegistrar;
  * 字典、系统参数与枚举选项（设计文档 §6.7）：DictRegistry、SettingRegistry 扩展点（本模块的参数分组见 resources/settings.php）、
  * 同步命令 core:sync-dicts、core:sync-settings，以及 EnumRegistry 中本模块的枚举。
  *
- * 异步导出（设计文档 §6.10）：ExporterRegistry 扩展点（本模块登记用户列表的导出 system.user）；用户删除前删除他的导出（连同文件）。
+ * 异步导出（设计文档 §6.10）：ExporterRegistry 扩展点（本模块登记用户列表的导出 `user`）；用户删除前删除他的导出（连同文件）。
  * 完成通知由 Message 监听 ExportFinished 发送（System 不依赖 Message）。
  */
 class SystemServiceProvider extends ServiceProvider
@@ -56,6 +56,7 @@ class SystemServiceProvider extends ServiceProvider
     public function boot(MenuRegistry $menus, DataScopeRegistry $scopes, SettingRegistry $settings, EnumRegistry $enums, ExporterRegistry $exporters): void
     {
         Relation::morphMap([
+            'user' => User::class,
             'permission' => Permission::class,
             'role' => Role::class,
             'dict_type' => DictType::class,
@@ -140,7 +141,7 @@ class SystemServiceProvider extends ServiceProvider
 
     /**
      * 限流器（config/fortify.php 的 limiters），每分钟次数为系统参数 `auth.login_rate_limit`（设计文档 §7.2；
-     * 默认值来自 config('core.auth.login_rate_limit')，每次请求时读取，后台修改后立即生效）：
+     * 默认值来自 config('core.system.auth.login_rate_limit')，每次请求时读取，后台修改后立即生效）：
      * - login：按“用户名 + IP”计数，超出时返回 429，提示还需等待的秒数（同时挂在 username 上），并派发框架标准的 Lockout 事件
      *   （Fortify 使用命名限流器时不派发它；Monitor 的登录日志据此记录，设计文档 §7.3）；
      * - two-factor：按待验证的用户（登录后会话中的 login.id）计数。
@@ -179,8 +180,8 @@ class SystemServiceProvider extends ServiceProvider
      */
     protected function configurePasswordReset(): void
     {
-        ResetPassword::createUrlUsing(fn (mixed $notifiable, string $token): string => rtrim(config()->string('core.auth.frontend_url'), '/')
-            .config()->string('core.auth.reset_password_path')
+        ResetPassword::createUrlUsing(fn (mixed $notifiable, string $token): string => rtrim(config()->string('core.system.auth.frontend_url'), '/')
+            .config()->string('core.system.auth.reset_password_path')
             .'?'.http_build_query([
                 'token' => $token,
                 'email' => $notifiable instanceof CanResetPassword ? $notifiable->getEmailForPasswordReset() : null,

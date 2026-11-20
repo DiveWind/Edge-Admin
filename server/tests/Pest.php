@@ -152,7 +152,7 @@ function demoSettings(): array
         'settings' => [
             'name' => ['type' => 'string', 'name' => 'demo.name', 'default' => 'Demo', 'public' => true],
             'notice' => ['type' => 'text', 'name' => 'demo.notice', 'default' => ''],
-            'limit' => ['type' => 'int', 'name' => 'demo.limit', 'config' => 'core.auth.login_rate_limit', 'rules' => ['min:1', 'max:100']],
+            'limit' => ['type' => 'int', 'name' => 'demo.limit', 'config' => 'core.system.auth.login_rate_limit', 'rules' => ['min:1', 'max:100']],
             'ratio' => ['type' => 'float', 'name' => 'demo.ratio', 'default' => 0.5],
             'enabled' => ['type' => 'bool', 'name' => 'demo.enabled', 'default' => false],
             'options' => ['type' => 'json', 'name' => 'demo.options', 'default' => ['a' => 1]],

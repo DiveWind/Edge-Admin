@@ -127,7 +127,7 @@ class CrudMakeCommand extends EntryGeneratorCommand
 
         $this->components->info(self::punctuate("{$model} 的完整增删改查已生成，接着执行："));
         $this->components->bulletList([
-            'php artisan migrate（建表）与 php artisan core:sync（同步菜单与权限节点）',
+            'php artisan migrate（建表）与 php artisan core:sync（同步节点）',
             'composer ci（生成物不手改即可通过）',
             "按模块 README 中 {$model} 一节的“加字段时要改的地方”补上业务字段",
         ]);
@@ -145,7 +145,7 @@ class CrudMakeCommand extends EntryGeneratorCommand
 
         if (! $this->files->exists($path)) {
             $this->writeFromStub('module.menus', $path, $replacements, 'Declarations');
-            $this->register($this->moduleProvider()['path'], '菜单与权限节点 resources/menus.php', fn (string $code): ?string => ModuleProviderFile::registerMenus($code));
+            $this->register($this->moduleProvider()['path'], '节点 resources/menus.php', fn (string $code): ?string => ModuleProviderFile::registerMenus($code));
         }
 
         $buttons = ['create' => 'common.create', 'update' => 'common.edit', 'delete' => 'common.delete'];
@@ -180,7 +180,7 @@ class CrudMakeCommand extends EntryGeneratorCommand
         $controllers = [];
 
         if ($this->option('export')) {
-            $controllers["{$model}ExportController"] = 'controller.export';
+            $controllers[self::exportName($model).'Controller'] = 'controller.export';
         }
 
         if ($this->option('soft-deletes')) {
@@ -221,14 +221,14 @@ class CrudMakeCommand extends EntryGeneratorCommand
             ...($this->option('export') ? [['core:make-exporter', $module]] : []),
             ['core:make-request', [...$entry, 'name' => "{$model}Index", '--list' => true, '--model' => $model]],
             ['core:make-request', [...$entry, 'name' => $model, '--model' => $model]],
-            ...($this->option('export') ? [['core:make-request', [...$entry, 'name' => "{$model}Export", '--export' => true]]] : []),
+            ...($this->option('export') ? [['core:make-request', [...$entry, 'name' => self::exportName($model), '--export' => true]]] : []),
             ['core:make-resource', [...$entry, 'name' => $model, '--model' => $model]],
             ['core:make-controller', [...$entry, 'name' => $model, '--model' => $model]],
             ...($this->option('soft-deletes') ? [
                 ['core:make-controller', [...$entry, 'name' => "Restore{$model}", '--model' => $model, '--invokable' => true]],
                 ['core:make-controller', [...$entry, 'name' => "ForceDelete{$model}", '--model' => $model, '--invokable' => true]],
             ] : []),
-            ...($this->option('export') ? [['core:make-controller', [...$entry, 'name' => "{$model}Export", '--model' => $model, '--invokable' => true]]] : []),
+            ...($this->option('export') ? [['core:make-controller', [...$entry, 'name' => self::exportName($model), '--model' => $model, '--invokable' => true]]] : []),
         ];
     }
 
@@ -245,8 +245,8 @@ class CrudMakeCommand extends EntryGeneratorCommand
             'crud.test.controller' => "{$controllers}/{$model}ControllerTest.php",
             'crud.test.restore' => $this->option('soft-deletes') ? "{$controllers}/Restore{$model}ControllerTest.php" : null,
             'crud.test.force-delete' => $this->option('soft-deletes') ? "{$controllers}/ForceDelete{$model}ControllerTest.php" : null,
-            'crud.test.export' => $this->option('export') ? "{$controllers}/{$model}ExportControllerTest.php" : null,
-            'crud.test.activity' => $this->option('audit') ? $this->laravel->basePath("tests/{$this->moduleKind()}/{$this->moduleName()}/Actions/{$model}ActivityTest.php") : null,
+            'crud.test.export' => $this->option('export') ? "{$controllers}/".self::exportName($model).'ControllerTest.php' : null,
+            'crud.test.audit' => $this->option('audit') ? $this->laravel->basePath("tests/{$this->moduleKind()}/{$this->moduleName()}/Actions/{$model}AuditTest.php") : null,
         ]);
     }
 

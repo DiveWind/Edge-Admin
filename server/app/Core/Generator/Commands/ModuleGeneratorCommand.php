@@ -179,11 +179,29 @@ abstract class ModuleGeneratorCommand extends CoreGeneratorCommand
             'translationNamespace' => $this->translationNamespace(),
             'lang' => $this->translationNamespace().'::'.Str::snake($model),
             'logName' => $this->translationNamespace(),
+            'identifier' => $this->identifierFor($model),
+            'exportName' => self::exportName($model),
         ];
     }
 
     /**
-     * 模型的菜单节点权限码（也是导出的对外名称）：`<模块>.<模型>`（snake_case，如 content.article）。
+     * 模型的对外标识（多态别名、导出的对外名称，设计文档 §4.4）：内核模块为 `<模型 snake>`，业务模块为 `<模块 snake>.<模型 snake>`。
+     */
+    protected function identifierFor(string $model): string
+    {
+        return $this->option('core') ? Str::snake($model) : Str::snake($this->moduleName()).'.'.Str::snake($model);
+    }
+
+    /**
+     * 导出入口的单动作控制器与请求的名称（不含后缀）：`Export<模型复数>`（POST /<列表>/export，动词在前，宾语是整个列表，设计文档 §4.4）。
+     */
+    public static function exportName(string $model): string
+    {
+        return 'Export'.Str::pluralStudly($model);
+    }
+
+    /**
+     * 模型的菜单节点权限码：`<模块>.<模型>`（snake_case，如 content.article、system.user）。权限码不受对外标识的前缀规则约束（§4.4）。
      */
     protected function permissionFor(string $model): string
     {

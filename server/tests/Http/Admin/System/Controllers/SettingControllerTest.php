@@ -40,7 +40,7 @@ describe('index', function (): void {
     });
 
     it('lists the declared settings by group with their current and default values', function (): void {
-        config(['core.auth.login_rate_limit' => 5]);
+        config(['core.system.auth.login_rate_limit' => 5]);
         Setting::factory()->create(['key' => 'demo.limit', 'group' => 'demo', 'value' => 20]);
 
         $response = $this->actingAs(userWithPermissions('system.setting'))

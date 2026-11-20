@@ -8,7 +8,7 @@ use App\Core\System\Queries\UserList;
 use Illuminate\Database\Eloquent\{Builder, Model};
 
 /**
- * 用户列表的导出（对外名称 `system.user`，POST /system/users/export，设计文档 §6.5、§6.10）。
+ * 用户列表的导出（对外名称 `user`，POST /system/users/export，设计文档 §6.5、§6.10）。
  *
  * 查询就是用户列表的 UserList：同一份筛选与排序白名单、同一个数据范围（visibleTo），导出的用户不会比列表多。
  * 列：id、username、name、email、status（显示名）、roles（角色的显示名，按 sort、id，逗号分隔）、created_at（应用时区）。

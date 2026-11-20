@@ -23,7 +23,7 @@ class UserController
     /**
      * 列表（经过数据范围 visibleTo($actor)，预加载 roles）：筛选 username、name、email（模糊）、status（精确）、
      * created_at（区间 `起,止`）；排序 id、username、created_at，默认 `-id`。不在白名单内的筛选、排序参数返回 422（§6.3）。
-     * 查询在 Query 类 UserList 中，与导出（UserExportController）共用。
+     * 查询在 Query 类 UserList 中，与导出（ExportUsersController）共用。
      */
     #[Authorize('viewAny', User::class)]
     public function index(UserIndexRequest $request, UserList $list, #[CurrentUser] User $actor): AnonymousResourceCollection

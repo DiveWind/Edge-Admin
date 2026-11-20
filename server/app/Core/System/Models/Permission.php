@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 use Spatie\Permission\Models\Permission as SpatiePermission;
 
 /**
- * 菜单与权限节点（多态别名 `permission`，见 SystemServiceProvider）：菜单树直接建在 spatie 的 permissions 表上（设计文档 §8.2）。
+ * 节点（多态别名 `permission`，见 SystemServiceProvider）：菜单树直接建在 spatie 的 permissions 表上（设计文档 §8.2）。
  *
  * - name：权限码，同时是 Vben 的路由 name，全局唯一（小写点分：system、system.user、system.user.create）；
  * - type：节点类型（PermissionType），层级规则见 PermissionType::canBeChildOf()；

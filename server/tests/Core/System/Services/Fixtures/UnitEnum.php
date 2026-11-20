@@ -2,7 +2,7 @@
 
 namespace Tests\Core\System\Services\Fixtures;
 
-use App\Core\System\Contracts\HasLabel;
+use App\Support\Enums\HasLabel;
 
 /**
  * 不是 backed enum（没有值）：EnumRegistry 拒绝登记。

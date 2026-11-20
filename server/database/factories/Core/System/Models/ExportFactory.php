@@ -22,7 +22,7 @@ class ExportFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'exporter' => 'system.user',
+            'exporter' => 'user',
             'format' => ExportFormat::Xlsx,
             'status' => ExportStatus::Queued,
             'params' => [],

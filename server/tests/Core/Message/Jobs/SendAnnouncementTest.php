@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Bus;
  */
 function announcementRecipientIds(Announcement $announcement): array
 {
-    return Notification::query()->about($announcement)->where('type', 'message.announcement')
+    return Notification::query()->about($announcement)->where('type', 'announcement_published')
         ->orderBy('notifiable_id')->pluck('notifiable_id')->all();
 }
 
@@ -40,7 +40,7 @@ describe('batches', function (): void {
     });
 
     it('splits the enabled recipients into batches of the configured size', function (): void {
-        config(['core.message.announcements.batch_size' => 2]);
+        config(['core.message.announcement.batch_size' => 2]);
         $users = User::factory()->count(5)->create();
         User::factory()->disabled()->create();
         $announcement = Announcement::factory()->published()->create();
@@ -89,7 +89,7 @@ describe('batches', function (): void {
 
 describe('delivery on the sync queue', function (): void {
     it('notifies the target users only, skipping disabled users and other roles', function (): void {
-        config(['core.message.announcements.batch_size' => 1]);
+        config(['core.message.announcement.batch_size' => 1]);
         $target = Role::factory()->create();
         $first = User::factory()->create()->assignRole($target);
         $second = User::factory()->create()->assignRole($target);
@@ -128,7 +128,7 @@ describe('delivery on the sync queue', function (): void {
     });
 
     it('uses the configured link', function (): void {
-        config(['core.message.announcements.link' => '/notice/{id}/detail']);
+        config(['core.message.announcement.link' => '/notice/{id}/detail']);
         User::factory()->create();
         $announcement = Announcement::factory()->create();
 
