@@ -1,0 +1,18 @@
+<?php
+
+namespace {{ namespace }};
+
+/**
+ * TODO: 说明这个接口。
+ *
+ * 单动作控制器（设计文档 §6.5：非资源接口都是单动作控制器）：只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（§5.4）。
+ * 授权写在 __invoke() 的 #[Authorize(...)] 上（权限码须在模块的 resources/menus.php 中声明，tests/Arch 检查每条路由都有授权声明）；
+ * 写入调用 {{ module }} 模块的 Action。路由登记在 {{ app }} 入口的 routes.php。
+ */
+class {{ class }}
+{
+    public function __invoke(): void
+    {
+        //
+    }
+}

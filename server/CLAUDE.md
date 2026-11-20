@@ -215,15 +215,19 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
   | 生成 | 命令 |
   |---|---|
   | 入口 `app/Http/<入口>`（登记 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`） | `core:make-app <名称> [--restricted]` |
-  | 模块 `app/Modules/<模块>`（`--core`：`app/Core/<模块>`） | `core:make-module <名称>` |
-  | 模型 + 迁移 + 工厂 + Policy，并登记多态别名 | `core:make-model <名称> --module=<模块>` |
-  | 模块中的类 | `core:make-action` / `make-query` / `make-enum` / `make-policy` / `make-data` / `make-migration` / `make-factory` `<名称> --module=<模块>` |
+  | 模块 `app/Modules/<模块>`（`--core`：`app/Core/<模块>`），`--crud=<模型>` 接着生成完整增删改查 | `core:make-module <名称> [--crud=<模型> …]` |
+  | **一个模型的完整增删改查**：模型、迁移、工厂、Policy、Action、Query、[导出类]、接口（资源 + 单动作控制器、Request、Resource）、菜单节点、路由、语言包、授权测试、模块 README | `core:make-crud <模型> --module=<模块> [--soft-deletes] [--export] [--audit] [--no-data-scope]` |
+  | 模型 + 迁移 + 工厂 + Policy + 语言包，并登记多态别名 | `core:make-model <名称> --module=<模块> [--soft-deletes] [--no-data-scope]` |
+  | 模块中的类（`--model=` 生成某个模型的标准写法） | `core:make-action` / `make-query` / `make-exporter` / `make-enum [--color]` / `make-policy` / `make-data` / `make-migration` / `make-factory` `<名称> --module=<模块>` |
   | 向受限入口开放的契约（`Contracts` + `Data` + `Services` 实现，绑定到模块 Provider 的 `$bindings`） | `core:make-contract <名称> --module=<模块>` |
-  | 入口中的类 `app/Http/<入口>/<模块>/{Controllers,Requests,Resources}` | `core:make-controller` / `make-request` / `make-resource` `<名称> --module=<模块> [--app=admin]` |
+  | 入口中的类 `app/Http/<入口>/<模块>/{Controllers,Requests,Resources}` | `core:make-controller [--model=] [--invokable]` / `make-request [--list\|--export] [--model=]` / `make-resource [--model=]` `<名称> --module=<模块> [--app=admin]` |
 
   - 内核模块必须显式加 `--core`；名称自动转为 StudlyCase 并补上后缀（`Article` → `ArticleController`），不能带子目录。
-  - 共享文件的登记是幂等的；文件格式不符合预期时命令失败并打印需手工粘贴的内容，按提示补上即可，不要为了迁就生成器改乱文件结构。
-  - 路由不自动登记（`core:make-controller` 会打印要加的路由）；`core:make-module --crud`（完整增删改查）尚未提供。
+  - 新的列表 + 增删改查一律先用 `core:make-crud` 生成，再按模块 README 中“加字段时要改的地方”补字段与业务规则；字段只有占位字段 `name`，没有字段声明选项。
+  - 模型是依据：其他命令按模型文件的写法（`SoftDeletes`、`HasDataScope`、`creator()`、`name`）生成，不另设选项（设计文档 §10.4）。
+  - 共享文件的登记是幂等的（Provider、`menus.php`、入口 `routes.php`、模块 README）；文件格式不符合预期时命令失败并打印需手工粘贴的内容，按提示补上即可，不要为了迁就生成器改乱文件结构。
+  - 路由：`core:make-crud` 自动写入入口 `routes.php` 的模块分组；单独的 `core:make-controller` 只打印要加的路由（已登记时不打印）。
+  - 修改生成器的模板或规则后，除了 `tests/Core/Generator`，还要跑 `composer test:generator-e2e`（在项目副本中生成并跑全部检查，约 1.5 分钟）。
   - 模板可在项目中覆盖：`php artisan stub:publish`（或 `vendor:publish --tag=core-stubs`）后修改 `stubs/core.<名称>.stub`。
   - 没有对应 `core:make-*` 的类型（事件、监听、任务、通知等）才用官方 `make:*`，名称写以 `App/` 开头的完整路径，如 `make:event App/Modules/Content/Events/ArticlePublished`。
 - 测试放在 `tests/` 下与 `app/` 对应的目录（`tests/Http/Admin/...`、`tests/Core/System/...`、`tests/Modules/...`），不使用 `tests/Feature`、`tests/Unit`。

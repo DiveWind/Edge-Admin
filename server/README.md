@@ -99,10 +99,13 @@ tests/                                与 app/ 对应；tests/Arch 为边界与�
 缺少名称或模块时交互提问，`-f|--force` 覆盖已有文件，失败时退出码为 1；生成物直接通过 `composer ci`（Pint、Rector、PHPStan、架构测试）。
 
 ```bash
-php artisan core:make-module Content                                   # 业务模块
-php artisan core:make-model Article --module=Content                   # 模型、迁移、工厂、Policy，登记多态别名
-php artisan core:make-action PublishArticle --module=Content           # 写操作
-php artisan core:make-controller Article --module=Content --model=Article   # 后台接口 index / show（连同列表请求与 Resource）
+php artisan core:make-module Blog --crud=Post --soft-deletes --export --audit   # 新模块 + 一个模型的完整增删改查
+php artisan core:make-crud Tag --module=Blog                           # 已有模块中再加一个模型的完整增删改查
+php artisan core:make-module Content                                   # 只建业务模块
+php artisan core:make-model Article --module=Content                   # 模型、迁移、工厂、Policy、语言包，登记多态别名
+php artisan core:make-action PublishArticle --module=Content --model=Article   # 写操作（锁行、操作者）
+php artisan core:make-controller Article --module=Content --model=Article      # 资源控制器的五个方法（连同请求、Resource、Query、Action）
+php artisan core:make-controller PublishArticle --invokable --module=Content --model=Article   # 单动作控制器
 php artisan core:make-app device --restricted                          # 受限的入口（对外开放，前缀带 /v1）
 php artisan core:make-contract DeviceConfig --module=Content           # 受限入口通过它访问模块的数据
 ```
@@ -110,18 +113,20 @@ php artisan core:make-contract DeviceConfig --module=Content           # 受限�
 | 命令 | 生成 |
 |---|---|
 | `core:make-app {name} [--restricted]` | `app/Http/<Name>/<Name>ServiceProvider.php`、`routes.php`、`tests/Http/<Name>/<Name>ServiceProviderTest.php`；登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml` 与 `.env.example` 的 `CORE_APPS`。路由默认要求登录（`auth:sanctum`），受信任的入口与后台相同使用 Sanctum 会话。`--restricted`：`trusted=false`，前缀 `api/<name>/v1`，只用 Bearer token（无状态） |
-| `core:make-module {name} [--core]` | `app/Modules/<Name>/<Name>ServiceProvider.php`（登记到 `bootstrap/providers.php`）与 `README.md`；`--core` 生成到 `app/Core/<Name>`。入口中的同名目录在生成控制器等时创建，不建空目录。`--crud` 尚未提供 |
-| `core:make-model {name} --module=` | `Models/<Name>.php`、`database/migrations/*_create_<表>_table.php`、`database/factories/<与模型相同的路径>Factory.php`、`Policies/<Name>Policy.php`（标准方法齐全：先检查权限码 `<模块>.<模型>` 及其 `.create` / `.update` / `.delete`，软删除相关方法默认拒绝；需在模块的 `resources/menus.php` 中声明这些权限码）；在模块 Provider 的 `Relation::morphMap()` 中登记别名 `<模块>.<模型>` |
-| `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy（`core:make-policy --model=` 可指定模型，`--permission=` 指定权限码） |
-| `core:make-action` / `core:make-query` / `core:make-enum` / `core:make-data {name} --module=` | `Actions/`（`handle()`）、`Queries/`（只读）、`Enums/`（实现 `HasLabel`）、`Data/<Name>Data`（只读数据对象） |
+| `core:make-module {name} [--core] [--crud=<模型> …]` | `app/Modules/<Name>/<Name>ServiceProvider.php`（登记到 `bootstrap/providers.php`；`boot()` 已接上语言包、`MenuRegistry`、`DictRegistry`）、空的 `resources/menus.php` 与 `resources/dicts.php`、`README.md`（含“删除本模块”）；`--core` 生成到 `app/Core/<Name>`。入口中的同名目录在生成控制器等时创建，不建空目录。`--crud=<模型>` 接着执行 `core:make-crud`（`--soft-deletes` 等选项原样传过去） |
+| `core:make-crud {model} --module= [--app=admin] [--soft-deletes] [--export] [--audit] [--no-data-scope]` | 一个模型的完整增删改查（写法同 Content，设计文档 §10.4）：模型、迁移、工厂、Policy、Action（新增 / 修改 / 删除，软删除另有恢复 / 彻底删除，`--audit` 另有审计日志）、列表 Query、[导出类]、资源与单动作控制器、Request、Resource、语言包；菜单节点写入模块的 `resources/menus.php`，路由写入入口 `routes.php` 的模块分组，授权测试写入 `tests/Http/<入口>/<模块>`，模块 README 加入该模型一节（含“加字段时要改的地方”）。字段只有占位字段 `name` |
+| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope]` | `Models/<Name>.php`（占位字段 `name`、`created_by` 与 `creator()`、`HasDataScope`、可选 `SoftDeletes`）、建表迁移、工厂、`Policies/<Name>Policy.php`（§8.3 的标准写法：权限码 → 业务保护 → 数据范围，软删除的规则随模型生成）、语言包 `resources/lang/<语言>/<模型>.php`；在模块 Provider 中登记多态别名 `<模块>.<模型>` 与语言包。只提示还没在 `resources/menus.php` 中声明的权限码 |
+| `core:make-migration` / `core:make-factory` / `core:make-policy {name} --module=` | 为模块中已有的模型单独生成迁移、工厂、Policy，按模型文件的写法（`core:make-policy --model=` 可指定模型，`--permission=` 指定权限码） |
+| `core:make-action` / `core:make-query` / `core:make-exporter` / `core:make-enum` / `core:make-data {name} --module=` | `Actions/`（`--model=` 时按名称识别 `Create` / `Update` / `Delete` / `Restore` / `ForceDelete<模型>` 与 `Log<模型>Activity`，`--audit` 写审计日志）、`Queries/`（`<模型>List` 为 `builder(User $actor, array $parameters): QueryBuilder`）、`Exporters/<模型>Exporter`（登记到 `ExporterRegistry`）、`Enums/`（实现 `HasLabel`，`--color` 另实现 `HasColor`）、`Data/<Name>Data`（只读数据对象） |
 | `core:make-contract {name} --module=` | `Contracts/<Name>`（接口）、`Data/<Name>Data`、`Services/<Name>Service`（实现），并在模块 Provider 的 `$bindings` 中绑定 |
-| `core:make-controller {name} --module= [--app=admin] [--model=]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成 `#[Authorize]` 的 `index`（`paginate($request->pageSize())`）与 `show`，并补上缺少的列表请求与 Resource。路由不自动登记，命令会打印要添加的路由 |
-| `core:make-request {name} --module= [--app=admin] [--list]` | `…/Requests/<Name>Request.php`；`--list` 继承入口的 `ListRequest` |
-| `core:make-resource {name} --module= [--app=admin] [--model=]` | `…/Resources/<Name>Resource.php`；`--model` 逐个列出 `id` 与时间字段 |
+| `core:make-controller {name} --module= [--app=admin] [--model=] [--invokable]` | `app/Http/<App>/<Module>/Controllers/<Name>Controller.php`；`--model` 生成资源控制器的五个方法（`#[Authorize]`、列表走 `<模型>List`、写操作调用 Action 并传入 `#[CurrentUser]`），并补上缺少的请求、Resource、Query 与 Action；`--invokable` 生成单动作控制器（`<模型>Export`、`ForceDelete<模型>`、其他 `<动作><模型>`）。控制器还没登记时打印要添加的路由 |
+| `core:make-request {name} --module= [--app=admin] [--list\|--export] [--model=]` | `…/Requests/<Name>Request.php`；`--list` 继承入口的 `ListRequest`（按模型校验筛选值），`--export` 继承同模块的列表请求（去掉分页、加 `format`），只有 `--model` 时为表单请求 |
+| `core:make-resource {name} --module= [--app=admin] [--model=]` | `…/Resources/<Name>Resource.php`；`--model` 按模型逐个列出字段，`relations()` 返回需要预加载的关联 |
 
 - 名称自动转为 StudlyCase 并补上后缀（`article` → `ArticleController`），不能带子目录；内核模块（`app/Core`）必须加 `--core`。
 - 受限的入口不能用 `--model`（只能通过模块的 `Contracts` 访问数据）。
 - 修改共享文件是幂等的，重复执行不会重复登记；文件格式不符合预期时命令失败，并打印需要手工粘贴的内容。
+- 生成物不手改即通过 `composer ci`、`migrate:fresh --seed` 与 `core:sync`：由 `composer test:generator-e2e`（在系统临时目录的项目副本中生成并检查，CI 中单独一步）保证。
 - 模板：`php artisan stub:publish`（连同官方模板）或 `php artisan vendor:publish --tag=core-stubs`（只发布本项目的）复制到 `stubs/core.<名称>.stub`，项目中的模板优先。
 
 ## 配置

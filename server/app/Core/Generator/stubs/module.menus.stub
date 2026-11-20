@@ -1,0 +1,24 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| {{ module }} 模块的菜单与权限节点（设计文档 §8.2）
+|--------------------------------------------------------------------------
+|
+| 在 {{ moduleProvider }}::boot() 中注册到 MenuRegistry，由 `php artisan core:sync-permissions` 写入 permissions 表。
+| 格式与 Vben 的路由节点同构；buttons 展开为 `<父 name>.<键>` 的按钮节点（值是标题）。标题是前端的 i18n key，后端不翻译。
+| 菜单节点自身的权限码就是“查看 / 列表”权限；按钮是写操作。
+|
+| core:make-crud 把模型的菜单与按钮写入这里（目录 `{{ catalog }}`）。手工声明时的格式：
+|
+|     [
+|         'name' => '{{ catalog }}',
+|         'type' => 'catalog',
+|         'path' => '/{{ catalogPath }}',
+|         'meta' => ['title' => '{{ catalog }}.title', 'icon' => 'lucide:folder', 'order' => 100],
+|         'children' => [ … 菜单节点（type menu、component、buttons） … ],
+|     ],
+|
+*/
+
+return [];

@@ -8,12 +8,29 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * TODO: 说明这张表（{{ module }} 模块的 {{ model }}）。
+{{#createdBy}}
+     * created_by 是创建人（用户删除后置空{{#dataScope}}；数据范围的归属列，§8.4{{/dataScope}}）。
+{{/createdBy}}
+{{#softDeletes}}
+     * 软删除（deleted_at）：恢复、彻底删除与“已删除”筛选见设计文档 §10.1。
+{{/softDeletes}}
      */
     public function up(): void
     {
         Schema::create('{{ table }}', function (Blueprint $table): void {
             $table->id();
+{{#name}}
+            $table->string('name');
+{{/name}}
+{{#createdBy}}
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+{{/createdBy}}
             $table->timestamps();
+{{#softDeletes}}
+            $table->softDeletes()->index();
+{{/softDeletes}}
         });
     }
 

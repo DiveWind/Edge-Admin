@@ -1060,7 +1060,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 
 ### 6.11 业务模块示范：Content（文章）
 
-前缀与 §6.5 相同；**业务模块** `app/Modules/Content`，接口在 `app/Http/Admin/Content`。它是脚手架的“业务对接示范”（§4.2，**可整块删除**，步骤见模块的 `README.md`），用来证明：业务模块**不改 Core 的任何文件**，只通过扩展点（§5.5）就能用上菜单权限、数据权限、字典、枚举选项、附件、富文本净化、异步导出与审计日志；它也是 `core:make-module --crud`（§10.4）生成结果的样板。契约写在本节（前后端协作以 `docs/` 为准），模块内部的说明写在模块 README；删除模块时连同本节一起删除。
+前缀与 §6.5 相同；**业务模块** `app/Modules/Content`，接口在 `app/Http/Admin/Content`。它是脚手架的“业务对接示范”（§4.2，**可整块删除**，步骤见模块的 `README.md`），用来证明：业务模块**不改 Core 的任何文件**，只通过扩展点（§5.5）就能用上菜单权限、数据权限、字典、枚举选项、附件、富文本净化、异步导出与审计日志；它也是 `core:make-crud`（§10.4）生成结果的样板：生成物沿用它的分层与写法（Query 类、Policy 的三段式、锁行复核的 Action、软删除整套、导出、审计），但只带占位字段 `name`，不含发布流程、封面附件、字典分类与富文本这些业务部分。契约写在本节（前后端协作以 `docs/` 为准），模块内部的说明写在模块 README；删除模块时连同本节一起删除。
 
 | 接口 | 说明 | 权限 |
 |---|---|---|
@@ -1469,7 +1469,7 @@ public function delete(User $actor, User $user): Response
 - 统计类数据用 `Cache::flexible()`；请求内缓存用 `Cache::memo()` 或 `#[Scoped]`。
 - 时间：写库前统一转换为应用时区；输出带时区偏移的 ISO 8601。
 - 枚举：实现统一的 `HasLabel`（多语言，必须，`tests/Arch` 强制）/ `HasColor`（语义色，可选）接口，由后端统一下发选项（在 `EnumRegistry` 中登记后由 `/options/enums` 下发，§6.7）。
-  - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum` 的模板不带 `color()`，需要时手工加上 `HasColor`。
+  - `App\Core\System\Contracts\HasColor::color(): string`：取值规则与字典项的 `color` 相同——antd Tag 的预设色名（`success`、`processing`、`error`、`warning`、`default`、`blue` 等）或 `#RGB` / `#RRGGBB`；登记时校验。表示“状态”的枚举（启用 / 停用、成功 / 失败）实现它，前端的 Tag 直接使用；纯分类的枚举不实现。`core:make-enum --color` 生成同时实现 `HasColor` 的枚举。
 - 统计指标、复杂查询做成模块里独立的 Query 类。
 - **软删除是整套功能**：恢复、彻底删除、“已删除”筛选、对应授权，生成器一个参数（`--soft-deletes`）生成；只加 `SoftDeletes` 不算完成。规范如下（样板是 Content 的文章，§6.11）：
   - 表加 `deleted_at`（`$table->softDeletes()->index()`），模型 `use SoftDeletes`；输出字段带 `deleted_at`（未删除为 null）。
@@ -1520,19 +1520,70 @@ Scramble 的兼容性在引入时另行验证。
 | 命令 | 生成 |
 |---|---|
 | `core:make-app {name} [--restricted]` | 入口目录（`app/Http/<Name>`）、ServiceProvider、路由文件、基础测试，并登记到 `config/core.php`、`bootstrap/providers.php`、`phpunit.xml`、`.env.example`；`--restricted` 生成受限入口（前缀带 `/v1`）。架构测试自动发现新入口 |
-| `core:make-module {name}` | 业务模块（`app/Modules/<Name>`）+ 各受信任入口中的同名目录；`--crud --fields=... --soft-deletes` 生成完整增删改查 |
-| `core:make-model {name} --module=` | 模型、迁移、工厂、Policy（标准方法齐全、默认拒绝），并在模块 Provider 中登记多态别名 |
-| `core:make-migration` / `core:make-factory` / `core:make-data` | 为已有模型单独生成迁移、工厂；生成只读数据对象 |
-| `core:make-action` / `core:make-query` / `core:make-policy` / `core:make-enum` | 模块中的对应类（`--module=`） |
+| `core:make-module {name} [--crud=<模型> …]` | 业务模块（`app/Modules/<Name>`）：ServiceProvider（`boot()` 已接上语言包、`MenuRegistry`、`DictRegistry`）、空的 `resources/menus.php` 与 `resources/dicts.php`、README（含“删除本模块”）；`--crud=` 接着执行 `core:make-crud`（下文） |
+| `core:make-crud {model} --module=` | **完整增删改查**（下文） |
+| `core:make-model {name} --module= [--soft-deletes] [--no-data-scope]` | 模型、迁移、工厂、Policy（§8.3 标准写法）、语言包，并在模块 Provider 中登记多态别名与语言包 |
+| `core:make-migration` / `core:make-factory` / `core:make-policy` | 为已有模型单独生成迁移、工厂、Policy（按模型的写法生成，见下文“模型是依据”） |
+| `core:make-action` / `core:make-query` / `core:make-exporter` / `core:make-enum [--color]` / `core:make-data` | 模块中的对应类（`--module=`；`--model=` 生成某个模型的标准写法） |
 | `core:make-contract {name} --module=` | 模块向受限入口导出的接口、只读数据对象与实现绑定 |
-| `core:make-controller` / `core:make-request` / `core:make-resource` | 入口中的对应类（`--app= --module=`） |
+| `core:make-controller [--model=] [--invokable]` / `core:make-request [--model=] [--list\|--export]` / `core:make-resource [--model=]` | 入口中的对应类（`--app= --module=`） |
 
 - 全部继承官方 `Illuminate\Console\GeneratorCommand`：支持 `--force`、缺参数时交互提问，行为与官方 make 命令一致；失败时退出码为 1。
-- 模板覆盖：项目中的 `stubs/core.<名称>.stub` 优先于命令自带模板，可用 `php artisan vendor:publish --tag=core-stubs` 发布后修改。
+- 模板覆盖：项目中的 `stubs/core.<名称>.stub` 优先于命令自带模板，可用 `php artisan vendor:publish --tag=core-stubs` 发布后修改。模板中除 `{{ 名称 }}` 替换外只有一种条件块：`{{#开关}}…{{/开关}}`（开关为真时保留）与 `{{^开关}}…{{/开关}}`（为假时保留），独占一行的标记连同换行一起去掉。
 - 生成的入口默认要求登录：受信任入口使用会话（同 Admin），受限入口使用 token（无会话）。
-- 路由不自动登记：生成控制器后命令会打印需要添加的路由；生成器本身是内核模块 `app/Core/Generator`，只在命令行下注册。
-- 完整增删改查还会生成：权限节点（写入模块的 `resources/menus.php`，§8.2）、路由、**授权测试**、模块 README（操作日志的文案由前端按路由名翻译，§6.6）。
+- 修改共享文件（`bootstrap/providers.php`、模块 Provider、`resources/menus.php`、入口的 `routes.php`、模块 README）一律幂等；文件不是预期的格式时不猜测位置，命令失败并打印需手工粘贴的内容。生成器本身是内核模块 `app/Core/Generator`，只在命令行下注册。
+- 生成后的提示只列出还没做的事：Policy 用到的权限码已在 `menus.php` 中声明时不再提示，控制器已在 `routes.php` 中登记时不再打印路由。
 - **新建文件必须使用生成器**，写入 `CLAUDE.md`；放错位置由架构测试拦截。
+
+**模型是依据**：迁移、工厂、Policy、Action、Query、导出类、Request、Resource、控制器按**模型文件的写法**生成，不另设选项：用了 `SoftDeletes` 就生成软删除整套（§10.1），用了 `HasDataScope` 就加 `visibleTo()` / `isVisibleTo()`（§8.4），有 `creator()` 就预加载并输出创建人，有 `@property string $name` 就带上占位字段 `name`。因此这些命令对手写的模型（如 Content 的 `Article`，没有 `name`）同样生成可通过检查的代码，只是不带业务字段。`core:make-model` 的 `--soft-deletes` 与 `--no-data-scope`（数据范围默认开）决定模型的写法，之后各命令照此生成。
+
+**单个命令的标准写法**（与 Content 一致）：
+
+| 命令 | `--model=` 时生成 |
+|---|---|
+| `core:make-model` | `#[Fillable(['name'])]`、`@property` 注释、`UsesAppTimezone`、`HasDataScope`（归属列 `created_by`）、`creator()`；迁移含 `name`、`created_by`（外键，用户删除后置空）、时间戳（`--soft-deletes`：`softDeletes()->index()`）；工厂含 `name`、`created_by`（`--soft-deletes`：`trashed()` 状态）；语言包 `resources/lang/<语言>/<模型>.php`（字段名、403 提示、导出表头，命名空间 `<模块>::`） |
+| `core:make-policy` | §8.3 的十个标准方法：先权限码，再业务保护（软删除的 `restore`、`forceDelete` 只对已删除的，提示文案来自语言包），最后 `isVisibleTo()`；软删除另有 `viewTrashed`；模型没有软删除时 `restore` 等四个方法默认拒绝 |
+| `core:make-action` | 按名称识别用例：`Create<模型>`、`Update<模型>`、`Delete<模型>`、`Restore<模型>`、`ForceDelete<模型>` 为标准写法（`handle(…, User $actor)`、事务、`lockForUpdate()` 复核、并发 422 / 404），`Log<模型>Activity` 为审计日志（日志名为模块名，§6.11 的结构）；其他名称生成“锁行 → 修改 → 返回”的骨架。`--audit` 让写操作在同一事务中调用 `Log<模型>Activity`（缺少时一并生成）；不加 `--model` 时只生成带 `User $actor` 的骨架 |
+| `core:make-query` | `<模型>List::builder(User $actor, array $parameters): QueryBuilder`：`visibleTo`、预加载、筛选与排序白名单、默认 `-id`，软删除时 `trashed` 筛选与 `viewTrashed` 检查（§6.10）；名称以 `List` 结尾时模型可省略。没有模型时生成 `get(User $actor): array` 的统计骨架 |
+| `core:make-exporter` | `Exporters/<模型>Exporter`（调用 `<模型>List`，缺少时一并生成），并在模块 Provider 中登记到 `ExporterRegistry`（对外名称 `<模块>.<模型>`） |
+| `core:make-enum --color` | 同时实现 `HasColor`（语义色，§10.1） |
+| `core:make-controller` | 资源控制器的五个方法：`index`（列表请求 + `<模型>List`）、`show`（预加载）、`store`（201）、`update`、`destroy`，写操作调用 Action 并传入 `#[CurrentUser]`；缺少的列表请求、表单请求、Resource、Query 与 Action 一并生成。`--invokable` 生成单动作控制器：`<模型>Export`（导出，`CreateExport`）、`ForceDelete<模型>`（返回 `data: null`）与其他 `<动作><模型>`（调用同名 Action、返回 Resource，ability 为动作名），并打印对应的 `Route::post(...)` / `Route::delete(...)` |
+| `core:make-request` | `--list`：继承 `ListRequest` 并校验筛选值（`name`、`created_at`、`trashed`）；`--export`：继承列表请求，去掉 `page`、`pageSize`，加 `format`（§6.10）；只有 `--model`：新增 / 修改的表单请求 |
+| `core:make-resource` | 逐个列出 `id`、`name`、`created_by`、`creator`、`deleted_at` 与时间字段，`relations()` 返回需要预加载的关联 |
+
+#### 完整增删改查：`core:make-crud`
+
+```bash
+php artisan core:make-module Blog --crud=Post --soft-deletes --export --audit   # 新模块 + 第一个模型
+php artisan core:make-crud Tag --module=Blog                                    # 已有模块中再加一个模型
+```
+
+| 选项 | 默认 | 作用 |
+|---|---|---|
+| `--module=` | 必填 | 所属模块（必须已存在；`core:make-module --crud=` 先建模块）。`--core` 用于内核模块 |
+| `--app=` | `admin` | 入口：必须是受信任的、提供 `Requests/ListRequest.php` 的入口 |
+| `--soft-deletes` | 关 | 软删除整套（§10.1）：`deleted_at`、恢复与彻底删除的 Action、单动作控制器、`withTrashed()` 路由、`restore` / `force-delete` 按钮、`trashed` 筛选与 `viewTrashed` |
+| `--export` | 关 | 异步导出（§6.10）：导出类并登记、`export` 按钮、导出请求、`POST /<路径>/export`（`admin-exports` 限流） |
+| `--audit` | 关 | 审计日志（§5.5、§6.11）：`Log<模型>Activity`，写操作在同一事务中写入（日志名为模块名） |
+| `--no-data-scope` | 开 | 不使用数据范围（`HasDataScope`）：不加 `visibleTo` / `isVisibleTo`，测试不含数据范围用例。仍保留 `created_by` 与 `creator()` |
+| `-f` / `--force` | 关 | 覆盖已有文件（共享文件的登记仍幂等）；不加时模型已存在即失败，不写任何文件 |
+
+**字段**：只生成一个占位字段 `name`（字符串，最长 255，必填，列表按它模糊筛选），**不提供 `--fields` 之类的字段声明**。理由：一个字段要同时出现在迁移、模型（`#[Fillable]`、`casts()`、`@property`）、工厂、表单请求、列表请求与 Query 的白名单、Resource、导出列、语言包与测试数据中，每种类型（字符串、富文本、字典、枚举、附件、关联）在这十处的写法都不同（如字典要 `InDict` 与 `allowing()`、富文本要 `SanitizedHtml` 与长度按净化前计、附件要 `OwnedAttachment` 与 `SyncAttachments`），做成声明语言就是一套要长期维护的 DSL，而且仍覆盖不了业务规则；生成后按模块 README 中“加字段时要改的地方”逐处补上，比学一套声明语法更直接。
+
+**生成清单**（以 `core:make-crud Post --module=Blog --soft-deletes --export --audit` 为例；方括号内的只在对应选项下生成）：
+
+| 位置 | 文件 |
+|---|---|
+| 模块 `app/Modules/Blog` | `Models/Post`、`Policies/PostPolicy`、`Actions/{Create,Update,Delete}Post`、[`Actions/{Restore,ForceDelete}Post`]、[`Actions/LogPostActivity`]、`Queries/PostList`、[`Exporters/PostExporter`]、`resources/lang/{en,zh_CN}/post.php`（`config('core.locales')` 中的每种语言） |
+| 共享文件（幂等） | `resources/menus.php`：目录 `blog`（没有时创建）下的菜单 `blog.post`（`/blog/post`，组件 `/blog/post/list`）与按钮 `create`、`update`、`delete`[、`restore`、`force-delete`][、`export`]；模块 Provider：多态别名 `blog.post`、语言包、[`ExporterRegistry` 登记 `blog.post`]；模块 README 中加入该模型一节（接口、权限码、文件清单、加字段时要改的地方） |
+| 数据库 | `database/migrations/*_create_posts_table.php`、`database/factories/Modules/Blog/Models/PostFactory.php` |
+| 入口 `app/Http/Admin/Blog` | `Controllers/PostController`（五个资源方法）、[`Controllers/{Restore,ForceDelete}PostController`]、[`Controllers/PostExportController`]、`Requests/{PostIndex,Post}Request`、[`Requests/PostExportRequest`]、`Resources/PostResource` |
+| 路由（`app/Http/Admin/routes.php`） | `auth:sanctum` 分组中的模块分组 `Route::prefix('blog')->name('blog.')`（已有时追加到其中）：[`posts/export`]、[`posts/{post}/restore`、`posts/{post}/force-delete`（`withTrashed()`）]、`Route::apiResource('posts', …)`，参数一律 `whereNumber` |
+| 测试 | `tests/Http/Admin/Blog/Controllers/PostControllerTest.php`（列表、详情、新增、修改、删除的 401、403、200 / 201、404、422 与数据范围）、[恢复、彻底删除、导出各一个测试文件]、[`tests/Modules/Blog/Actions/PostActivityTest.php`] |
+
+- 命名：权限码与多态别名用 snake_case（`blog.post`、`order_center.sales_order`），菜单路径、路由前缀与 URI 用 kebab-case（`/order-center/sales-order`、`order-center/sales-orders`），路由名为 `<入口>.<模块 kebab>.<URI>.<动作>`；菜单与目录的标题是前端 i18n key（`blog.title`、`blog.post.title`），后端不翻译（§6.2）。
+- **路由自动写入**入口的 `routes.php`：入口路由文件只描述结构（分组 + `apiResource`），格式固定，按“`auth:sanctum` 分组的结尾”与“同名模块分组的结尾”两个锚点插入，导入按 Pint 的格式重排；找不到锚点时打印要粘贴的分组。比“只打印片段”多一步自动化，但风险可控：插入内容是确定的几行，命令幂等，生成后由 `tests/Arch` 检查每条路由都有授权声明。
+- 生成结果**不手改即通过** Pint、PHPStan（max）、Rector 与 Pest（含 `tests/Arch`），并能 `migrate:fresh --seed` 与 `core:sync`：由端到端检查 `composer test:generator-e2e`（`tests/Core/Generator/EndToEndTest.php`，`generator-e2e` 组，`composer test` 不含它，CI 中单独一步）保证——在系统临时目录中建一份项目副本（`vendor` 用硬链接），在副本中生成三份：全部选项的新模块（`core:make-module Blog --crud=Post --soft-deletes --export --audit`）、同一模块中默认选项的第二个模型（`core:make-crud Tag --module=Blog`，检验共享文件的追加）、不使用数据范围的另一个模块（`core:make-module Shop --crud=Product --no-data-scope`），再跑 Pint、PHPStan、Rector、全部 Pest 测试、`migrate:fresh --seed` 与 `core:sync`，最后删除副本，工作区不留任何文件。生成器自身的单元测试在 `tests/Core/Generator`。
 
 ### 10.5 测试
 
@@ -1724,4 +1775,3 @@ Scramble 的兼容性在引入时另行验证。
 | 通用导入 | 暂不做（§6.10 的“导入”）：有第一个使用方时，按“附件上传 → 队列逐行校验并调用模块的 Action → 错误报告附件 → 完成通知”实现 |
 | 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `http(s)` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
 | 下载备份 | 不提供（§6.10）；确有需要时须同时满足：只限超管、确认密码（`password.confirm`）、单独的权限码、操作日志 |
-| `core:make-module --crud` | 未完成：§10.4 的完整增删改查生成（含写入模块的 `resources/menus.php`、路由、授权测试）尚未提供；目前用 `core:make-model`、`core:make-controller` 等逐个生成，菜单节点手工写入 `menus.php`。生成结果以业务模块示范 Content（§6.11，`app/Modules/Content`）为样板，软删除按 §10.1 |

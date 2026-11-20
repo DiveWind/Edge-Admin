@@ -1,0 +1,51 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+use Illuminate\Support\Facades\DB;
+
+/**
+ * 修改{{ model }}（设计文档 §5.4）：在事务中锁行后写入（记录在请求期间被删除 → 404）。
+{{#audit}}
+ * 审计日志 `{{ permission }}.updated`：只记变化了的字段，没有变化时不写（{{ log }}）。
+{{/audit}}
+ */
+class {{ class }}
+{
+    /**
+     * 可写入的字段（其余键忽略）。
+     *
+     * @var list<string>
+     */
+    public const array ATTRIBUTES = [{{ attributes }}];
+{{#audit}}
+
+    public function __construct(private readonly {{ log }} $log) {}
+{{/audit}}
+
+    /**
+     * Execute the action.
+     *
+     * @param  array<string, mixed>  $attributes  已校验的字段（ATTRIBUTES）
+     */
+    public function handle({{ model }} ${{ modelVariable }}, array $attributes, {{ userModel }} $actor): {{ model }}
+    {
+        return DB::transaction(function () use (${{ modelVariable }}, $attributes{{#audit}}, $actor{{/audit}}): {{ model }} {
+            $locked = {{ model }}::query()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
+{{#audit}}
+            $before = $this->log->snapshot($locked);
+{{/audit}}
+
+            $locked->fill(array_intersect_key($attributes, array_flip(self::ATTRIBUTES)));
+            $locked->save();
+{{#audit}}
+
+            $this->log->handle($actor, $locked, {{ log }}::UPDATED, $before);
+{{/audit}}
+
+            return $locked->refresh();
+        });
+    }
+}

@@ -57,6 +57,16 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
     }
 
     /**
+     * 模板中条件块的开关：`{{#名称}}…{{/名称}}` 在开关为真时保留，`{{^名称}}…{{/名称}}` 在为假时保留。
+     *
+     * @return array<string, bool>
+     */
+    protected function sections(string $class): array
+    {
+        return [];
+    }
+
+    /**
      * 类名后缀（Controller、Request 等）：名称不以它结尾时自动补上。
      */
     protected function suffix(): string
@@ -139,7 +149,7 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
      */
     protected function buildClass($name): string
     {
-        return $this->replace(parent::buildClass($name), $this->replacements($name));
+        return $this->replace(parent::buildClass($name), $this->replacements($name), $this->sections($name));
     }
 
     /**
@@ -203,11 +213,12 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
     }
 
     /**
-     * 按模板生成非类文件（路由文件、测试、README 等），遵循 --force；返回是否已生成。
+     * 按模板生成非类文件（路由文件、测试、README 等），遵循 --force；PHP 文件的导入按 Pint 的格式整理。返回是否已生成。
      *
      * @param  array<string, string>  $replacements
+     * @param  array<string, bool>  $sections
      */
-    protected function writeFromStub(string $stub, string $path, array $replacements, string $type): bool
+    protected function writeFromStub(string $stub, string $path, array $replacements, string $type, array $sections = []): bool
     {
         if ($this->files->exists($path) && ! $this->option('force')) {
             $this->components->error("{$type} [{$this->relativePath($path)}] already exists.");
@@ -216,7 +227,9 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
         }
 
         $this->makeDirectory($path);
-        $this->files->put($path, $this->replace($this->files->get($this->resolveStub($stub)), $replacements));
+        $contents = $this->replace($this->files->get($this->resolveStub($stub)), $replacements, $sections);
+
+        $this->files->put($path, str_ends_with($path, '.php') ? $this->sortImports($contents) : $contents);
         $this->components->info(sprintf('%s [%s] created successfully.', $type, $this->relativePath($path)));
 
         return true;
@@ -226,8 +239,9 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
      * 按另一个模板生成一个类（如契约的实现），遵循 --force；返回是否已生成。
      *
      * @param  array<string, string>  $replacements
+     * @param  array<string, bool>  $sections
      */
-    protected function writeClass(string $stub, string $class, array $replacements, string $type): bool
+    protected function writeClass(string $stub, string $class, array $replacements, string $type, array $sections = []): bool
     {
         $path = $this->getPath($class);
 
@@ -242,7 +256,7 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
         $this->replaceNamespace($code, $class);
 
         $this->makeDirectory($path);
-        $this->files->put($path, $this->sortImports($this->replace($this->replaceClass($code, $class), $replacements)));
+        $this->files->put($path, $this->sortImports($this->replace($this->replaceClass($code, $class), $replacements, $sections)));
         $this->components->info(sprintf('%s [%s] created successfully.', $type, $this->relativePath($path)));
 
         return true;
@@ -368,15 +382,41 @@ abstract class CoreGeneratorCommand extends GeneratorCommand
     }
 
     /**
-     * 替换模板中的 `{{ xxx }}`。
+     * 处理模板中的条件块，再替换 `{{ xxx }}`。
      *
      * @param  array<string, string>  $replacements
+     * @param  array<string, bool>  $sections
      */
-    protected function replace(string $stub, array $replacements): string
+    protected function replace(string $stub, array $replacements, array $sections = []): string
     {
+        $stub = self::renderSections($stub, $sections);
+
         foreach ($replacements as $key => $value) {
             $stub = str_replace(['{{ '.$key.' }}', '{{'.$key.'}}'], $value, $stub);
         }
+
+        return $stub;
+    }
+
+    /**
+     * 条件块：`{{#名称}}…{{/名称}}` 在开关为真时保留内容，`{{^名称}}…{{/名称}}` 在为假时保留；未给出的开关视为假。
+     * 独占一行的标记连同所在的行一起去掉（生成物没有多余的空行）。不同名称的块可以嵌套，同名的不可以。
+     *
+     * @param  array<string, bool>  $sections
+     */
+    public static function renderSections(string $stub, array $sections): string
+    {
+        $stub = preg_replace('/^[ \t]*(\{\{[#^\/]\s*\w+\s*\}\})[ \t]*\n/m', '$1', $stub) ?? $stub;
+
+        do {
+            $stub = preg_replace_callback(
+                '/\{\{([#^])\s*(\w+)\s*\}\}(.*?)\{\{\/\s*\2\s*\}\}/s',
+                fn (array $match): string => (($sections[$match[2]] ?? false) === ($match[1] === '#')) ? $match[3] : '',
+                $stub,
+                -1,
+                $count,
+            ) ?? $stub;
+        } while ($count > 0);
 
         return $stub;
     }

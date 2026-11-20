@@ -8,7 +8,7 @@ use Override;
 
 /**
  * core:make-migration：模块中模型的建表迁移（database/migrations/<时间>_create_<表>_table.php，设计文档 §14）。
- * 表名与 Eloquent 的默认推断一致（类名的复数 snake_case）。同一张表已有建表迁移时视为已存在：--force 覆盖原文件，不会重复创建。
+ * 表名与 Eloquent 的默认推断一致（类名的复数 snake_case）；列按模型文件的写法生成：name、created_by（外键）、时间戳、软删除。同一张表已有建表迁移时视为已存在：--force 覆盖原文件，不会重复创建。
  */
 #[Signature('core:make-migration
     {name : 模型名，如 Article（生成 create_articles_table）}
@@ -89,7 +89,17 @@ class MigrationMakeCommand extends ModuleGeneratorCommand
      */
     protected function replacements(string $class): array
     {
-        return [...parent::replacements($class), 'table' => $this->tableName()];
+        return [...parent::replacements($class), 'model' => $this->getNameInput(), 'table' => $this->tableName()];
+    }
+
+    /**
+     * 按模型文件的写法：name、created_by、软删除（设计文档 §10.4）。
+     *
+     * @return array<string, bool>
+     */
+    protected function sections(string $class): array
+    {
+        return $this->modelFeatures($this->getNameInput());
     }
 
     /**

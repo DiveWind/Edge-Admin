@@ -1,0 +1,35 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+use Illuminate\Support\Facades\DB;
+
+/**
+ * 删除{{ model }}{{#softDeletes}}（软删除，可恢复，设计文档 §10.1）{{/softDeletes}}：在事务中锁行，已被别人删除 → 404。
+{{#audit}}
+ * 审计日志 `{{ permission }}.deleted`（只记事件）。
+{{/audit}}
+ */
+class {{ class }}
+{
+{{#audit}}
+    public function __construct(private readonly {{ log }} $log) {}
+
+{{/audit}}
+    /**
+     * Execute the action.
+     */
+    public function handle({{ model }} ${{ modelVariable }}, {{ userModel }} $actor): void
+    {
+        DB::transaction(function () use (${{ modelVariable }}{{#audit}}, $actor{{/audit}}): void {
+            $locked = {{ model }}::query()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
+            $locked->delete();
+{{#audit}}
+
+            $this->log->handle($actor, $locked, {{ log }}::DELETED);
+{{/audit}}
+        });
+    }
+}

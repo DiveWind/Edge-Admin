@@ -2,10 +2,13 @@
 
 namespace {{ namespace }};
 
+use {{ namespacedUserModel }};
+
 /**
  * TODO: 说明这个查询。
  *
- * Query 只读：复杂查询与统计指标（设计文档 §5.4）。统计类数据用 Cache::flexible()，请求内缓存用 Cache::memo()（§10.1）。
+ * Query 只读：复杂查询与统计指标（设计文档 §5.4）。所有查询入口都必须经过数据权限（模型的 visibleTo($actor)，§8.4）；
+ * 统计类数据用 Cache::flexible()，请求内缓存用 Cache::memo()（§10.1）。列表查询用 `core:make-query <模型>List`（builder 形态）。
  */
 class {{ class }}
 {
@@ -14,7 +17,7 @@ class {{ class }}
      *
      * @return array<string, mixed>
      */
-    public function get(): array
+    public function get({{ userModel }} $actor): array
     {
         return [];
     }

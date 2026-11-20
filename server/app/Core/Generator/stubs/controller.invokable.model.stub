@@ -1,0 +1,24 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedUserModel }};
+use {{ namespacedResource }};
+use {{ moduleNamespace }}\Actions\{{ action }};
+use {{ namespacedModel }};
+use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
+
+/**
+ * {{ action }}（{{ app }} 入口，单动作控制器）：调用 {{ module }} 模块的 {{ action }}，返回{{ model }}。
+ *
+ * 授权由 {{ model }}Policy::{{ ability }}() 判定（403）；并发时状态已变由 Action 返回 422。{{#trashed}}路由带 withTrashed()（§10.1）。{{/trashed}}
+ */
+class {{ class }}
+{
+    #[Authorize('{{ ability }}', '{{ routeParameter }}')]
+    public function __invoke({{ model }} ${{ modelVariable }}, {{ action }} $action, #[CurrentUser] {{ userModel }} $actor): {{ resource }}
+    {
+        return new {{ resource }}($action->handle(${{ modelVariable }}, $actor)->load({{ resource }}::relations()));
+    }
+}

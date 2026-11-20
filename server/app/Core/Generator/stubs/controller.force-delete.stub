@@ -1,0 +1,22 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedUserModel }};
+use {{ moduleNamespace }}\Actions\ForceDelete{{ model }};
+use {{ namespacedModel }};
+use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
+
+/**
+ * 彻底删除已删除的{{ model }}（{{ app }} 入口，设计文档 §10.1）：返回 data: null。
+ * 路由带 withTrashed()；只有已删除的能彻底删除（{{ model }}Policy::forceDelete，403：先删除；并发时 422）。
+ */
+class {{ class }}
+{
+    #[Authorize('forceDelete', '{{ routeParameter }}')]
+    public function __invoke({{ model }} ${{ modelVariable }}, ForceDelete{{ model }} $action, #[CurrentUser] {{ userModel }} $actor): void
+    {
+        $action->handle(${{ modelVariable }}, $actor);
+    }
+}

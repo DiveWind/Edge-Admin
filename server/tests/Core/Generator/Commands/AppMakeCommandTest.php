@@ -120,7 +120,7 @@ it('rejects invalid names', function (string $name, string $message): void {
         ->expectsOutputToContain($message)
         ->assertFailed();
 
-    expect($this->project->files('app/Http'))->toBe(['app/Http/Admin/AdminServiceProvider.php', 'app/Http/Admin/Requests/ListRequest.php']);
+    expect($this->project->files('app/Http'))->toBe(['app/Http/Admin/AdminServiceProvider.php', 'app/Http/Admin/Requests/ListRequest.php', 'app/Http/Admin/routes.php']);
 })->with([
     'shared middleware directory' => ['middleware', '共用的中间件目录'],
     'subdirectory' => ['api/device', '不能包含子目录'],

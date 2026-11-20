@@ -20,19 +20,83 @@ afterEach(function (): void {
 });
 
 describe('controller', function (): void {
-    it('creates the model controller with its list request and resource', function (): void {
+    it('creates the resource controller with its requests, resource, query and actions', function (): void {
         $this->artisan('core:make-controller', ['name' => 'Article', '--module' => 'Content', '--model' => 'Article'])
-            ->expectsOutputToContain("Route::apiResource('content/articles', ArticleController::class)->only(['index', 'show']);")
+            ->expectsOutputToContain("Route::apiResource('articles', ArticleController::class)->whereNumber('article');")
             ->assertSuccessful();
 
         expect($this->project->read('app/Http/Admin/Content/Controllers/ArticleController.php'))->toContain(
             'namespace App\Http\Admin\Content\Controllers;',
-            "#[Authorize('viewAny', Article::class)]\n    public function index(ArticleIndexRequest \$request): AnonymousResourceCollection",
-            'ArticleResource::collection(Article::query()->latest(\'id\')->paginate($request->pageSize()))',
+            "#[Authorize('viewAny', Article::class)]\n    public function index(ArticleIndexRequest \$request, ArticleList \$list, #[CurrentUser] User \$actor): AnonymousResourceCollection",
+            'ArticleResource::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()))',
             "#[Authorize('view', 'article')]\n    public function show(Article \$article): ArticleResource",
+            'new ArticleResource($article->load(ArticleResource::relations()))',
+            "#[Authorize('create', Article::class)]\n    public function store(ArticleRequest \$request, CreateArticle \$action, #[CurrentUser] User \$actor): ArticleResource",
+            "#[Authorize('update', 'article')]\n    public function update(ArticleRequest \$request, Article \$article, UpdateArticle \$action, #[CurrentUser] User \$actor): ArticleResource",
+            "#[Authorize('delete', 'article')]\n    public function destroy(Article \$article, DeleteArticle \$action, #[CurrentUser] User \$actor): void",
         )
-            ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleIndexRequest.php'))->toContain('use App\Http\Admin\Requests\ListRequest;', 'class ArticleIndexRequest extends ListRequest', '...parent::rules(),')
-            ->and($this->project->read('app/Http/Admin/Content/Resources/ArticleResource.php'))->toContain('@mixin Article', "'created_at' => \$this->created_at?->toIso8601String(),");
+            ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleIndexRequest.php'))->toContain('class ArticleIndexRequest extends ListRequest', "'filter.name' => ['sometimes', 'string', 'max:255'],", "'filter.created_at'")
+            ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleRequest.php'))->toContain("'name' => ['required', 'string', 'max:255'],", '__("content::article.attributes.{$field}")')
+            ->and($this->project->read('app/Http/Admin/Content/Resources/ArticleResource.php'))->toContain('@mixin Article', "'name' => \$this->name,", "'creator' => \$this->creator?->only(['id', 'username', 'name']),", "return ['creator'];")
+            ->and($this->project->read('app/Modules/Content/Queries/ArticleList.php'))->toContain('->visibleTo($actor)', "AllowedFilter::partial('name')")
+            ->and($this->project->exists('app/Modules/Content/Actions/CreateArticle.php'))->toBeTrue()
+            ->and($this->project->exists('app/Modules/Content/Actions/DeleteArticle.php'))->toBeTrue();
+    });
+
+    it('does not print the route when the controller is already registered', function (): void {
+        $this->project->put('app/Http/Admin/routes.php', "<?php\n\nRoute::apiResource('articles', ArticleController::class);\n");
+
+        $this->artisan('core:make-controller', ['name' => 'Article', '--module' => 'Content', '--model' => 'Article'])
+            ->doesntExpectOutputToContain('路由不会自动登记')
+            ->assertSuccessful();
+    });
+
+    it('creates single action controllers by name, with their routes', function (string $name, string $route, string $contains): void {
+        $this->artisan('core:make-model', ['name' => 'Comment', '--module' => 'Content', '--soft-deletes' => true])->assertSuccessful();
+
+        $this->artisan('core:make-controller', ['name' => $name, '--module' => 'Content', '--model' => 'Comment', '--invokable' => true])
+            ->expectsOutputToContain($route)
+            ->assertSuccessful();
+
+        expect($this->project->read("app/Http/Admin/Content/Controllers/{$name}Controller.php"))->toContain('public function __invoke(', $contains);
+    })->with([
+        'restore' => ['RestoreComment', "Route::post('comments/{comment}/restore', RestoreCommentController::class)->whereNumber('comment')->withTrashed()->name('comments.restore');", "#[Authorize('restore', 'comment')]"],
+        'other action' => ['PublishComment', "Route::post('comments/{comment}/publish', PublishCommentController::class)->whereNumber('comment')->name('comments.publish');", 'PublishComment $action'],
+        'force delete' => ['ForceDeleteComment', "Route::delete('comments/{comment}/force-delete', ForceDeleteCommentController::class)->whereNumber('comment')->withTrashed()->name('comments.force-delete');", "#[Authorize('forceDelete', 'comment')]"],
+    ]);
+
+    it('creates a plain single action controller', function (): void {
+        $this->artisan('core:make-controller', ['name' => 'Dashboard', '--module' => 'Content', '--invokable' => true])
+            ->expectsOutputToContain("Route::post('dashboard', DashboardController::class)->name('dashboard');")
+            ->assertSuccessful();
+
+        expect($this->project->read('app/Http/Admin/Content/Controllers/DashboardController.php'))->toContain("    public function __invoke(): void\n    {\n        //\n    }");
+    });
+
+    it('creates the export controller with its request and exporter', function (): void {
+        $this->project->put('app/Http/Admin/System/Resources/ExportResource.php', '<?php');
+        $this->project->put('app/Http/Admin/AdminServiceProvider.php', "<?php\n\nnamespace App\\Http\\Admin;\n\nclass AdminServiceProvider { public const string EXPORT_LIMITER = 'admin-exports'; }\n");
+
+        $this->artisan('core:make-controller', ['name' => 'ArticleExport', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
+            ->expectsOutputToContain("Route::post('articles/export', ArticleExportController::class)->middleware('throttle:'.AdminServiceProvider::EXPORT_LIMITER)->name('articles.export');")
+            ->assertSuccessful();
+
+        expect($this->project->read('app/Http/Admin/Content/Controllers/ArticleExportController.php'))->toContain("#[Authorize('content.article.export')]", "\$action->handle(\$actor, 'content.article',")
+            ->and($this->project->read('app/Http/Admin/Content/Requests/ArticleExportRequest.php'))->toContain('class ArticleExportRequest extends ArticleIndexRequest', "unset(\$rules['page'], \$rules['pageSize']);")
+            ->and($this->project->read('app/Modules/Content/Exporters/ArticleExporter.php'))->toContain('private readonly ArticleList $list')
+            ->and($this->project->read('app/Modules/Content/ContentServiceProvider.php'))->toContain("'content.article' => ArticleExporter::class,");
+    });
+
+    it('rejects an export controller in an entry without exports', function (): void {
+        $this->artisan('core:make-controller', ['name' => 'ArticleExport', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
+            ->expectsOutputToContain('不支持导出')
+            ->assertFailed();
+    });
+
+    it('rejects a force delete controller for a model without soft deletes', function (): void {
+        $this->artisan('core:make-controller', ['name' => 'ForceDeleteArticle', '--module' => 'Content', '--model' => 'Article', '--invokable' => true])
+            ->expectsOutputToContain('没有软删除')
+            ->assertFailed();
     });
 
     it('keeps an existing list request and resource', function (): void {
@@ -83,7 +147,21 @@ describe('request', function (): void {
     it('creates a list request with --list', function (): void {
         $this->artisan('core:make-request', ['name' => 'CommentIndexRequest', '--list' => true, '--module' => 'Content'])->assertSuccessful();
 
-        expect($this->project->read('app/Http/Admin/Content/Requests/CommentIndexRequest.php'))->toContain('class CommentIndexRequest extends ListRequest');
+        expect($this->project->read('app/Http/Admin/Content/Requests/CommentIndexRequest.php'))->toContain('class CommentIndexRequest extends ListRequest', "// 'filter.status'");
+    });
+
+    it('validates the trashed filter of a model with soft deletes', function (): void {
+        $this->artisan('core:make-model', ['name' => 'Comment', '--module' => 'Content', '--soft-deletes' => true])->assertSuccessful();
+
+        $this->artisan('core:make-request', ['name' => 'CommentIndex', '--list' => true, '--module' => 'Content'])->assertSuccessful();
+
+        expect($this->project->read('app/Http/Admin/Content/Requests/CommentIndexRequest.php'))->toContain("'filter.trashed' => ['sometimes', 'string', 'in:with,only'],");
+    });
+
+    it('requires the list request for an export request', function (): void {
+        $this->artisan('core:make-request', ['name' => 'ArticleExport', '--export' => true, '--module' => 'Content'])
+            ->expectsOutputToContain('请先执行 php artisan core:make-request ArticleIndex --list')
+            ->assertFailed();
     });
 
     it('rejects --list when the entry has no ListRequest', function (): void {

@@ -1,0 +1,48 @@
+<?php
+
+use {{ moduleNamespace }}\Actions\{{ log }};
+use {{ namespacedModel }};
+use App\Core\Monitor\Models\Activity;
+
+/*
+|--------------------------------------------------------------------------
+| {{ model }} 的审计日志（日志名 {{ logName }}，设计文档 §5.5、§6.11）：由写操作在同一事务中写入
+|--------------------------------------------------------------------------
+*/
+
+beforeEach(function (): void {
+    syncBuiltinPermissions();
+});
+
+/**
+ * 本模块的审计日志（按写入顺序）。
+ *
+ * @return list<Activity>
+ */
+function {{ modelVariable }}Activities{{ module }}(): array
+{
+    return array_values(Activity::query()->where('log_name', {{ log }}::LOG_NAME)->orderBy('id')->get()->all());
+}
+
+it('logs creating, updating and deleting with the changed fields', function (): void {
+    $actor = superAdminActor();
+    $this->actingAs($actor);
+
+    $id = $this->postJson(route('{{ routeName }}.store'), ['name' => 'Hello'])->assertCreated()->json('data.id');
+    ${{ modelVariable }} = {{ model }}::query()->findOrFail($id);
+
+    $this->putJson(route('{{ routeName }}.update', ${{ modelVariable }}), ['name' => 'Renamed'])->assertOk();
+    $this->putJson(route('{{ routeName }}.update', ${{ modelVariable }}), ['name' => 'Renamed'])->assertOk();
+    $this->deleteJson(route('{{ routeName }}.destroy', ${{ modelVariable }}))->assertOk();
+
+    $activities = {{ modelVariable }}Activities{{ module }}();
+
+    expect(array_map(fn (Activity $activity): ?string => $activity->event, $activities))->toBe(['created', 'updated', 'deleted'])
+        ->and($activities[0]->description)->toBe('{{ permission }}.created')
+        ->and($activities[0]->causer_id)->toBe($actor->id)
+        ->and($activities[0]->subject_type)->toBe(${{ modelVariable }}->getMorphClass())
+        ->and($activities[0]->properties->get('attributes'))->toBe(['name' => 'Hello'])
+        ->and($activities[1]->properties->get('old'))->toBe(['name' => 'Hello'])
+        ->and($activities[1]->properties->get('attributes'))->toBe(['name' => 'Renamed'])
+        ->and($activities[2]->properties->get('username'))->toBe($actor->username);
+});

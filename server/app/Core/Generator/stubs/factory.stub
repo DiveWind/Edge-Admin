@@ -2,10 +2,15 @@
 
 namespace {{ namespace }};
 
+{{#createdBy}}
+use App\Core\System\Models\User;
+{{/createdBy}}
 use {{ namespacedModel }};
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
+ * TODO: 说明默认状态（{{ model }}）。
+ *
  * @extends Factory<{{ model }}>
  */
 class {{ class }} extends Factory
@@ -18,7 +23,27 @@ class {{ class }} extends Factory
     public function definition(): array
     {
         return [
+{{#name}}
+            'name' => fake()->words(3, true),
+{{/name}}
+{{#createdBy}}
+            'created_by' => User::factory(),
+{{/createdBy}}
+{{^name}}
+{{^createdBy}}
             //
+{{/createdBy}}
+{{/name}}
         ];
     }
+{{#softDeletes}}
+
+    /**
+     * 已删除（软删除）。
+     */
+    public function trashed(): static
+    {
+        return $this->state(fn (): array => ['deleted_at' => now()]);
+    }
+{{/softDeletes}}
 }

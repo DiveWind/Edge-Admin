@@ -74,7 +74,7 @@ it('imports a class with the given alias when its name is taken', function (): v
 it('does not import a class with the same name as the class it declares', function (): void {
     $imports = PhpImports::parse("<?php\n\nnamespace App\\Modules\\Content;\n\nclass Article {}\n");
 
-    expect(fn (): string => $imports->add('App\Modules\Content\Models\Article'))->toThrow(UnexpectedFormatException::class);
+    expect(fn (): string => $imports->add('App\Modules\Billing\Models\Article'))->toThrow(UnexpectedFormatException::class);
 });
 
 it('leaves code it cannot rewrite safely unchanged', function (string $code): void {

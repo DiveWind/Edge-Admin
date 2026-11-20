@@ -1,0 +1,72 @@
+<?php
+
+use {{ moduleNamespace }}\Actions\ForceDelete{{ model }};
+use {{ namespacedModel }};
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+
+/*
+|--------------------------------------------------------------------------
+| 彻底删除已删除的{{ model }}：DELETE …/{{ uri }}/{{{ routeParameter }}}/force-delete（软删除整套，设计文档 §10.1）
+|--------------------------------------------------------------------------
+*/
+
+beforeEach(function (): void {
+    syncBuiltinPermissions();
+});
+
+it('returns 401 for guests', function (): void {
+    $this->deleteJson(route('{{ routeName }}.force-delete', {{ model }}::factory()->trashed()->create()))->assertUnauthorized();
+});
+
+it('returns 403 without the force-delete code (delete and restore are not enough){{#dataScope}} or outside the data scope{{/dataScope}}', function (): void {
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create();
+
+    $this->actingAs(userWithDataScope('all', '{{ permission }}', '{{ permission }}.delete', '{{ permission }}.restore'))
+        ->deleteJson(route('{{ routeName }}.force-delete', ${{ modelVariable }}))
+        ->assertForbidden();
+{{#dataScope}}
+    $this->actingAs(userWithPermissions('{{ permission }}.force-delete'))
+        ->deleteJson(route('{{ routeName }}.force-delete', ${{ modelVariable }}))
+        ->assertForbidden();
+{{/dataScope}}
+
+    expect({{ model }}::query()->withTrashed()->find(${{ modelVariable }}->id))->not->toBeNull();
+});
+
+it('permanently deletes the deleted {{ modelWords }}', function (): void {
+    $actor = userWithPermissions('{{ permission }}.force-delete');
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+
+    $this->actingAs($actor)
+        ->deleteJson(route('{{ routeName }}.force-delete', ${{ modelVariable }}))
+        ->assertOk()
+        ->assertExactJson(['code' => 0, 'data' => null, 'message' => 'ok']);
+
+    expect({{ model }}::query()->withTrashed()->find(${{ modelVariable }}->id))->toBeNull();
+});
+
+it('returns 403 for a {{ modelWords }} that is not deleted (delete it first)', function (): void {
+    ${{ modelVariable }} = {{ model }}::factory()->create();
+
+    $this->actingAs(superAdminActor())
+        ->deleteJson(route('{{ routeName }}.force-delete', ${{ modelVariable }}))
+        ->assertForbidden()
+        ->assertJsonPath('message', __('{{ lang }}.messages.force_delete_trashed_only'));
+
+    expect({{ model }}::query()->find(${{ modelVariable }}->id))->not->toBeNull();
+});
+
+it('returns 422 when the {{ modelWords }} was restored meanwhile', function (): void {
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create();
+    $stale = {{ model }}::query()->withTrashed()->findOrFail(${{ modelVariable }}->id);
+    {{ model }}::query()->withTrashed()->whereKey(${{ modelVariable }}->id)->update(['deleted_at' => null]);
+
+    expect(fn () => resolve(ForceDelete{{ model }}::class)->handle($stale, superAdminActor()))
+        ->toThrow(UnprocessableEntityHttpException::class);
+
+    expect({{ model }}::query()->find(${{ modelVariable }}->id))->not->toBeNull();
+});
+
+it('returns 404 for unknown ids', function (): void {
+    $this->actingAs(superAdminActor())->deleteJson(route('{{ routeName }}.force-delete', 999999))->assertNotFound();
+});

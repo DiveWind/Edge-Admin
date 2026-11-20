@@ -1,0 +1,84 @@
+<?php
+
+use App\Core\System\Enums\ExportStatus;
+use App\Core\System\Models\Export;
+use {{ namespacedModel }};
+use Illuminate\Support\Facades\Storage;
+use Spatie\SimpleExcel\SimpleExcelReader;
+
+/*
+|--------------------------------------------------------------------------
+| 导出{{ model }}列表：POST …/{{ uri }}/export（设计文档 §6.10）
+|--------------------------------------------------------------------------
+|
+| 测试的队列驱动为 sync：事务提交后导出任务在请求中执行，库中已是执行后的状态。
+| 导出的通用部分（格式、并发上限、我的导出）由 Core 的测试覆盖，这里只测本列表的导出。
+|
+*/
+
+beforeEach(function (): void {
+    syncBuiltinPermissions();
+    Storage::fake('local');
+});
+
+it('returns 401 for guests', function (): void {
+    $this->postJson(route('{{ routeName }}.export'))->assertUnauthorized();
+});
+
+it('returns 403 without {{ permission }}.export, even with the list permission', function (): void {
+    $this->actingAs(userWithPermissions('{{ permission }}'))
+        ->postJson(route('{{ routeName }}.export'))
+        ->assertForbidden();
+
+    expect(Export::query()->count())->toBe(0);
+});
+
+it('exports no more {{ modelWordsPlural }} than the actor can see in the list', function (): void {
+    $actor = userWithPermissions('{{ permission }}', '{{ permission }}.export');
+    {{ model }}::factory()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+{{#dataScope}}
+    {{ model }}::factory()->create();
+{{/dataScope}}
+
+    $listed = $this->actingAs($actor)->getJson(route('{{ routeName }}.index'))->assertOk()->json('data.items.*.id');
+
+    $this->actingAs($actor)
+        ->postJson(route('{{ routeName }}.export'), ['format' => 'csv'])
+        ->assertCreated()
+        ->assertJsonPath('data.name', '{{ permission }}');
+
+    $export = Export::query()->sole();
+    $file = $export->file()->sole();
+    $rows = SimpleExcelReader::create(Storage::disk($file->disk)->path($file->path), $file->extension)->noHeaderRow()->getRows()->values()->all();
+
+    expect($export->status)->toBe(ExportStatus::Completed)
+        ->and(array_map(fn (array $row): int => (int) $row[0], array_slice($rows, 1)))->toBe($listed)->toHaveCount(1);
+});
+{{#softDeletes}}
+
+it('exports the deleted {{ modelWordsPlural }} only with the restore or force-delete code', function (): void {
+    {{ model }}::factory()->trashed()->create();
+
+    $this->actingAs(userWithDataScope('all', '{{ permission }}.export'))
+        ->postJson(route('{{ routeName }}.export'), ['filter' => ['trashed' => 'only']])
+        ->assertForbidden();
+
+    $this->actingAs(userWithDataScope('all', '{{ permission }}.export', '{{ permission }}.restore'))
+        ->postJson(route('{{ routeName }}.export'), ['filter' => ['trashed' => 'only']])
+        ->assertCreated();
+});
+{{/softDeletes}}
+
+it('rejects filters and sorts outside of the list whitelist, like the list does', function (array $payload, string $error): void {
+    $this->actingAs(userWithPermissions('{{ permission }}.export'))
+        ->postJson(route('{{ routeName }}.export'), $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($error);
+
+    expect(Export::query()->count())->toBe(0);
+})->with([
+    'unknown filter' => [['filter' => ['unknown' => 'x']], 'filter.unknown'],
+    'unknown sort' => [['sort' => 'unknown'], 'sort'],
+    'invalid format' => [['format' => 'pdf'], 'format'],
+    'pagination is not part of an export' => [['page' => 2], 'page'],
+]);

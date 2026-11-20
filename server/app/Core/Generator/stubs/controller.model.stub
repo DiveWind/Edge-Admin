@@ -2,35 +2,70 @@
 
 namespace {{ namespace }};
 
+use {{ namespacedUserModel }};
 use {{ namespacedIndexRequest }};
-use {{ namespacedModel }};
+use {{ namespacedRequest }};
 use {{ namespacedResource }};
+use {{ moduleNamespace }}\Actions\Create{{ model }};
+use {{ moduleNamespace }}\Actions\Delete{{ model }};
+use {{ moduleNamespace }}\Actions\Update{{ model }};
+use {{ namespacedModel }};
+use {{ moduleNamespace }}\Queries\{{ model }}List;
+use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
- * {{ model }} 的接口（{{ app }} 入口）。
+ * {{ model }} 的接口（{{ app }} 入口）：列表、详情、新增、修改、删除{{#softDeletes}}（软删除）{{/softDeletes}}。
  *
- * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）；授权由 {{ model }}Policy 判定（默认拒绝）。
- * 写接口（store、update、destroy）调用 {{ module }} 模块的 Action。路由登记在 {{ app }} 入口的 routes.php。
+ * 控制器只做“授权声明 → 调用 Action / 查询 → 返回 Resource”（设计文档 §5.4）；授权由 {{ model }}Policy 判定（默认拒绝{{#dataScope}}，含数据范围{{/dataScope}}），
+ * 写接口调用 {{ module }} 模块的 Action。路由登记在 {{ app }} 入口的 routes.php。
  */
 class {{ class }}
 {
     /**
-     * 列表：page、pageSize、sort、filter[]，响应由入口统一包装。
+     * 列表{{#dataScope}}（经过数据范围 visibleTo($actor)）{{/dataScope}}：筛选、排序的白名单在 Query 类 {{ model }}List 中{{#softDeletes}}（filter[trashed] 另需 viewTrashed）{{/softDeletes}}，
+     * 不在白名单内的参数返回 422（§6.3）。
      */
     #[Authorize('viewAny', {{ model }}::class)]
-    public function index({{ indexRequest }} $request): AnonymousResourceCollection
+    public function index({{ indexRequest }} $request, {{ model }}List $list, #[CurrentUser] {{ userModel }} $actor): AnonymousResourceCollection
     {
-        return {{ resource }}::collection({{ model }}::query()->latest('id')->paginate($request->pageSize()));
+        return {{ resource }}::collection($list->builder($actor, $request->listParameters())->paginate($request->pageSize()));
     }
 
     /**
-     * 详情。
+     * 详情。{{#softDeletes}}已删除的记录为 404（路由绑定不含已删除的）。{{/softDeletes}}
      */
-    #[Authorize('view', '{{ modelVariable }}')]
+    #[Authorize('view', '{{ routeParameter }}')]
     public function show({{ model }} ${{ modelVariable }}): {{ resource }}
     {
-        return new {{ resource }}(${{ modelVariable }});
+        return new {{ resource }}(${{ modelVariable }}->load({{ resource }}::relations()));
+    }
+
+    /**
+     * 新增（201）{{#createdBy}}：created_by 为操作者{{/createdBy}}。
+     */
+    #[Authorize('create', {{ model }}::class)]
+    public function store({{ request }} $request, Create{{ model }} $action, #[CurrentUser] {{ userModel }} $actor): {{ resource }}
+    {
+        return new {{ resource }}($action->handle($request->validated(), $actor)->load({{ resource }}::relations()));
+    }
+
+    /**
+     * 修改。
+     */
+    #[Authorize('update', '{{ routeParameter }}')]
+    public function update({{ request }} $request, {{ model }} ${{ modelVariable }}, Update{{ model }} $action, #[CurrentUser] {{ userModel }} $actor): {{ resource }}
+    {
+        return new {{ resource }}($action->handle(${{ modelVariable }}, $request->validated(), $actor)->load({{ resource }}::relations()));
+    }
+
+    /**
+     * 删除{{#softDeletes}}（软删除，可恢复）{{/softDeletes}}：返回 data: null。
+     */
+    #[Authorize('delete', '{{ routeParameter }}')]
+    public function destroy({{ model }} ${{ modelVariable }}, Delete{{ model }} $action, #[CurrentUser] {{ userModel }} $actor): void
+    {
+        $action->handle(${{ modelVariable }}, $actor);
     }
 }

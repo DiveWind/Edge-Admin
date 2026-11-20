@@ -1,0 +1,37 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| {{ model }} 的后端文案（中文，键与 en/{{ modelSnake }}.php 相同）
+|--------------------------------------------------------------------------
+|
+| TODO: 把“记录”与导出的显示名换成业务名称。
+|
+*/
+
+return [
+    'attributes' => [
+        'name' => '名称',
+    ],
+{{#softDeletes}}
+
+    'messages' => [
+        'restore_trashed_only' => '只有已删除的记录能恢复。',
+        'force_delete_trashed_only' => '只有已删除的记录能彻底删除，请先删除。',
+        'view_trashed' => '没有查看已删除记录的权限。',
+    ],
+{{/softDeletes}}
+
+    'export' => [
+        'title' => '{{ modelHeadlinePlural }}',
+        'columns' => [
+            'id' => 'ID',
+            'name' => '名称',
+            'creator' => '创建人',
+            'created_at' => '创建时间',
+{{#softDeletes}}
+            'deleted_at' => '删除时间',
+{{/softDeletes}}
+        ],
+    ],
+];

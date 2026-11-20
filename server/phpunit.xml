@@ -15,6 +15,12 @@
             <exclude>tests/Arch</exclude>
         </testsuite>
     </testsuites>
+    <!-- 端到端检查（tests/Core/Generator/EndToEndTest.php，数分钟）：composer test:generator-e2e 单独执行 -->
+    <groups>
+        <exclude>
+            <group>generator-e2e</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>

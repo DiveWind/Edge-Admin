@@ -1,0 +1,49 @@
+<?php
+
+namespace {{ namespace }};
+
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+
+/**
+ * 新增、修改{{ model }}（{{ app }} 入口）。
+ *
+ * 只做输入格式校验（必填、长度、类型、白名单字段）；业务约束（唯一性、状态、引用检查）放在 {{ module }} 模块的 Action（设计文档 §5.4）。
+{{#name}}
+ * - name：占位字段，必填，最长 255；增加字段时在这里加上校验，并在 attributes() 与语言包中加上字段名。
+{{/name}}
+ * 未声明的字段一律拒绝（AppServiceProvider：failOnUnknownFields）；授权写在控制器的 #[Authorize] 上。
+ */
+class {{ class }} extends FormRequest
+{
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+{{#name}}
+            'name' => ['required', 'string', 'max:255'],
+{{/name}}
+{{^name}}
+            // TODO: 字段的校验规则
+{{/name}}
+        ];
+    }
+{{#name}}
+
+    /**
+     * 字段名（错误提示中使用，语言包 {{ lang }}.attributes）。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return array_map(fn (string $field): string => __("{{ lang }}.attributes.{$field}"), [
+            'name' => 'name',
+        ]);
+    }
+{{/name}}
+}

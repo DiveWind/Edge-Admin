@@ -10,6 +10,13 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * {{ model }} 的输出格式（{{ app }} 入口）。
  *
  * 逐个列出字段，禁止整模型 toArray() 输出；日期字段输出 toIso8601String()（设计文档 §9、§10.1）。
+{{#creator}}
+ * creator：创建人 `{ id, username, name }`（已删除时为 null，预加载见 relations()）。
+{{/creator}}
+{{#softDeletes}}
+ * deleted_at：已删除的时间（未删除为 null，§10.1）。
+{{/softDeletes}}
+ * 增加字段时在这里逐个加上。
  *
  * @mixin {{ model }}
  */
@@ -24,8 +31,30 @@ class {{ class }} extends JsonResource
     {
         return [
             'id' => $this->id,
+{{#name}}
+            'name' => $this->name,
+{{/name}}
+{{#createdBy}}
+            'created_by' => $this->created_by,
+{{/createdBy}}
+{{#creator}}
+            'creator' => $this->creator?->only(['id', 'username', 'name']),
+{{/creator}}
+{{#softDeletes}}
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
+{{/softDeletes}}
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * 输出前需要预加载的关联（列表由 {{ model }}List 预加载同样的关联）。
+     *
+     * @return list<string>
+     */
+    public static function relations(): array
+    {
+        return [{{#creator}}'creator'{{/creator}}];
     }
 }

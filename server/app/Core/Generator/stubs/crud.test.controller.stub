@@ -1,0 +1,272 @@
+<?php
+
+use {{ namespacedModel }};
+
+/*
+|--------------------------------------------------------------------------
+| {{ model }}：列表、详情、新增、修改、删除（{{ app }} 入口，设计文档 §10.5）
+|--------------------------------------------------------------------------
+|
+| 由 core:make-crud 生成。每个接口覆盖：未登录 401、没有权限码 403{{#dataScope}}、数据范围之外 403{{/dataScope}}、成功、校验失败 422、不存在 404。
+| 增加字段与业务规则后在这里补上对应的用例。
+|
+*/
+
+beforeEach(function (): void {
+    syncBuiltinPermissions();
+});
+
+describe('index', function (): void {
+    it('returns 401 for guests', function (): void {
+        $this->getJson(route('{{ routeName }}.index'))->assertUnauthorized();
+    });
+
+    it('returns 403 without the {{ permission }} code', function (): void {
+        $this->actingAs(userWithPermissions())->getJson(route('{{ routeName }}.index'))->assertForbidden();
+    });
+
+    it('paginates the {{ modelWordsPlural }} with their fields', function (): void {
+        ${{ modelVariable }} = {{ model }}::factory()->create();
+        {{ model }}::factory()->create();
+
+        $response = $this->actingAs({{#dataScope}}userWithDataScope('all', '{{ permission }}'){{/dataScope}}{{^dataScope}}userWithPermissions('{{ permission }}'){{/dataScope}})
+            ->getJson(route('{{ routeName }}.index', ['sort' => 'id', 'pageSize' => 1]))
+            ->assertOk()
+            ->assertJsonPath('data.total', 2);
+
+        expect($response->json('data.items.0'))->toMatchArray([
+            'id' => ${{ modelVariable }}->id,
+            'name' => ${{ modelVariable }}->name,
+            'created_by' => ${{ modelVariable }}->created_by,
+            'creator' => ${{ modelVariable }}->creator?->only(['id', 'username', 'name']),
+{{#softDeletes}}
+            'deleted_at' => null,
+{{/softDeletes}}
+            'created_at' => ${{ modelVariable }}->created_at?->toIso8601String(),
+            'updated_at' => ${{ modelVariable }}->updated_at?->toIso8601String(),
+        ]);
+    });
+{{#dataScope}}
+
+    it('only lists the {{ modelWordsPlural }} within the data scope (self)', function (): void {
+        $actor = userWithPermissions('{{ permission }}');
+        $own = {{ model }}::factory()->create(['created_by' => $actor->id]);
+        {{ model }}::factory()->create();
+
+        $this->actingAs($actor)
+            ->getJson(route('{{ routeName }}.index'))
+            ->assertOk()
+            ->assertJsonPath('data.items.*.id', [$own->id]);
+    });
+{{/dataScope}}
+
+    it('filters by name and created_at and sorts by the allowed fields', function (): void {
+        $first = {{ model }}::factory()->create(['name' => 'Alpha one', 'created_at' => '2026-01-01 10:00:00']);
+        $second = {{ model }}::factory()->create(['name' => 'Beta two', 'created_at' => '2026-02-01 10:00:00']);
+        $this->actingAs(superAdminActor());
+
+        $this->getJson(route('{{ routeName }}.index', ['filter' => ['name' => 'alpha']]))->assertOk()->assertJsonPath('data.items.*.id', [$first->id]);
+        $this->getJson(route('{{ routeName }}.index', ['filter' => ['created_at' => '2026-01-15T00:00:00+00:00,']]))->assertOk()->assertJsonPath('data.items.*.id', [$second->id]);
+        $this->getJson(route('{{ routeName }}.index', ['sort' => 'created_at']))->assertOk()->assertJsonPath('data.items.*.id', [$first->id, $second->id]);
+    });
+
+    it('returns 422 for filters and sorts outside the allowlist', function (array $query, string $field): void {
+        $this->actingAs(superAdminActor())
+            ->getJson(route('{{ routeName }}.index', $query))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([$field]);
+    })->with([
+        'unknown filter' => [['filter' => ['unknown' => 'x']], 'filter'],
+        'unknown sort' => [['sort' => 'unknown'], 'sort'],
+        'time range' => [['filter' => ['created_at' => '2026-11-01,2026-11-02']], 'filter.created_at'],
+{{#softDeletes}}
+        'trashed value' => [['filter' => ['trashed' => 'all']], 'filter.trashed'],
+{{/softDeletes}}
+    ]);
+{{#softDeletes}}
+
+    it('hides the deleted {{ modelWordsPlural }} unless filter[trashed] asks for them', function (string $trashed, array $expected): void {
+        $kept = {{ model }}::factory()->create();
+        $deleted = {{ model }}::factory()->trashed()->create();
+        $ids = ['kept' => $kept->id, 'deleted' => $deleted->id];
+
+        $this->actingAs(userWithDataScope('all', '{{ permission }}', '{{ permission }}.restore'))
+            ->getJson(route('{{ routeName }}.index', ['sort' => 'id', ...($trashed === '' ? [] : ['filter' => ['trashed' => $trashed]])]))
+            ->assertOk()
+            ->assertJsonPath('data.items.*.id', array_map(fn (string $key): int => $ids[$key], $expected));
+    })->with([
+        'default' => ['', ['kept']],
+        'with' => ['with', ['kept', 'deleted']],
+        'only' => ['only', ['deleted']],
+    ]);
+
+    it('requires the restore or force-delete code to see the deleted {{ modelWordsPlural }}', function (string $code, int $status): void {
+        $this->actingAs(userWithDataScope('all', '{{ permission }}', ...array_filter([$code])))
+            ->getJson(route('{{ routeName }}.index', ['filter' => ['trashed' => 'only']]))
+            ->assertStatus($status);
+    })->with([
+        'list only' => ['', 403],
+        'restore' => ['{{ permission }}.restore', 200],
+        'force delete' => ['{{ permission }}.force-delete', 200],
+    ]);
+{{/softDeletes}}
+});
+
+describe('show', function (): void {
+    it('returns 401 for guests', function (): void {
+        $this->getJson(route('{{ routeName }}.show', {{ model }}::factory()->create()))->assertUnauthorized();
+    });
+
+    it('returns 403 without the code{{#dataScope}} or outside the data scope{{/dataScope}}', function (): void {
+        ${{ modelVariable }} = {{ model }}::factory()->create();
+
+        $this->actingAs(userWithPermissions())->getJson(route('{{ routeName }}.show', ${{ modelVariable }}))->assertForbidden();
+{{#dataScope}}
+        $this->actingAs(userWithPermissions('{{ permission }}'))->getJson(route('{{ routeName }}.show', ${{ modelVariable }}))->assertForbidden();
+{{/dataScope}}
+    });
+
+    it('returns the {{ modelWords }}', function (): void {
+        $actor = userWithPermissions('{{ permission }}');
+        ${{ modelVariable }} = {{ model }}::factory()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+
+        $this->actingAs($actor)
+            ->getJson(route('{{ routeName }}.show', ${{ modelVariable }}))
+            ->assertOk()
+            ->assertJsonPath('data.id', ${{ modelVariable }}->id)
+            ->assertJsonPath('data.name', ${{ modelVariable }}->name)
+            ->assertJsonPath('data.creator.id', ${{ modelVariable }}->created_by);
+    });
+
+    it('returns 404 for {{#softDeletes}}deleted and {{/softDeletes}}unknown ids', function (): void {
+        $this->actingAs(superAdminActor());
+
+{{#softDeletes}}
+        $this->getJson(route('{{ routeName }}.show', {{ model }}::factory()->trashed()->create()))->assertNotFound();
+{{/softDeletes}}
+        $this->getJson(route('{{ routeName }}.show', 999999))->assertNotFound();
+    });
+});
+
+describe('store', function (): void {
+    it('returns 401 for guests', function (): void {
+        $this->postJson(route('{{ routeName }}.store'), ['name' => 'Hello'])->assertUnauthorized();
+    });
+
+    it('returns 403 without the {{ permission }}.create code', function (): void {
+        $this->actingAs(userWithPermissions('{{ permission }}', '{{ permission }}.update'))
+            ->postJson(route('{{ routeName }}.store'), ['name' => 'Hello'])
+            ->assertForbidden();
+
+        expect({{ model }}::query()->count())->toBe(0);
+    });
+
+    it('creates the {{ modelWords }} with the actor as its creator (201)', function (): void {
+        $actor = userWithPermissions('{{ permission }}.create');
+
+        $this->actingAs($actor)
+            ->postJson(route('{{ routeName }}.store'), ['name' => 'Hello'])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Hello')
+            ->assertJsonPath('data.created_by', $actor->id);
+
+        expect({{ model }}::query()->sole()->created_by)->toBe($actor->id);
+    });
+
+    it('validates the fields', function (array $payload, string $field): void {
+        $this->actingAs(superAdminActor())
+            ->postJson(route('{{ routeName }}.store'), $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([$field]);
+
+        expect({{ model }}::query()->count())->toBe(0);
+    })->with([
+        'missing name' => [[], 'name'],
+        'name too long' => [['name' => str_repeat('a', 256)], 'name'],
+        'unknown field' => [['name' => 'Hello', 'created_by' => 1], 'created_by'],
+    ]);
+});
+
+describe('update', function (): void {
+    it('returns 401 for guests', function (): void {
+        $this->putJson(route('{{ routeName }}.update', {{ model }}::factory()->create()), ['name' => 'Renamed'])->assertUnauthorized();
+    });
+
+    it('returns 403 without the code{{#dataScope}} or outside the data scope{{/dataScope}}', function (): void {
+        ${{ modelVariable }} = {{ model }}::factory()->create();
+
+        $this->actingAs(userWithPermissions('{{ permission }}'))->putJson(route('{{ routeName }}.update', ${{ modelVariable }}), ['name' => 'Renamed'])->assertForbidden();
+{{#dataScope}}
+        $this->actingAs(userWithPermissions('{{ permission }}.update'))->putJson(route('{{ routeName }}.update', ${{ modelVariable }}), ['name' => 'Renamed'])->assertForbidden();
+{{/dataScope}}
+
+        expect(${{ modelVariable }}->refresh()->name)->not->toBe('Renamed');
+    });
+
+    it('updates the {{ modelWords }}', function (): void {
+        $actor = userWithPermissions('{{ permission }}.update');
+        ${{ modelVariable }} = {{ model }}::factory()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+
+        $this->actingAs($actor)
+            ->putJson(route('{{ routeName }}.update', ${{ modelVariable }}), ['name' => 'Renamed'])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Renamed');
+
+        expect(${{ modelVariable }}->refresh()->name)->toBe('Renamed');
+    });
+
+    it('validates the fields', function (): void {
+        $this->actingAs(superAdminActor())
+            ->putJson(route('{{ routeName }}.update', {{ model }}::factory()->create()), ['name' => ''])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+    });
+{{#softDeletes}}
+
+    it('returns 404 for a deleted {{ modelWords }}', function (): void {
+        $this->actingAs(superAdminActor())
+            ->putJson(route('{{ routeName }}.update', {{ model }}::factory()->trashed()->create()), ['name' => 'Renamed'])
+            ->assertNotFound();
+    });
+{{/softDeletes}}
+});
+
+describe('destroy', function (): void {
+    it('returns 401 for guests', function (): void {
+        $this->deleteJson(route('{{ routeName }}.destroy', {{ model }}::factory()->create()))->assertUnauthorized();
+    });
+
+    it('returns 403 without the code{{#dataScope}} or outside the data scope{{/dataScope}}', function (): void {
+        ${{ modelVariable }} = {{ model }}::factory()->create();
+
+        $this->actingAs(userWithPermissions('{{ permission }}', '{{ permission }}.update'))->deleteJson(route('{{ routeName }}.destroy', ${{ modelVariable }}))->assertForbidden();
+{{#dataScope}}
+        $this->actingAs(userWithPermissions('{{ permission }}.delete'))->deleteJson(route('{{ routeName }}.destroy', ${{ modelVariable }}))->assertForbidden();
+{{/dataScope}}
+
+        expect({{ model }}::query()->find(${{ modelVariable }}->id))->not->toBeNull();
+    });
+
+    it('deletes the {{ modelWords }}{{#softDeletes}} softly{{/softDeletes}}', function (): void {
+        $actor = userWithPermissions('{{ permission }}.delete');
+        ${{ modelVariable }} = {{ model }}::factory()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+
+        $this->actingAs($actor)
+            ->deleteJson(route('{{ routeName }}.destroy', ${{ modelVariable }}))
+            ->assertOk()
+            ->assertExactJson(['code' => 0, 'data' => null, 'message' => 'ok']);
+
+{{#softDeletes}}
+        expect(${{ modelVariable }}->refresh()->trashed())->toBeTrue();
+{{/softDeletes}}
+{{^softDeletes}}
+        expect({{ model }}::query()->find(${{ modelVariable }}->id))->toBeNull();
+{{/softDeletes}}
+    });
+
+    it('returns 404 for {{#softDeletes}}a deleted{{/softDeletes}}{{^softDeletes}}an unknown{{/softDeletes}} {{ modelWords }}', function (): void {
+        $this->actingAs(superAdminActor())
+            ->deleteJson(route('{{ routeName }}.destroy', {{#softDeletes}}{{ model }}::factory()->trashed()->create(){{/softDeletes}}{{^softDeletes}}999999{{/softDeletes}}))
+            ->assertNotFound();
+    });
+});

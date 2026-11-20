@@ -2,13 +2,19 @@
 
 namespace {{ namespace }};
 
+use App\Core\System\Contracts\{DictRegistry, MenuRegistry};
 use Illuminate\Support\ServiceProvider;
 
 /**
  * {{ module }}（{{ kind }}）：职责与对外提供的能力见同目录的 README.md。
  *
- * 注册本模块的契约绑定、多态别名、命令、事件监听、语言包与视图，并通过 Core 的扩展点接入（设计文档 §4.3、§5.5）。
- * 多态别名与契约绑定由 core:make-model、core:make-contract 自动登记。
+ * 注册本模块的契约绑定、多态别名、命令、事件监听、语言包与视图，并通过 Core 的扩展点接入（设计文档 §4.3、§5.5），不修改 Core 的任何文件：
+ * - 语言包：resources/lang，命名空间 `{{ translationNamespace }}::`；
+ * - 菜单与权限节点：resources/menus.php → MenuRegistry（core:sync-permissions 写入）；
+ * - 字典类型与初始字典项：resources/dicts.php → DictRegistry（core:sync-dicts 写入）。
+ *
+ * 多态别名、契约绑定与导出类由 core:make-model、core:make-contract、core:make-exporter 自动登记；
+ * 其他扩展点（EnumRegistry、SettingRegistry、DataScopeRegistry）需要时在 boot() 中注入并登记。
  */
 class {{ class }} extends ServiceProvider
 {
@@ -23,8 +29,11 @@ class {{ class }} extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot(MenuRegistry $menus, DictRegistry $dicts): void
     {
-        //
+        $this->loadTranslationsFrom(__DIR__.'/resources/lang', '{{ translationNamespace }}');
+
+        $menus->register(require __DIR__.'/resources/menus.php');
+        $dicts->register(require __DIR__.'/resources/dicts.php');
     }
 }

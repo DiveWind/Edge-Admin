@@ -28,7 +28,7 @@ jobs:
   server:
     name: Lint, analyse, refactor check, test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -63,3 +63,7 @@ jobs:
       # 测试使用 SQLite 内存库，环境变量全部来自 phpunit.xml，不需要 .env
       - name: composer ci
         run: composer ci
+
+      # 设计文档 §10.4：core:make-crud 的生成物不手改即通过全部检查（在系统临时目录的项目副本中生成并检查，结束后删除副本）
+      - name: Generator end-to-end
+        run: composer test:generator-e2e

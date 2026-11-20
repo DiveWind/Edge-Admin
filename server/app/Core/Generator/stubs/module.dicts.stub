@@ -1,0 +1,21 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| {{ module }} 模块的字典类型与初始字典项（设计文档 §6.7）
+|--------------------------------------------------------------------------
+|
+| 在 {{ moduleProvider }}::boot() 中注册到 DictRegistry，由 `php artisan core:sync-dicts` 写入 dict_types、dict_items（内置）。
+| 类型编码以模块名开头；名称与 label 是前端的 i18n key（或纯文本），后端不翻译；校验用 `new InDict('<类型>')`。
+|
+|     [
+|         'code' => '{{ catalog }}.example_type',
+|         'name' => '{{ catalog }}.dict.exampleType',
+|         'items' => [
+|             ['value' => 'a', 'label' => '{{ catalog }}.dict.exampleType.a', 'color' => 'blue'],
+|         ],
+|     ],
+|
+*/
+
+return [];

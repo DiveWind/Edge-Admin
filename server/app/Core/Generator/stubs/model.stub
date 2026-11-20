@@ -2,22 +2,60 @@
 
 namespace {{ namespace }};
 
+use App\Core\System\Models\User;
+{{#dataScope}}
+use App\Core\System\Models\Concerns\HasDataScope;
+{{/dataScope}}
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
+{{#softDeletes}}
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\SoftDeletes;
+{{/softDeletes}}
 use {{ namespacedFactory }};
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * TODO: 说明这个模型（多态别名 `{{ morphAlias }}`，见 {{ moduleProvider }}）。
  *
+ * - name：占位字段（字符串，最长 255）：按业务改名或增加字段，要改的地方见模块 README 的“加字段时要改的地方”；
+{{#dataScope}}
+ * - created_by：创建人（HasDataScope 的归属列，“仅本人”的数据范围按它判定，设计文档 §8.4）；
+{{/dataScope}}
+{{^dataScope}}
+ * - created_by：创建人（不使用数据范围：能查看列表的人看得到全部记录）；
+{{/dataScope}}
+{{#softDeletes}}
+ * - SoftDeletes：删除是软删除，恢复、彻底删除与“已删除”筛选是整套功能（§10.1）；
+{{/softDeletes}}
+ * - 后端文案在语言包 `{{ lang }}`（resources/lang/<语言>/{{ modelSnake }}.php）。
+ *
  * 写入只在 {{ module }} 模块的 Action 中进行（设计文档 §5.2）；Policy 与工厂按默认规则自动推断。
+ *
+ * @property int $id
+ * @property string $name
+ * @property int|null $created_by
+{{#softDeletes}}
+ * @property CarbonInterface|null $deleted_at
+{{/softDeletes}}
  */
-#[Fillable([])]
+#[Fillable(['name'])]
 class {{ class }} extends Model
 {
     /** @use HasFactory<{{ factory }}> */
-    use HasFactory, UsesAppTimezone;
+    use {{ traits }};
+
+    /**
+     * 创建人（已删除时为 null）。
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -26,6 +64,8 @@ class {{ class }} extends Model
      */
     protected function casts(): array
     {
-        return [];
+        return [
+            'created_by' => 'integer',
+        ];
     }
 }

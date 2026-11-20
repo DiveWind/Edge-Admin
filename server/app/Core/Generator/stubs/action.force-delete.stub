@@ -1,0 +1,50 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+
+/**
+ * 彻底删除已删除的{{ model }}（设计文档 §10.1）。
+ *
+ * 只有已删除的能彻底删除（先删除，两步操作避免误删）：{{ model }}Policy 返回 403；并发时（另一人已恢复）锁行复核 → 422（message），
+ * 已被彻底删除 → 404。关联数据在这里清理，或用外键 cascadeOnDelete（附件由 HasAttachments 连同文件删除）。
+{{#audit}}
+ * 审计日志 `{{ permission }}.force_deleted`：old 为删除前的全部字段（记录本身已不存在）。
+{{/audit}}
+ */
+class {{ class }}
+{
+{{#audit}}
+    public function __construct(private readonly {{ log }} $log) {}
+
+{{/audit}}
+    /**
+     * Execute the action.
+     *
+     * @throws UnprocessableEntityHttpException
+     */
+    public function handle({{ model }} ${{ modelVariable }}, {{ userModel }} $actor): void
+    {
+        DB::transaction(function () use (${{ modelVariable }}{{#audit}}, $actor{{/audit}}): void {
+            $locked = {{ model }}::query()->withTrashed()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
+
+            if (! $locked->trashed()) {
+                throw new UnprocessableEntityHttpException(__('{{ lang }}.messages.force_delete_trashed_only'));
+            }
+{{#audit}}
+
+            $before = $this->log->snapshot($locked);
+{{/audit}}
+
+            $locked->forceDelete();
+{{#audit}}
+
+            $this->log->handle($actor, $locked, {{ log }}::FORCE_DELETED, $before);
+{{/audit}}
+        });
+    }
+}

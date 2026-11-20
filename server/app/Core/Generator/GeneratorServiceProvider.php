@@ -2,7 +2,7 @@
 
 namespace App\Core\Generator;
 
-use App\Core\Generator\Commands\{ActionMakeCommand, AppMakeCommand, ContractMakeCommand, ControllerMakeCommand, CoreGeneratorCommand, DataMakeCommand, EnumMakeCommand, FactoryMakeCommand, MigrationMakeCommand, ModelMakeCommand, ModuleMakeCommand, PolicyMakeCommand, QueryMakeCommand, RequestMakeCommand, ResourceMakeCommand};
+use App\Core\Generator\Commands\{ActionMakeCommand, AppMakeCommand, ContractMakeCommand, ControllerMakeCommand, CoreGeneratorCommand, CrudMakeCommand, DataMakeCommand, EnumMakeCommand, ExporterMakeCommand, FactoryMakeCommand, MigrationMakeCommand, ModelMakeCommand, ModuleMakeCommand, PolicyMakeCommand, QueryMakeCommand, RequestMakeCommand, ResourceMakeCommand};
 use Illuminate\Foundation\Events\PublishingStubs;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -22,12 +22,14 @@ class GeneratorServiceProvider extends ServiceProvider
     public const array COMMANDS = [
         AppMakeCommand::class,
         ModuleMakeCommand::class,
+        CrudMakeCommand::class,
         ModelMakeCommand::class,
         MigrationMakeCommand::class,
         FactoryMakeCommand::class,
         PolicyMakeCommand::class,
         ActionMakeCommand::class,
         QueryMakeCommand::class,
+        ExporterMakeCommand::class,
         EnumMakeCommand::class,
         ContractMakeCommand::class,
         DataMakeCommand::class,

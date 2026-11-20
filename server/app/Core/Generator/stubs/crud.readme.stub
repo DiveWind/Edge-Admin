@@ -1,0 +1,36 @@
+## {{ model }}（完整增删改查）
+
+由 `php artisan core:make-crud {{ model }} --module={{ module }}{{ options }}` 生成（设计文档 §10.4），写法与 Content 模块的文章一致。
+
+**接口**（{{ app }} 入口，路由在 `{{ routesFile }}` 的 `{{ routePrefix }}` 分组；菜单 `{{ permission }}`，路径 `{{ menuPath }}`）：
+
+| 接口 | 说明 | 权限 |
+|---|---|---|
+| `GET /{{ routePrefix }}/{{ uri }}` | 分页；筛选 `name`（模糊）、`created_at`（区间）{{#softDeletes}}、`trashed`（`with` / `only`，另需 `viewTrashed`）{{/softDeletes}}；排序 `id`、`created_at`，默认 `-id` | `{{ permission }}` |
+| `GET /{{ routePrefix }}/{{ uri }}/{{{ routeParameter }}}` | 详情 | `{{ permission }}` |
+{{#export}}
+| `POST /{{ routePrefix }}/{{ uri }}/export` | 异步导出：`{ format, filter, sort }`（§6.10），另经过发起导出的限流 | `{{ permission }}.export` |
+{{/export}}
+| `POST /{{ routePrefix }}/{{ uri }}` | 新增（201），`created_by` 为操作者 | `{{ permission }}.create` |
+| `PUT /{{ routePrefix }}/{{ uri }}/{{{ routeParameter }}}` | 修改 | `{{ permission }}.update` |
+| `DELETE /{{ routePrefix }}/{{ uri }}/{{{ routeParameter }}}` | 删除{{#softDeletes}}（软删除）{{/softDeletes}} | `{{ permission }}.delete` |
+{{#softDeletes}}
+| `POST /{{ routePrefix }}/{{ uri }}/{{{ routeParameter }}}/restore` | 恢复已删除的（未删除的 403） | `{{ permission }}.restore` |
+| `DELETE /{{ routePrefix }}/{{ uri }}/{{{ routeParameter }}}/force-delete` | 彻底删除已删除的（未删除的 403） | `{{ permission }}.force-delete` |
+{{/softDeletes}}
+
+- 授权：`Policies/{{ model }}Policy`（§8.3）{{#dataScope}}；数据范围按 `created_by`（`HasDataScope`，§8.4）：“仅本人”的操作者只能看到、修改、删除{{#softDeletes}}、恢复、彻底删除{{/softDeletes}}{{#export}}、导出{{/export}}自己创建的记录{{/dataScope}}{{^dataScope}}；不使用数据范围{{/dataScope}}。
+- 写操作：`Actions/Create{{ model }}`、`Update{{ model }}`、`Delete{{ model }}`{{#softDeletes}}、`Restore{{ model }}`、`ForceDelete{{ model }}`（软删除整套，§10.1）{{/softDeletes}}{{#audit}}；审计日志 `Actions/{{ log }}`（日志名 `{{ logName }}`，同一事务）{{/audit}}。
+- 列表查询：`Queries/{{ model }}List`{{#export}}，导出 `Exporters/{{ model }}Exporter`（对外名称 `{{ permission }}`）共用它{{/export}}。
+- 后端文案：`resources/lang/<语言>/{{ modelSnake }}.php`（`{{ lang }}`）；菜单与目录的标题是前端 i18n key `{{ permission }}.title`、`{{ catalog }}.title`。
+- 测试：`tests/Http/{{ app }}/{{ module }}/Controllers/{{ model }}*Test.php`{{#audit}}、`tests/{{ kindDir }}/{{ module }}/Actions/{{ model }}ActivityTest.php`{{/audit}}。
+
+**加字段时要改的地方**（占位字段 `name` 也按这张清单改名）：
+
+1. 迁移 `database/migrations/*_create_{{ table }}_table.php`；
+2. 模型 `Models/{{ model }}`：`#[Fillable]`、`casts()`（富文本用 `SanitizedHtml`）、`@property`；工厂 `database/factories/{{ kindDir }}/{{ module }}/Models/{{ model }}Factory.php`；
+3. 写入：`Create{{ model }}::ATTRIBUTES`、`Update{{ model }}::ATTRIBUTES`{{#audit}}、`{{ log }}::snapshot()`（大字段记摘要）{{/audit}}；
+4. 入口：`Requests/{{ model }}Request`（校验与 `attributes()`）、`Requests/{{ model }}IndexRequest`（筛选值）、`Resources/{{ model }}Resource`；
+5. 列表：`Queries/{{ model }}List` 的筛选与排序白名单{{#export}}；导出 `Exporters/{{ model }}Exporter` 的 `columns()` 与 `map()`{{/export}}；
+6. 语言包 `resources/lang/*/{{ modelSnake }}.php`（字段名{{#export}}、导出表头{{/export}}）；需要字典时在 `resources/dicts.php` 声明，校验用 `InDict`；
+7. 测试中的请求体与断言。

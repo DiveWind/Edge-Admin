@@ -1,0 +1,85 @@
+<?php
+
+namespace {{ namespace }};
+
+use {{ namespacedModel }};
+use {{ namespacedUserModel }};
+use App\Support\QueryBuilder\Filters\DateTimeRangeFilter;
+{{#softDeletes}}
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Gate;
+use Spatie\QueryBuilder\AllowedFilter;
+{{/softDeletes}}
+{{#name}}
+use Spatie\QueryBuilder\AllowedFilter;
+{{/name}}
+use Illuminate\Http\Request;
+use Spatie\QueryBuilder\QueryBuilder;
+
+/**
+ * {{ model }} 的列表查询（设计文档 §6.3、§6.10）：列表接口与导出共用，导出看到的数据不会比列表多。
+ *
+{{#dataScope}}
+ * - 经过数据范围 visibleTo($actor)（按 created_by，§8.4）{{#creator}}，预加载 creator{{/creator}}；
+{{/dataScope}}
+{{^dataScope}}
+ * - 模型不使用数据范围{{#creator}}；预加载 creator{{/creator}}；
+{{/dataScope}}
+ * - 筛选{{#name}} name（模糊）、{{/name}} created_at（区间 `起,止`，DateTimeRangeFilter）{{#softDeletes}}、trashed（`with` 含已删除、`only` 只看已删除，§10.1）{{/softDeletes}}；
+ * - 排序 id、created_at，默认 `-id`；
+ * - 不在白名单内的筛选、排序抛出 query-builder 的 InvalidQuery（后台入口映射为 422，§6.3），时间区间格式错误抛出 ValidationException（422）；
+{{#softDeletes}}
+ * - 带 trashed（with / only）时还要 {{ model }}Policy::viewTrashed，否则抛出 AuthorizationException（403）：导出在发起时与队列中执行时同样检查。
+{{/softDeletes}}
+ *
+ * 参数是数组 `{ filter, sort }`（列表请求的 ListRequest::listParameters()，或导出记录中保存的 params），同一份参数可以在队列中重放。
+ * 增加字段时在这里加上它的筛选、排序（同时改列表请求的校验）。
+ */
+class {{ class }}
+{
+    /**
+     * 构造查询（不执行）：调用方 ->paginate()（列表）或 ->getEloquentBuilder()（导出）。
+     *
+     * @param  array<string, mixed>  $parameters  `{ filter?: array<string, mixed>, sort?: string }`
+     * @return QueryBuilder<{{ model }}>
+{{#softDeletes}}
+     *
+     * @throws AuthorizationException
+{{/softDeletes}}
+     */
+    public function builder({{ userModel }} $actor, array $parameters): QueryBuilder
+    {
+{{#softDeletes}}
+        if ($this->includesTrashed($parameters)) {
+            Gate::forUser($actor)->authorize('viewTrashed', {{ model }}::class);
+        }
+
+{{/softDeletes}}
+        return QueryBuilder::for({{ model }}::query(){{#dataScope}}->visibleTo($actor){{/dataScope}}{{#creator}}->with(['creator']){{/creator}}, new Request($parameters))
+            ->allowedFilters(
+{{#name}}
+                AllowedFilter::partial('name'),
+{{/name}}
+                DateTimeRangeFilter::allowed('created_at'),
+{{#softDeletes}}
+                AllowedFilter::trashed(),
+{{/softDeletes}}
+            )
+            ->allowedSorts('id', 'created_at')
+            ->defaultSort('-id');
+    }
+{{#softDeletes}}
+
+    /**
+     * 参数中是否要求已删除的记录（filter[trashed] 为 with 或 only）。
+     *
+     * @param  array<string, mixed>  $parameters
+     */
+    private function includesTrashed(array $parameters): bool
+    {
+        $filter = $parameters['filter'] ?? null;
+
+        return is_array($filter) && in_array($filter['trashed'] ?? null, ['with', 'only'], true);
+    }
+{{/softDeletes}}
+}

@@ -21,9 +21,16 @@ it('creates a business module and registers its provider in the modules group', 
         ->expectsOutputToContain('app/Http/Admin/Content')
         ->assertSuccessful();
 
-    expect($this->project->files('app/Modules'))->toBe(['app/Modules/Content/ContentServiceProvider.php', 'app/Modules/Content/README.md'])
-        ->and($this->project->read('app/Modules/Content/ContentServiceProvider.php'))->toContain('namespace App\Modules\Content;', 'class ContentServiceProvider extends ServiceProvider', 'Content（业务模块）')
-        ->and($this->project->read('app/Modules/Content/README.md'))->toContain('# Content', 'app/Http/Admin/Content', '--module=Content')
+    expect($this->project->files('app/Modules'))->toBe([
+        'app/Modules/Content/ContentServiceProvider.php', 'app/Modules/Content/README.md', 'app/Modules/Content/resources/dicts.php', 'app/Modules/Content/resources/menus.php',
+    ])
+        ->and($this->project->read('app/Modules/Content/ContentServiceProvider.php'))->toContain(
+            'namespace App\Modules\Content;', 'class ContentServiceProvider extends ServiceProvider', 'Content（业务模块）',
+            "public function boot(MenuRegistry \$menus, DictRegistry \$dicts): void\n    {\n        \$this->loadTranslationsFrom(__DIR__.'/resources/lang', 'content');\n\n        \$menus->register(require __DIR__.'/resources/menus.php');\n        \$dicts->register(require __DIR__.'/resources/dicts.php');\n    }",
+        )
+        ->and(require $this->project->path('app/Modules/Content/resources/menus.php'))->toBe([])
+        ->and(require $this->project->path('app/Modules/Content/resources/dicts.php'))->toBe([])
+        ->and($this->project->read('app/Modules/Content/README.md'))->toContain('# Content', 'app/Http/Admin/Content', '--module=Content', '## 删除本模块', 'core:make-crud')
         ->and($this->project->exists('app/Http/Admin/Content'))->toBeFalse()
         ->and($this->project->read('bootstrap/providers.php'))->toContain(
             "use App\\Modules\\Content\\ContentServiceProvider;\nuse App\\Providers\\AppServiceProvider;",
@@ -71,9 +78,17 @@ it('fails when the module exists and does not duplicate the registration with --
         ->and(substr_count($this->project->read('bootstrap/providers.php'), 'ContentServiceProvider::class'))->toBe(1);
 });
 
-it('explains that --crud is not available yet and writes nothing', function (): void {
-    $this->artisan('core:make-module', ['name' => 'Content', '--crud' => true])
-        ->expectsOutputToContain('尚未实现')
+it('continues with core:make-crud when --crud is given', function (): void {
+    $this->artisan('core:make-module', ['name' => 'Content', '--crud' => 'Article', '--soft-deletes' => true])->assertSuccessful();
+
+    expect($this->project->exists('app/Modules/Content/Actions/RestoreArticle.php'))->toBeTrue()
+        ->and($this->project->exists('app/Http/Admin/Content/Controllers/ArticleController.php'))->toBeTrue()
+        ->and($this->project->read('app/Modules/Content/README.md'))->toContain('## Article（完整增删改查）', '--soft-deletes');
+});
+
+it('rejects an invalid --crud model name before writing anything', function (): void {
+    $this->artisan('core:make-module', ['name' => 'Content', '--crud' => 'Content/Article'])
+        ->expectsOutputToContain('模型名“Content/Article”不能包含子目录')
         ->assertFailed();
 
     expect($this->project->exists('app/Modules'))->toBeFalse();

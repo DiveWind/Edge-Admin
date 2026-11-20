@@ -32,8 +32,8 @@ it('appends a new group at the end when no later group exists', function (): voi
 it('keeps third-party providers last', function (): void {
     $code = "<?php\n\nreturn [\n    Vendor\\Package\\PackageServiceProvider::class,\n];\n";
 
-    expect(ProvidersFile::register($code, 'App\Modules\Content\ContentServiceProvider'))
-        ->toContain("return [\n    // 业务模块（app/Modules）\n    ContentServiceProvider::class,\n\n    Vendor\\Package\\PackageServiceProvider::class,\n];");
+    expect(ProvidersFile::register($code, 'App\Modules\Billing\BillingServiceProvider'))
+        ->toContain("return [\n    // 业务模块（app/Modules）\n    BillingServiceProvider::class,\n\n    Vendor\\Package\\PackageServiceProvider::class,\n];");
 });
 
 it('returns null when the provider is already registered', function (): void {
@@ -43,9 +43,9 @@ it('returns null when the provider is already registered', function (): void {
 });
 
 it('rejects lines it does not understand', function (string $code): void {
-    expect(fn (): ?string => ProvidersFile::register($code, 'App\Modules\Content\ContentServiceProvider'))
+    expect(fn (): ?string => ProvidersFile::register($code, 'App\Modules\Billing\BillingServiceProvider'))
         ->toThrow(function (UnexpectedFormatException $e): void {
-            expect($e->snippet)->toBe("use App\\Modules\\Content\\ContentServiceProvider;\n\n    ContentServiceProvider::class,");
+            expect($e->snippet)->toBe("use App\\Modules\\Billing\\BillingServiceProvider;\n\n    BillingServiceProvider::class,");
         });
 })->with([
     'not an array literal' => "<?php\n\nreturn array_merge([], []);\n",

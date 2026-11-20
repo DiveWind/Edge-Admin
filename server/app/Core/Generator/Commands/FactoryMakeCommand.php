@@ -9,6 +9,7 @@ use Override;
 /**
  * core:make-factory：模块中模型的工厂，放在 database/factories 下与模型相同的路径（设计文档 §4.5），
  * 如 App\Modules\Content\Models\Article → Database\Factories\Modules\Content\Models\ArticleFactory。
+ * 默认状态按模型文件的写法：name、created_by（新建一个用户）；软删除的模型另有 trashed() 状态。
  */
 #[Signature('core:make-factory
     {name : 模型名，如 Article（生成 ArticleFactory）}
@@ -91,6 +92,16 @@ class FactoryMakeCommand extends ModuleGeneratorCommand
             'model' => $this->model(),
             'namespacedModel' => $this->moduleNamespace().'\\Models\\'.$this->model(),
         ];
+    }
+
+    /**
+     * 按模型文件的写法：name、created_by、软删除的 trashed() 状态（设计文档 §10.4）。
+     *
+     * @return array<string, bool>
+     */
+    protected function sections(string $class): array
+    {
+        return $this->modelFeatures($this->model());
     }
 
     /**

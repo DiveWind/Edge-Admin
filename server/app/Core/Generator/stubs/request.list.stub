@@ -5,9 +5,15 @@ namespace {{ namespace }};
 use {{ namespacedListRequest }};
 
 /**
- * TODO: 说明这个列表请求。
+ * {{#model}}{{ model }} 的列表请求（{{ app }} 入口）{{/model}}{{^model}}TODO: 说明这个列表请求{{/model}}。
  *
- * 列表查询参数（设计文档 §6.3）：page、pageSize、sort 由 ListRequest 校验，这里追加筛选字段 `filter.<字段>`。
+ * 列表查询参数（设计文档 §6.3）：page、pageSize、sort 由 ListRequest 校验，这里校验筛选值的格式 `filter.<字段>`；
+{{#model}}
+ * 允许的筛选与排序字段由 {{ model }}List 中 query-builder 的白名单决定，其他参数返回 422。时间区间（`起,止`）的格式由 DateTimeRangeFilter 校验。
+{{#softDeletes}}
+ * filter[trashed]：`with`（含已删除）或 `only`（只看已删除），其他值 422；带它时还要 viewTrashed 的授权（{{ model }}List，403）。
+{{/softDeletes}}
+{{/model}}
  */
 class {{ class }} extends ListRequest
 {
@@ -20,7 +26,18 @@ class {{ class }} extends ListRequest
     {
         return [
             ...parent::rules(),
+{{#name}}
+            'filter.name' => ['sometimes', 'string', 'max:255'],
+{{/name}}
+{{#model}}
+            'filter.created_at' => ['sometimes', 'string', 'max:100'],
+{{/model}}
+{{#softDeletes}}
+            'filter.trashed' => ['sometimes', 'string', 'in:with,only'],
+{{/softDeletes}}
+{{^model}}
             // 'filter.status' => ['sometimes', 'string'],
+{{/model}}
         ];
     }
 }

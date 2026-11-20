@@ -1,0 +1,25 @@
+<?php
+
+namespace {{ namespace }};
+
+use App\Core\System\Actions\CreateExport;
+use {{ namespacedUserModel }};
+use {{ namespacedExportRequest }};
+use {{ entryNamespace }}\System\Resources\ExportResource;
+use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
+
+/**
+ * 导出{{ model }}列表（{{ app }} 入口，设计文档 §6.10）：创建导出任务并入队，返回导出记录（201）。
+ *
+ * 权限码 {{ permission }}.export（Gate::before，执行时再复核）；筛选与排序与列表相同（{{ model }}List 的白名单与数据范围），
+ * 不合法 422；同时进行的导出超过上限 422（CreateExport）；路由另经过发起导出的限流。文件在“我的导出”（/exports）中下载。
+ */
+class {{ class }}
+{
+    #[Authorize('{{ permission }}.export')]
+    public function __invoke({{ exportRequest }} $request, CreateExport $action, #[CurrentUser] {{ userModel }} $actor): ExportResource
+    {
+        return new ExportResource($action->handle($actor, '{{ permission }}', $request->exportFormat(), $request->listParameters()));
+    }
+}

@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Generator\Commands\CoreGeneratorCommand;
 use App\Core\Generator\GeneratorServiceProvider;
 use Illuminate\Support\ServiceProvider;
 use Tests\Core\Generator\TemporaryProject;
@@ -118,4 +119,11 @@ it('edits the shared files of this project idempotently and in its code style', 
         ->and(require $this->project->path('bootstrap/providers.php'))->toContain('App\Http\GeneratorProbe\GeneratorProbeServiceProvider', 'App\Modules\GeneratorProbe\GeneratorProbeServiceProvider')
         ->and((require $this->project->path('config/core.php'))['apps']['generator_probe']['trusted'])->toBeFalse()
         ->and($this->project->pintFailures())->toBeNull();
+});
+
+it('keeps or drops the conditional blocks of a stub, together with the lines of their markers', function (): void {
+    $stub = "a\n{{#on}}\nb{{^off}} c{{/off}}\n{{/on}}\n{{^on}}\nd\n{{/on}}\n{{#off}}\ne\n{{/off}}\nf{{#unknown}} g{{/unknown}}\n";
+
+    expect(CoreGeneratorCommand::renderSections($stub, ['on' => true, 'off' => false]))->toBe("a\nb c\nf\n")
+        ->and(CoreGeneratorCommand::renderSections($stub, ['on' => false, 'off' => true]))->toBe("a\nd\ne\nf\n");
 });

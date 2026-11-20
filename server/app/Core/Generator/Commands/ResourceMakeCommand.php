@@ -7,7 +7,8 @@ use Override;
 
 /**
  * core:make-resource：入口中的 API Resource（app/Http/<入口>/<模块>/Resources），逐个列出字段，日期输出 ISO 8601（设计文档 §9、§10.1）。
- * `--model=` 生成某个模型的 Resource（只有受信任的入口可以直接使用模型）。
+ * `--model=` 生成某个模型的 Resource（只有受信任的入口可以直接使用模型）：按模型文件的写法列出 id、name、created_by、creator、
+ * deleted_at 与时间字段，`relations()` 返回需要预加载的关联（设计文档 §10.4）。
  */
 #[Signature('core:make-resource
     {name : Resource 类名，如 Article（生成 ArticleResource）}
@@ -59,8 +60,19 @@ class ResourceMakeCommand extends EntryGeneratorCommand
 
         return [
             ...parent::replacements($class),
-            'model' => $model,
-            'namespacedModel' => $this->moduleNamespace().'\\Models\\'.$model,
+            ...($model === '' ? [] : $this->modelReplacements($model)),
         ];
+    }
+
+    /**
+     * 按模型文件的写法（设计文档 §10.4）。
+     *
+     * @return array<string, bool>
+     */
+    protected function sections(string $class): array
+    {
+        $model = $this->modelOption();
+
+        return $model === null ? [] : $this->modelFeatures($model);
     }
 }

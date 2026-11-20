@@ -3,13 +3,17 @@
 namespace {{ namespace }};
 
 use App\Core\System\Contracts\HasLabel;
+{{#color}}
+use App\Core\System\Contracts\HasColor;
+{{/color}}
 
 /**
  * TODO: 说明这个枚举。
  *
- * 实现 HasLabel：显示名称由后端统一下发给前端（设计文档 §5.5、§10.1）。
+ * 实现 HasLabel{{#color}} 与 HasColor{{/color}}：显示名称{{#color}}与语义色{{/color}}由后端统一下发给前端（设计文档 §5.5、§10.1）；
+ * 需要下发选项时在模块 Provider 的 boot() 中登记到 EnumRegistry（`/options/enums`，名称以模块名开头）。
  */
-enum {{ class }}: string implements HasLabel
+enum {{ class }}: string implements {{#color}}HasColor, {{/color}}HasLabel
 {
     case Example = 'example';
 
@@ -22,4 +26,16 @@ enum {{ class }}: string implements HasLabel
             self::Example => __('Example'),
         };
     }
+{{#color}}
+
+    /**
+     * 语义色：antd Tag 的预设色名（success、processing、error、warning、default、blue 等）或 #RGB / #RRGGBB。
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Example => 'default',
+        };
+    }
+{{/color}}
 }

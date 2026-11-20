@@ -199,17 +199,20 @@ class PhpImports
 
         foreach ($groups as $namespace => $names) {
             if ($namespace === '' || count($names) === 1) {
-                array_push($statements, ...array_map(fn (string $name): string => 'use '.ltrim($namespace.'\\'.$name, '\\').';', $names));
+                foreach ($names as $name) {
+                    $statements[ltrim($namespace.'\\'.$name, '\\')] = 'use '.ltrim($namespace.'\\'.$name, '\\').';';
+                }
 
                 continue;
             }
 
             sort($names, SORT_STRING);
 
-            $statements[] = 'use '.$namespace.'\\{'.implode(', ', $names).'};';
+            // 分组导入按组内第一个类排序（与 Pint 的 ordered_imports 一致）
+            $statements[$namespace.'\\'.$names[0]] = 'use '.$namespace.'\\{'.implode(', ', $names).'};';
         }
 
-        usort($statements, fn (string $a, string $b): int => strcasecmp(str_replace('\\', ' ', $a), str_replace('\\', ' ', $b)));
+        uksort($statements, fn (string $a, string $b): int => strcasecmp(str_replace('\\', ' ', $a), str_replace('\\', ' ', $b)));
 
         return implode("\n", $statements);
     }

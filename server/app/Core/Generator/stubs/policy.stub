@@ -9,17 +9,28 @@ use Illuminate\Auth\Access\Response;
 /**
  * {{ model }} 的授权规则（设计文档 §8.3）：标准方法齐全，默认拒绝。
  *
- * 标准写法：先检查权限码 `$actor->can('<权限码>')`，再做业务保护，最后检查数据范围；不通过时返回带提示文案的 Response::deny()（403）。
  * 权限码在模块的 resources/menus.php 中声明（§8.2，未声明的权限码由 tests/Arch 拦截）：菜单节点 `{{ permission }}` 是查看 / 列表权限，
- * 按钮 `{{ permission }}.create`、`{{ permission }}.update`、`{{ permission }}.delete` 是写操作。
+ * 按钮 `{{ permission }}.create`、`.update`、`.delete`{{#softDeletes}}、`.restore`、`.force-delete`{{/softDeletes}} 是写操作。
+ * 标准写法：先检查权限码，再做业务保护，最后检查数据范围{{#dataScope}}（isVisibleTo，按 created_by，§8.4）{{/dataScope}}；不通过时返回 Response::deny()（403）。
+{{^dataScope}}
+ * 模型不使用数据范围：有权限码即可访问全部记录。
+{{/dataScope}}
+{{#softDeletes}}
  *
- * TODO: 按业务补充保护规则（§8.6）与数据范围（§8.4）；启用软删除时为 restore、forceDelete 检查对应的权限码。
- * 规则与调用方无关：禁止判断是哪个入口在调用；关联操作（如分配、挂载）另加方法单独授权。
+ * 软删除整套（§10.1）：默认的路由绑定不含已删除的记录；restore、forceDelete 的路由带 withTrashed()，只对已删除的记录
+ * （未删除的 403：先删除，再彻底删除，两步操作避免误删）；列表与导出带 filter[trashed] 时还要 viewTrashed（{{ model }}List 中检查）。
+{{/softDeletes}}
+{{^softDeletes}}
+ *
+ * 模型没有软删除：restore、forceDelete 及其批量方法一律拒绝。
+{{/softDeletes}}
+ *
+ * TODO: 按业务补充保护规则（§8.6）；关联操作（如分配、挂载）另加方法单独授权。规则与调用方无关：禁止判断是哪个入口在调用。
  */
 class {{ class }}
 {
     /**
-     * Determine whether the user can view any models.
+     * Determine whether the user can view any models.{{#dataScope}} 列表另按 visibleTo($actor) 过滤。{{/dataScope}}
      */
     public function viewAny({{ userModel }} $actor): Response
     {
@@ -31,7 +42,16 @@ class {{ class }}
      */
     public function view({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
+{{#dataScope}}
+        if (! $actor->can('{{ permission }}')) {
+            return Response::deny();
+        }
+
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
         return $actor->can('{{ permission }}') ? Response::allow() : Response::deny();
+{{/dataScope}}
     }
 
     /**
@@ -47,32 +67,112 @@ class {{ class }}
      */
     public function update({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
+{{#dataScope}}
+        if (! $actor->can('{{ permission }}.update')) {
+            return Response::deny();
+        }
+
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
         return $actor->can('{{ permission }}.update') ? Response::allow() : Response::deny();
+{{/dataScope}}
     }
 
     /**
-     * Determine whether the user can delete the model.
+     * Determine whether the user can delete the model.{{#softDeletes}}（软删除；已删除的再删除由彻底删除处理）{{/softDeletes}}
      */
     public function delete({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
+{{#softDeletes}}
+{{#dataScope}}
+        if (! $actor->can('{{ permission }}.delete') || ${{ modelVariable }}->trashed()) {
+            return Response::deny();
+        }
+
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
+        return $actor->can('{{ permission }}.delete') && ! ${{ modelVariable }}->trashed() ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{/softDeletes}}
+{{^softDeletes}}
+{{#dataScope}}
+        if (! $actor->can('{{ permission }}.delete')) {
+            return Response::deny();
+        }
+
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
         return $actor->can('{{ permission }}.delete') ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{/softDeletes}}
     }
 
     /**
-     * Determine whether the user can restore the model.
+     * Determine whether the user can restore the model.{{#softDeletes}} 只有已删除的能恢复。{{/softDeletes}}
      */
     public function restore({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
+{{#softDeletes}}
+        if (! $actor->can('{{ permission }}.restore')) {
+            return Response::deny();
+        }
+
+        if (! ${{ modelVariable }}->trashed()) {
+            return Response::deny(__('{{ lang }}.messages.restore_trashed_only'));
+        }
+
+{{#dataScope}}
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
+        return Response::allow();
+{{/dataScope}}
+{{/softDeletes}}
+{{^softDeletes}}
         return Response::deny();
+{{/softDeletes}}
     }
 
     /**
-     * Determine whether the user can permanently delete the model.
+     * Determine whether the user can permanently delete the model.{{#softDeletes}} 只有已删除的能彻底删除。{{/softDeletes}}
      */
     public function forceDelete({{ userModel }} $actor, {{ model }} ${{ modelVariable }}): Response
     {
+{{#softDeletes}}
+        if (! $actor->can('{{ permission }}.force-delete')) {
+            return Response::deny();
+        }
+
+        if (! ${{ modelVariable }}->trashed()) {
+            return Response::deny(__('{{ lang }}.messages.force_delete_trashed_only'));
+        }
+
+{{#dataScope}}
+        return ${{ modelVariable }}->isVisibleTo($actor) ? Response::allow() : Response::deny();
+{{/dataScope}}
+{{^dataScope}}
+        return Response::allow();
+{{/dataScope}}
+{{/softDeletes}}
+{{^softDeletes}}
         return Response::deny();
+{{/softDeletes}}
     }
+{{#softDeletes}}
+
+    /**
+     * 查看已删除的记录（列表与导出的 filter[trashed]）：能恢复或彻底删除的人。
+     */
+    public function viewTrashed({{ userModel }} $actor): Response
+    {
+        return $actor->can('{{ permission }}.restore') || $actor->can('{{ permission }}.force-delete')
+            ? Response::allow()
+            : Response::deny(__('{{ lang }}.messages.view_trashed'));
+    }
+{{/softDeletes}}
 
     /**
      * Determine whether the user can delete models in bulk.
@@ -87,7 +187,12 @@ class {{ class }}
      */
     public function restoreAny({{ userModel }} $actor): Response
     {
+{{#softDeletes}}
+        return $actor->can('{{ permission }}.restore') ? Response::allow() : Response::deny();
+{{/softDeletes}}
+{{^softDeletes}}
         return Response::deny();
+{{/softDeletes}}
     }
 
     /**
@@ -95,6 +200,11 @@ class {{ class }}
      */
     public function forceDeleteAny({{ userModel }} $actor): Response
     {
+{{#softDeletes}}
+        return $actor->can('{{ permission }}.force-delete') ? Response::allow() : Response::deny();
+{{/softDeletes}}
+{{^softDeletes}}
         return Response::deny();
+{{/softDeletes}}
     }
 }

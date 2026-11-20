@@ -14,15 +14,41 @@ TODO：本模块负责什么、不负责什么。
 
 ## 依赖 Core 的能力
 
-TODO：用到的 Core 能力与扩展点（菜单权限、数据权限、系统参数、字典、通知等，设计文档 §5.5）。
+全部通过扩展点，在 `{{ moduleProvider }}::boot()` 中登记（设计文档 §5.5），不修改 `app/Core` 的任何文件：
+
+| Core 的能力 | 本模块怎么用 |
+|---|---|
+| 菜单与权限节点（`MenuRegistry`，§8.2） | `resources/menus.php` |
+| 字典（`DictRegistry`，§6.7） | `resources/dicts.php` |
+| 语言包（§4.5） | `resources/lang`，命名空间 `{{ translationNamespace }}::` |
+| 多态别名（§4.5） | `Relation::morphMap()`，别名 `{{ morphPrefix }}<模型>` |
+
+TODO：用到的其他能力（数据权限、系统参数、枚举选项、导出、通知等）。
+
+## 删除本模块
+
+其余模块与 Core 的测试不依赖本模块（`tests/Arch` 保证）。
+
+1. 删除目录与文件：
+   - `{{ directory }}`（本目录）与各入口中的同名目录：{{ entries }}；
+   - 本模块模型的建表迁移（`database/migrations/*_create_<表>_table.php`）与工厂（`database/factories/{{ kindDir }}/{{ module }}`）；
+   - `tests/{{ kindDir }}/{{ module }}` 与各入口的 `tests/Http/<入口>/{{ module }}`。
+2. 删除登记：
+   - `bootstrap/providers.php` 中的 `{{ moduleProvider }}`（及其 `use`）；
+   - 各入口 `routes.php` 中的 `{{ routePrefix }}` 路由分组（及其控制器的 `use`）。
+3. 数据库：已部署的环境用一个新迁移 `Schema::dropIfExists(...)` 删除本模块的表（不要删除已执行过的迁移后指望它回滚）；
+   绑定在本模块记录上的附件、`activity_log` 中 `log_name = {{ translationNamespace }}` 的审计日志按需在同一个迁移中清理。
+4. 同步声明：执行 `php artisan core:sync`。本模块的内置菜单节点、字典**转为自定义**（保留授权，不删除），在菜单管理、字典管理中删除即可。
+5. 执行 `composer ci`：其余测试应全部通过。
 
 ## 生成命令
 
 ```bash
-php artisan core:make-model <名称> --module={{ module }}{{ core }}       # 模型、迁移、工厂、Policy，登记多态别名
+php artisan core:make-crud <模型> --module={{ module }}{{ core }} [--soft-deletes] [--export] [--audit] [--no-data-scope]   # 完整增删改查
+php artisan core:make-model <名称> --module={{ module }}{{ core }}       # 模型、迁移、工厂、Policy、语言包，登记多态别名
 php artisan core:make-action <名称> --module={{ module }}{{ core }}      # 写操作
-php artisan core:make-query <名称> --module={{ module }}{{ core }}       # 复杂查询、统计
-php artisan core:make-enum <名称> --module={{ module }}{{ core }}        # 枚举（实现 HasLabel）
+php artisan core:make-query <名称> --module={{ module }}{{ core }}       # 列表查询、统计
+php artisan core:make-enum <名称> --module={{ module }}{{ core }}        # 枚举（实现 HasLabel，--color 另实现 HasColor）
 php artisan core:make-contract <名称> --module={{ module }}{{ core }}    # 向受限入口开放的契约
 php artisan core:make-controller <名称> --module={{ module }}{{ core }} --model=<模型>   # 后台接口
 ```

@@ -1,0 +1,38 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| {{ model }} 的后端文案（命名空间 {{ translationNamespace }}::，{{ moduleProvider }} 中 loadTranslationsFrom()）
+|--------------------------------------------------------------------------
+|
+| 只放后端要输出的文案：校验的字段名、403 / 422 的提示、导出的显示名与表头（按发起人的语言翻译，§6.10）。
+| 菜单标题是前端的 i18n key，不在这里（§6.2）。各语言的同名文件键相同。
+|
+*/
+
+return [
+    'attributes' => [
+        'name' => 'name',
+    ],
+{{#softDeletes}}
+
+    'messages' => [
+        'restore_trashed_only' => 'Only deleted {{ modelWordsPlural }} can be restored.',
+        'force_delete_trashed_only' => 'Only deleted {{ modelWordsPlural }} can be permanently deleted. Delete the {{ modelWords }} first.',
+        'view_trashed' => 'You are not allowed to view deleted {{ modelWordsPlural }}.',
+    ],
+{{/softDeletes}}
+
+    'export' => [
+        'title' => '{{ modelHeadlinePlural }}',
+        'columns' => [
+            'id' => 'ID',
+            'name' => 'Name',
+            'creator' => 'Created by',
+            'created_at' => 'Created at',
+{{#softDeletes}}
+            'deleted_at' => 'Deleted at',
+{{/softDeletes}}
+        ],
+    ],
+];

@@ -3,7 +3,8 @@
 业务模块，目录 `app/Modules/Content`。结构与规则见设计文档 §4.3、§5；接口契约见设计文档 [§6.11](../../../../docs/backend-design.md#611-业务模块示范content文章)。
 
 **业务对接示范，可整块删除**（设计文档 §4.2）。它证明业务模块**不改 Core 的任何文件**，只通过扩展点（§5.5）就能用上 Core 的全部能力；
-也是 `core:make-module --crud`（§10.4）生成结果的样板，写法要保持规整、可复制。
+也是 `core:make-crud`（§10.4）生成结果的样板：生成器沿用这里的分层与写法（Query 类、Policy 的三段式、锁行复核的 Action、软删除整套、导出、审计），
+只是不带发布流程、封面、字典分类与富文本这些业务部分。改动这里的写法时，同步修改 `app/Core/Generator/stubs` 并跑 `composer test:generator-e2e`。
 
 ## 职责
 
@@ -75,7 +76,8 @@
 ## 生成命令
 
 ```bash
-php artisan core:make-model <名称> --module=Content       # 模型、迁移、工厂、Policy，登记多态别名
+php artisan core:make-crud <模型> --module=Content        # 另一个模型的完整增删改查（--soft-deletes、--export、--audit、--no-data-scope）
+php artisan core:make-model <名称> --module=Content       # 模型、迁移、工厂、Policy、语言包，登记多态别名
 php artisan core:make-action <名称> --module=Content      # 写操作
 php artisan core:make-query <名称> --module=Content       # 复杂查询、统计
 php artisan core:make-enum <名称> --module=Content        # 枚举（实现 HasLabel）

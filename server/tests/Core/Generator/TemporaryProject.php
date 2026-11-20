@@ -84,6 +84,16 @@ final readonly class TemporaryProject
             XML,
         '.env.example' => "APP_NAME=Laravel\n\nCORE_APPS=admin\n# CORE_ADMIN_PREFIX=api/admin\n\nAPP_MAINTENANCE_DRIVER=file\n",
         'app/Http/Admin/AdminServiceProvider.php' => "<?php\n\nnamespace App\\Http\\Admin;\n\nuse Illuminate\\Support\\ServiceProvider;\n\nclass AdminServiceProvider extends ServiceProvider {}\n",
+        'app/Http/Admin/routes.php' => <<<'PHP'
+            <?php
+
+            use Illuminate\Support\Facades\Route;
+
+            Route::middleware('auth:sanctum')->group(function (): void {
+                Route::get('user/info', fn (): array => [])->name('user.info');
+            });
+
+            PHP,
         'app/Http/Admin/Requests/ListRequest.php' => "<?php\n\nnamespace App\\Http\\Admin\\Requests;\n\nuse Illuminate\\Foundation\\Http\\FormRequest;\n\nclass ListRequest extends FormRequest {}\n",
     ];
 

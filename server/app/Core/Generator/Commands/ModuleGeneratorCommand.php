@@ -5,6 +5,7 @@ namespace App\Core\Generator\Commands;
 use Illuminate\Support\Str;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Throwable;
 
 use function Laravel\Prompts\select;
 
@@ -128,6 +129,112 @@ abstract class ModuleGeneratorCommand extends CoreGeneratorCommand
         return $this->files->exists($this->modulePath('Models/'.$model.'.php'))
             ? $this->moduleNamespace().'\\Models\\'.$model
             : null;
+    }
+
+    /**
+     * 模型文件的写法（设计文档 §10.4 的“模型是依据”）：各命令按它生成，不另设选项。模型文件不存在时全部为 false。
+     *
+     * - softDeletes：使用 SoftDeletes（软删除整套，§10.1）；
+     * - dataScope：使用 HasDataScope（visibleTo / isVisibleTo，§8.4）；
+     * - createdBy：有创建人列 created_by；creator：有 creator() 关联（预加载、输出创建人）；
+     * - name：有占位字段 name（`@property string $name`）。
+     *
+     * @return array{softDeletes: bool, dataScope: bool, createdBy: bool, creator: bool, name: bool}
+     */
+    protected function modelFeatures(string $model): array
+    {
+        $path = $this->modulePath("Models/{$model}.php");
+        $code = $this->files->exists($path) ? $this->files->get($path) : '';
+
+        return [
+            'softDeletes' => preg_match('/\bSoftDeletes\b/', $code) === 1,
+            'dataScope' => preg_match('/\bHasDataScope\b/', $code) === 1,
+            'createdBy' => str_contains($code, 'created_by'),
+            'creator' => preg_match('/function creator\(\)/', $code) === 1,
+            'name' => preg_match('/@property\s+string\s+\$name\b/', $code) === 1,
+        ];
+    }
+
+    /**
+     * 与模型相关的模板替换内容。
+     *
+     * @return array<string, string>
+     */
+    protected function modelReplacements(string $model): array
+    {
+        $words = Str::of($model)->snake(' ');
+
+        return [
+            'model' => $model,
+            'namespacedModel' => $this->moduleNamespace().'\\Models\\'.$model,
+            'modelVariable' => Str::camel($model),
+            'routeParameter' => Str::snake($model),
+            'modelPlural' => Str::camel(Str::pluralStudly($model)),
+            'modelWords' => $words->toString(),
+            'modelWordsPlural' => $words->plural()->toString(),
+            'modelHeadlinePlural' => Str::headline(Str::pluralStudly($model)),
+            'permission' => $this->permissionFor($model),
+            'translationNamespace' => $this->translationNamespace(),
+            'lang' => $this->translationNamespace().'::'.Str::snake($model),
+            'logName' => $this->translationNamespace(),
+        ];
+    }
+
+    /**
+     * 模型的菜单节点权限码（也是导出的对外名称）：`<模块>.<模型>`（snake_case，如 content.article）。
+     */
+    protected function permissionFor(string $model): string
+    {
+        return Str::snake($this->moduleName()).'.'.Str::snake($model);
+    }
+
+    /**
+     * 模块语言包的命名空间（模块名 snake_case，如 content::），也是审计日志的日志名。
+     */
+    protected function translationNamespace(): string
+    {
+        return Str::snake($this->moduleName());
+    }
+
+    /**
+     * 模块 resources/menus.php 中已声明的节点名（文件不存在或无法读取时为空）。
+     *
+     * @return list<string>
+     */
+    protected function declaredMenuNames(): array
+    {
+        $path = $this->modulePath('resources/menus.php');
+
+        if (! $this->files->exists($path)) {
+            return [];
+        }
+
+        try {
+            $nodes = $this->files->getRequire($path);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $names = [];
+        $collect = function (mixed $nodes) use (&$collect, &$names): void {
+            foreach (is_array($nodes) ? $nodes : [] as $node) {
+                if (! is_array($node) || ! is_string($node['name'] ?? null)) {
+                    continue;
+                }
+
+                $names[] = $node['name'];
+
+                foreach (is_array($node['buttons'] ?? null) ? $node['buttons'] : [] as $key => $title) {
+                    $names[] = $node['name'].'.'.$key;
+                }
+
+                $collect($node['children'] ?? []);
+            }
+        };
+
+        $collect($nodes);
+
+        return $names;
     }
 
     /**

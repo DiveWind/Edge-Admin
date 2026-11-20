@@ -1,0 +1,63 @@
+<?php
+
+use {{ moduleNamespace }}\Actions\Restore{{ model }};
+use {{ namespacedModel }};
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+
+/*
+|--------------------------------------------------------------------------
+| 恢复已删除的{{ model }}：POST …/{{ uri }}/{{{ routeParameter }}}/restore（软删除整套，设计文档 §10.1）
+|--------------------------------------------------------------------------
+*/
+
+beforeEach(function (): void {
+    syncBuiltinPermissions();
+});
+
+it('returns 401 for guests', function (): void {
+    $this->postJson(route('{{ routeName }}.restore', {{ model }}::factory()->trashed()->create()))->assertUnauthorized();
+});
+
+it('returns 403 without the restore code (delete is not enough){{#dataScope}} or outside the data scope{{/dataScope}}', function (): void {
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create();
+
+    $this->actingAs(userWithDataScope('all', '{{ permission }}', '{{ permission }}.delete'))->postJson(route('{{ routeName }}.restore', ${{ modelVariable }}))->assertForbidden();
+{{#dataScope}}
+    $this->actingAs(userWithPermissions('{{ permission }}.restore'))->postJson(route('{{ routeName }}.restore', ${{ modelVariable }}))->assertForbidden();
+{{/dataScope}}
+
+    expect(${{ modelVariable }}->refresh()->trashed())->toBeTrue();
+});
+
+it('restores the deleted {{ modelWords }}', function (): void {
+    $actor = userWithPermissions('{{ permission }}.restore');
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create({{#dataScope}}['created_by' => $actor->id]{{/dataScope}});
+
+    $this->actingAs($actor)
+        ->postJson(route('{{ routeName }}.restore', ${{ modelVariable }}))
+        ->assertOk()
+        ->assertJsonPath('data.id', ${{ modelVariable }}->id)
+        ->assertJsonPath('data.deleted_at', null);
+
+    expect(${{ modelVariable }}->refresh()->trashed())->toBeFalse();
+});
+
+it('returns 403 for a {{ modelWords }} that is not deleted', function (): void {
+    $this->actingAs(superAdminActor())
+        ->postJson(route('{{ routeName }}.restore', {{ model }}::factory()->create()))
+        ->assertForbidden()
+        ->assertJsonPath('message', __('{{ lang }}.messages.restore_trashed_only'));
+});
+
+it('returns 422 when the {{ modelWords }} was restored meanwhile', function (): void {
+    ${{ modelVariable }} = {{ model }}::factory()->trashed()->create();
+    $stale = {{ model }}::query()->withTrashed()->findOrFail(${{ modelVariable }}->id);
+    {{ model }}::query()->withTrashed()->whereKey(${{ modelVariable }}->id)->update(['deleted_at' => null]);
+
+    expect(fn () => resolve(Restore{{ model }}::class)->handle($stale, superAdminActor()))
+        ->toThrow(UnprocessableEntityHttpException::class);
+});
+
+it('returns 404 for unknown ids', function (): void {
+    $this->actingAs(superAdminActor())->postJson(route('{{ routeName }}.restore', 999999))->assertNotFound();
+});
