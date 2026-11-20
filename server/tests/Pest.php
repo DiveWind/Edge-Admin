@@ -6,6 +6,7 @@ use App\Core\System\Services\{EffectivePermissions, SettingRegistry};
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Pest\Expectation;
 use Tests\TestCase;
 
 /*
@@ -35,6 +36,34 @@ pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Arch', 'Core', 'Http', 'Modules', 'Providers', 'Support');
+
+/*
+|--------------------------------------------------------------------------
+| 跨数据库（设计文档 §10.5：SQLite、MySQL、PostgreSQL 都运行全部测试）
+|--------------------------------------------------------------------------
+|
+| MySQL 的 JSON 列不保留对象的键顺序（按键长、再按字典序重排），PostgreSQL 的 jsonb 同样；读回 JSON 列（activity_log.properties、
+| notifications.data、permissions.meta 等）的断言按键比较，不比较键的顺序。列表（array_is_list）的顺序照常比较，值仍按 === 比较。
+|
+*/
+
+expect()->extend('toBeIgnoringKeyOrder', function (array $expected): Expectation {
+    $normalize = function (mixed $value) use (&$normalize): mixed {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $value = array_map($normalize, $value);
+
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
+    };
+
+    return expect($normalize($this->value))->toBe($normalize($expected));
+});
 
 /*
 |--------------------------------------------------------------------------

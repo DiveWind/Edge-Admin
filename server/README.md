@@ -4,9 +4,9 @@ Laravel 13（PHP 8.5）纯 API 后端，默认适配 Vben Admin 5。设计依据
 
 ## 环境要求
 
-- PHP 8.5（扩展：`pdo_sqlite` 或 `pdo_mysql` / `pdo_pgsql`、`mbstring`、`intl`；`pcntl` 可选，`composer dev` 用它运行 `pail`）
+- PHP 8.5（扩展：`pdo_sqlite` 或 `pdo_mysql` / `pdo_pgsql`、`mbstring`、`intl`、`zip`（备份）；`pcntl` 可选，`composer dev` 用它运行 `pail`）
 - Composer 2
-- 数据库：默认 SQLite；MySQL / PostgreSQL 的配置示例见 `.env.example`
+- 数据库：默认 SQLite；MySQL、PostgreSQL 上同样运行全部测试（本机实测 MySQL 8.0、PostgreSQL 16，CI 为 MySQL 8.4、PostgreSQL 17，见下文“测试”），配置示例见 `.env.example`
 
 ## 本地运行
 
@@ -33,6 +33,7 @@ php artisan schedule:work
 | `GET /` | 应用名（JSON） |
 | `GET /up` | 健康检查 |
 | `/api/admin/...` | 后台接口：认证见下文“认证”，系统管理见设计文档 §6.5 |
+| `GET /docs/api` | OpenAPI 文档（只在 `APP_ENV=local` 开放，见下文“接口文档”） |
 
 ## 认证
 
@@ -45,10 +46,10 @@ php artisan schedule:work
 | `POST /login`、`POST /logout` | Fortify | 字段 `username`、`password`、`remember`；开启两步验证时返回 `data: { two_factor: true }` |
 | `POST /two-factor-challenge` | Fortify | `code`（动态验证码）或 `recovery_code`（恢复码） |
 | `POST /forgot-password`、`POST /reset-password` | Fortify | 重置链接指向前端页面（`CORE_AUTH_FRONTEND_URL` + `CORE_AUTH_RESET_PASSWORD_PATH`） |
-| `PUT /user/profile-information`、`PUT /user/password` | Fortify | 修改资料（`name`、`email`、`avatar`）；修改密码后其他会话与 token 失效 |
+| `PUT /user/profile-information`、`PUT /user/password` | Fortify | 修改资料（`name`、`email`、`avatar_id`：头像附件的 id，`null` 去掉头像）；修改密码后其他会话与 token 失效 |
 | `GET /user/confirmed-password-status`、`POST /user/confirm-password` | Fortify | 确认密码（两步验证的管理接口需要，否则 423） |
 | `/user/two-factor-*` | Fortify | 开启、确认、关闭两步验证，二维码、密钥与恢复码 |
-| `GET /user/info` | 自建 | 当前用户（`userId`、`username`、`realName`、`avatar`、`roles`、`desc`、`homePath`），未登录 401 |
+| `GET /user/info` | 自建 | 当前用户（`userId`、`username`、`realName`、`email`、`avatar`、`twoFactorEnabled`、`roles`、`desc`、`homePath`），未登录 401 |
 
 - 只有来自 `SANCTUM_STATEFUL_DOMAINS`（按 `Referer` / `Origin`）的请求使用会话 Cookie 并校验 CSRF；开发时前端在
   `localhost:5999` 经 Vite 代理同源访问后端，默认已包含。其他请求只能用 Bearer token（`auth:sanctum` 两者都识别）。
@@ -65,29 +66,86 @@ php artisan schedule:work
 | `composer lint` | Pint 检查代码风格（不修改） |
 | `composer analyse` | Larastan 静态分析（最高级别，无 baseline） |
 | `composer refactor` | Rector 重构；只检查不修改：`composer refactor -- --dry-run` |
-| `composer test` | Pest 测试，含 `tests/Arch` 架构测试（SQLite 内存库） |
-| `composer ci` | lint + analyse + rector --dry-run + test，与 CI 一致；不需要 `.env`（测试的环境变量与只用于测试的 `APP_KEY` 都在 `phpunit.xml` 中） |
+| `composer test` | Pest 测试，含 `tests/Arch` 架构测试（默认 SQLite 内存库，其他数据库见下文“测试”） |
+| `composer ci` | lint + analyse + rector --dry-run + test，与 CI 的 `quality` job 一致；不需要 `.env`（测试的环境变量与只用于测试的 `APP_KEY` 都在 `phpunit.xml` 中） |
+| `composer test:generator-e2e` | 在系统临时目录的项目副本中运行生成器，再跑全部检查（约 2 分钟，修改生成器后执行） |
+| `composer test:octane` | 用 Octane + FrankenPHP（2 个 worker）起服务，发一组检查请求间状态泄露的冒烟请求（需要 FrankenPHP 二进制，见下文“Octane”） |
+
+## 测试
+
+CI（`.github/workflows/server.yml`）在 PR 与推送到 main 时并行运行三个 job：`quality`（audit、`composer ci`、生成器端到端检查，SQLite）、
+`database`（矩阵：MySQL 8.4、PostgreSQL 17 上的 `composer test`）与 `octane`（`composer test:octane`）。本地复现：
+
+```bash
+composer ci                          # 与 quality 相同（SQLite 内存库）
+
+# MySQL / PostgreSQL：环境变量覆盖 phpunit.xml 的 sqlite（phpunit.xml 的 <env> 不覆盖已有的环境变量），库需事先建好、测试会清空它
+DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=core_test DB_USERNAME=core DB_PASSWORD=secret DB_URL= composer test
+DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5432 DB_DATABASE=core_test DB_USERNAME=core DB_PASSWORD=secret DB_URL= composer test
+```
+
+- 测试用的库不要与开发库共用：`LazilyRefreshDatabase` 会执行 `migrate:fresh`，`tests/Core/System/Actions/ConcurrentActionsTest.php` 还会在两个子进程中提交数据、每个用例结束时清空全部表。
+- `ConcurrentActionsTest`（加锁的 Action 两个进程真正并发：最后一个超管、删除与分配角色、删除节点与新增子节点、附件清理与绑定）只在 MySQL / PostgreSQL 上运行，SQLite 上跳过。
+- 读回 JSON 列的断言用 `toBeIgnoringKeyOrder()`（MySQL、PostgreSQL 不保留 JSON 对象的键顺序），其他跨库注意事项见设计文档 §10.5。
+
+## Octane
+
+默认以 PHP-FPM 运行；代码按常驻内存安全来写（设计文档 §10.3），`laravel/octane` 在依赖中、`config/octane.php` 已提交，可直接切换到 FrankenPHP 的 worker 模式。
+
+```bash
+# FrankenPHP 二进制（自带 PHP 8.5 与常用扩展）：放在 server/frankenphp（已在 .gitignore 中）或 PATH 中
+curl -fsSL -o frankenphp https://github.com/php/frankenphp/releases/download/v1.13.6/frankenphp-linux-x86_64 && chmod +x frankenphp
+
+php artisan octane:start --server=frankenphp --workers=2 --max-requests=500   # 本地起服务（http://127.0.0.1:8000）
+composer test:octane                 # 冒烟检查：临时 SQLite 库 + 2 个 worker，多个用户交替请求，结束后停止服务、删除库
+```
+
+- 冒烟请求（`tests/Http/Admin/Fixtures/octane-smoke.php`）检查：登录状态与守卫不串、数据范围、收回权限码后下一个请求（含另一个 worker）立即生效、
+  `Accept-Language` 只作用于本请求、请求 ID（`Context`）、响应后写入的操作日志（`defer()`）带的是那个请求的 ID、停用账号立即失效。
+- 不需要 FrankenPHP 的同一组请求在 `composer test` 中也会运行（`tests/Http/Admin/OctaneWorkerTest.php`：进程内用 Octane 的 `Worker` 处理，每个请求一个沙箱）。
+- 新增有状态的单例或第三方包时：登记到 `config/octane.php` 的 `flush`（目前为空，理由见文件中的注释），并在冒烟请求中覆盖它。
+
+## 接口文档
+
+开发环境安装了 [Scramble](https://scramble.dedoc.co)（`dedoc/scramble`，`require-dev`），按路由、Form Request 与 API Resource 生成后台入口的 OpenAPI 3.1 文档，给前端对接用：
+
+```bash
+APP_ENV=local php artisan serve       # 浏览 http://127.0.0.1:8000/docs/api（JSON：/docs/api.json）
+php artisan scramble:export --path=storage/api.json   # 导出文件（不提交）
+```
+
+- 只在 `APP_ENV=local` 开放（Scramble 的 `RestrictedDocsAccess`；其他环境 403，生产 `composer install --no-dev` 时没有这个包）。范围是后台入口的前缀（`config/scramble.php` 的 `api_path`，默认取 `CORE_ADMIN_PREFIX`），含挂在其下的 Fortify 路由。
+- 响应已按 Vben 格式改写（`App\Http\Admin\Responses\VbenOpenApiDocument`）：成功为 `{ code: 0, data, message }`，分页的 `data` 为 `{ items, total }`，API Resource 不再套一层 `data`，没有 204；错误在 `message`（422 另有 `errors`）之外有 `code` 与 `data: null`。
+  这个类引用了开发依赖 Scramble 的类型，但放在 `app/`（后台入口的 `Responses/`，与它描述的 `VbenResponse` 放在一起）：`AdminServiceProvider` 只在 `class_exists(Scramble::class)` 时登记它，生产环境没有 Scramble 时不会被加载；开发环境中它与其他代码一样经过 PHPStan 与架构测试。
+- 已知的局限（只是文档不准，接口以设计文档 §6 为准，不为它改业务代码）：
+  - 单动作控制器的标题来自 `__invoke()` 的注释，多数显示为“Handle the incoming request”；操作按控制器分组（tag），路由名在 `operationId` 中；
+  - 列表的筛选、排序参数取自列表请求的校验规则（`filter[...]`、`sort`），可用的字段以 Query 类的白名单为准；`sort` 只给出格式，不列出可排序的字段；
+  - 推断不出的返回值显示为空对象或任意类型：Fortify 的接口（登录返回 `{ two_factor }`、两步验证的二维码与恢复码等）、返回数组的 Query（`/menu/all`、`/monitor/system-info`、`/monitor/health`、`/settings/public`）；
+  - 业务规则的 422（`BusinessRuleViolation`，只有 `message`）、Policy 的 403 文案、`admin-ops` 等限流器的 429 不一定出现在对应的接口上；错误响应的 `code` 只标注“与 HTTP 状态码相同”；
+  - 认证方式（会话 Cookie + `X-XSRF-TOKEN`）没有写进文档的 `security`：在文档页中调试需要先在同一域名下登录。
 
 ## 目录
 
 ```
 app/
-├── Core/                             内核模块
+├── Core/                             内核模块（各自的 README 说明职责与对外提供的能力）
 │   ├── Generator/                    core:make-* 生成命令（只在命令行下注册），见下文“代码生成”
-│   └── System/                       用户与账号状态、认证（Fortify 的 Action、限流器）（Monitor、Message 见各自 README）
+│   ├── System/                       用户、角色、菜单权限、数据权限、字典、参数、附件、异步导出、认证（Fortify 的 Action、限流器）
+│   ├── Monitor/                      操作日志、登录日志、在线会话、定时任务、失败任务、健康检查、系统信息、备份、审计（LogAudit）
+│   └── Message/                      通知中心、公告
 ├── Http/
 │   ├── Admin/                        后台入口（给 Vben 用）
 │   │   ├── AdminServiceProvider.php  路由、中间件组（含 Sanctum 会话）、限流、Vben 响应与异常格式
-│   │   ├── Middleware/               FormatResponse（Vben 格式）、ForceJson（一律按 JSON 处理）
+│   │   ├── Middleware/               FormatResponse（Vben 格式）、RecordOperationLog（操作日志）、ForceJson（一律按 JSON 处理）
 │   │   ├── Requests/ListRequest.php  列表参数 page / pageSize / sort / filter[]
-│   │   ├── Responses/VbenResponse.php
-│   │   ├── System/                   System 模块的后台接口（GET /user/info）
+│   │   ├── Responses/                VbenResponse、替换 Fortify 的响应、VbenOpenApiDocument（接口文档的响应格式）
+│   │   ├── System/  Monitor/  Message/  Content/     各模块的后台接口（Controllers、Requests、Resources）
 │   │   └── routes.php
-│   └── Middleware/                   多入口共用：AssignRequestId（X-Request-Id）、EnsureUserIsEnabled（停用账号立即失效）、
-│                                     RedirectIfAuthenticated（guest：已登录时 JSON 请求返回 409）
+│   └── Middleware/                   多入口共用：AssignRequestId（X-Request-Id）、SetLocale（Accept-Language）、
+│                                     EnsureUserIsEnabled（停用账号立即失效）、RedirectIfAuthenticated（guest：已登录时 JSON 请求返回 409）
 ├── Providers/AppServiceProvider.php  全局默认（强制多态别名、严格模式、密码规则等）
 └── Support/                          与业务无关的共享件（Enums/HasLabel、HasColor，Exceptions/BusinessRuleViolation，Database/UniqueConstraint 等）
-config/core.php                       入口清单与部署级配置
+config/core.php                       入口清单与部署级配置（config/octane.php、config/scramble.php 见上文“Octane”“接口文档”）
 tests/                                与 app/ 对应；tests/Arch 为边界与约定测试
 ```
 

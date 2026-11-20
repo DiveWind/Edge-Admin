@@ -1,9 +1,9 @@
 <?php
 
-use App\Core\System\Actions\{ChangeUserStatus, CreateUser, DeleteUser, UpdateUser};
+use App\Core\System\Actions\{ChangeUserStatus, CreateUser, DeleteUser, SyncUserRoles, UpdateUser};
 use App\Core\System\Enums\Status;
 use App\Core\System\Events\{UserDeleted, UserDeleting};
-use App\Core\System\Models\User;
+use App\Core\System\Models\{Role, User};
 use App\Support\Exceptions\BusinessRuleViolation;
 use Illuminate\Support\Facades\{DB, Event};
 use Illuminate\Validation\ValidationException;
@@ -105,4 +105,27 @@ it('does not dispatch UserDeleted when the deletion is rolled back', function ()
 
     expect($deleted)->toBeFalse()
         ->and($user->fresh())->not->toBeNull();
+});
+
+it('rejects a role deleted after the request was validated instead of silently dropping it, keeping the current roles', function (): void {
+    $kept = Role::factory()->create();
+    $user = User::factory()->create()->assignRole($kept);
+
+    expect(fn () => resolve(SyncUserRoles::class)->handle($user, [$kept->name, 'deleted-meanwhile'], $this->superAdmin))
+        ->toThrow(function (ValidationException $e): void {
+            expect(array_keys($e->errors()))->toBe(['roles']);
+        })
+        ->and($user->roles()->pluck('name')->all())->toBe([$kept->name]);
+});
+
+it('locks the super admin role first when it changes the roles of an existing user on its own', function (): void {
+    $user = User::factory()->create();
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = str_replace(['"', '`'], '', $query->sql);
+    });
+
+    resolve(SyncUserRoles::class)->handle($user, [], $this->superAdmin);
+
+    expect($queries[0] ?? null)->toStartWith('select * from roles where name = ?');
 });

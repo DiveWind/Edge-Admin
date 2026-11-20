@@ -53,7 +53,10 @@ describe('health', function (): void {
 
         $checks = collect($response->json('data.checks'))->keyBy('name');
 
-        expect($checks->keys()->all())->toEqualCanonicalizing(['Database', 'Cache', 'UsedDiskSpace', 'Queue', 'Schedule', 'DebugMode', 'Environment', 'OptimizedApp'])
+        expect($checks->keys()->all())->toEqualCanonicalizing(array_values(array_filter([
+            'Database', DB::connection()->getDriverName() === 'sqlite' ? null : 'DatabaseConnectionCount',
+            'Cache', 'UsedDiskSpace', 'Queue', 'Schedule', 'DebugMode', 'Environment', 'OptimizedApp',
+        ])))
             ->and($checks['Database']['status'])->toBe('ok')
             ->and($checks['Environment']['status'])->toBe('failed')
             ->and($checks['Environment']['meta'])->toBe(['actual' => 'testing', 'expected' => 'production'])
@@ -136,7 +139,7 @@ describe('system info', function (): void {
             ->assertJsonPath('data.runtime.php_version', PHP_VERSION)
             ->assertJsonPath('data.runtime.laravel_version', app()->version())
             ->assertJsonPath('data.runtime.server', 'cli')
-            ->assertJsonPath('data.drivers.database', ['connection' => 'sqlite', 'driver' => 'sqlite', 'version' => DB::connection()->getServerVersion()])
+            ->assertJsonPath('data.drivers.database', ['connection' => config('database.default'), 'driver' => DB::connection()->getDriverName(), 'version' => DB::connection()->getServerVersion()])
             ->assertJsonPath('data.drivers.cache', ['store' => 'array', 'driver' => 'array'])
             ->assertJsonPath('data.drivers.queue', ['connection' => 'sync', 'driver' => 'sync']);
     });

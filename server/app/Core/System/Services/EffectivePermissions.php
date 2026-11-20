@@ -190,7 +190,10 @@ class EffectivePermissions
     }
 
     /**
-     * 全部节点（以权限码为键）；PermissionRegistrar 重新加载过时重新计算生效节点。
+     * 全部节点（以权限码为键，按 id 排序）；PermissionRegistrar 重新加载过时重新计算生效节点。
+     *
+     * spatie 加载节点时不排序，库返回的行序因数据库而异（PostgreSQL 中修改过的行排到最后），这里按 id 排序，
+     * 权限码列表、补齐祖先的结果在三种数据库上顺序一致。
      *
      * @return array<string, Permission>
      */
@@ -205,7 +208,7 @@ class EffectivePermissions
 
         $nodes = [];
 
-        foreach ($permissions as $permission) {
+        foreach ($permissions->sortBy('id') as $permission) {
             if ($permission instanceof Permission) {
                 $nodes[$permission->name] = $permission;
             }

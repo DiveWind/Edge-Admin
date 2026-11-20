@@ -25,7 +25,7 @@ it('stores the fixed structure with the stable type name instead of the class na
         ->and($notification->notifiable_type)->toBe('user')
         ->and($notification->notifiable_id)->toBe($user->id)
         ->and($notification->read_at)->toBeNull()
-        ->and($notification->data)->toBe([
+        ->and($notification->data)->toBeIgnoringKeyOrder([
             'title' => 'demo.notification.title',
             'content' => 'demo.notification.content',
             'level' => 'warning',

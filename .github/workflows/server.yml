@@ -1,5 +1,15 @@
 name: Server
 
+# 设计文档 §10.5：Linux + PHP 8.5 下在 SQLite、MySQL、PostgreSQL 上运行全部测试，并在 Octane（FrankenPHP）下额外验证一遍。
+#
+# 三个 job（database 是 MySQL、PostgreSQL 两项矩阵）并行，墙钟时间约等于最慢的 quality（composer ci + 生成器端到端检查），
+# PR 与推送到 main 都跑全部：
+# - quality：audit、composer ci（Pint、Larastan、Rector、Pest，SQLite 内存库）与生成器端到端检查，是最快给出结论的默认路径；
+# - database：MySQL 8.4 与 PostgreSQL 17 上只跑 Pest（静态检查与数据库无关，不重复执行）；跨库问题（JSON 列、排序规则、
+#   行锁与并发、保存点）只在真实数据库上暴露，合并前就要发现；
+# - octane：用 Octane + FrankenPHP 起服务，跑请求间状态泄露的冒烟请求（tests/Http/Admin/Fixtures/octane-smoke.php）。
+#   Pest 中的 OctaneWorkerTest 已在 quality 与 database 中用 Octane 的 Worker 在进程内跑同一组请求，这里再用真实的服务器确认一次。
+
 on:
   push:
     branches:
@@ -24,9 +34,13 @@ defaults:
   run:
     working-directory: server
 
+env:
+  PHP_VERSION: '8.5'
+  PHP_EXTENSIONS: mbstring, intl, pdo_sqlite, sqlite3, pdo_mysql, pdo_pgsql
+
 jobs:
-  server:
-    name: Lint, analyse, refactor check, test
+  quality:
+    name: Lint, analyse, refactor check, test (SQLite), generator e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -36,8 +50,8 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.5'
-          extensions: mbstring, intl, pdo_sqlite, sqlite3
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
           coverage: none
           tools: composer:v2
 
@@ -67,3 +81,130 @@ jobs:
       # 设计文档 §10.4：core:make-crud 的生成物不手改即通过全部检查（在系统临时目录的项目副本中生成并检查，结束后删除副本）
       - name: Generator end-to-end
         run: composer test:generator-e2e
+
+  database:
+    name: Test (${{ matrix.database }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql
+            port: 3306
+          - database: pgsql
+            port: 5432
+    services:
+      # 两个服务都声明、按矩阵只连接其中一个：GitHub Actions 的 services 不能按矩阵取舍，空闲的容器只占少量资源
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: core_test
+          MYSQL_USER: core
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psecret"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      pgsql:
+        image: postgres:17
+        env:
+          POSTGRES_DB: core_test
+          POSTGRES_USER: core
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U core"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      # 覆盖 phpunit.xml 的 sqlite（phpunit.xml 中的 <env> 不覆盖已存在的环境变量）
+      DB_CONNECTION: ${{ matrix.database }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: ${{ matrix.port }}
+      DB_DATABASE: core_test
+      DB_USERNAME: core
+      DB_PASSWORD: secret
+      DB_URL: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('server/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # 含两个进程并发的加锁测试（tests/Core/System/Actions/ConcurrentActionsTest.php，SQLite 上跳过）
+      - name: Test
+        run: composer test
+
+  octane:
+    name: Octane (FrankenPHP) smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FRANKENPHP_VERSION: '1.13.6'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('server/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # FrankenPHP 的静态二进制自带 PHP 与扩展（pdo_sqlite、intl 等）；固定版本并缓存，octane:start 在 server/ 下找到它
+      - name: Cache FrankenPHP
+        id: frankenphp-cache
+        uses: actions/cache@v4
+        with:
+          path: server/frankenphp
+          key: frankenphp-${{ runner.os }}-${{ env.FRANKENPHP_VERSION }}
+
+      - name: Download FrankenPHP
+        if: steps.frankenphp-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o frankenphp "https://github.com/php/frankenphp/releases/download/v${FRANKENPHP_VERSION}/frankenphp-linux-x86_64"
+          chmod +x frankenphp
+          ./frankenphp version
+
+      # 冒烟脚本先在本机 PHP 中建库（SQLite 文件）与数据，再按 --url 对 Octane 发请求；结束时停止服务器
+      - name: Smoke test under Octane
+        run: composer test:octane

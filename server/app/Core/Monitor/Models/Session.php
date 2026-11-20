@@ -139,7 +139,8 @@ class Session extends Model
 
     /**
      * 路由绑定：按对外 id（会话 ID 的前缀）在在线会话中查找。前缀只含字母与数字（路由参数约束），不会被当作通配符；
-     * 数据库排序规则不区分大小写时可能匹配多行，再按大小写精确比较。
+     * 数据库排序规则不区分大小写时（MySQL 的默认排序规则、SQLite 的 LIKE）可能匹配多行，按大小写精确比较后再按主键取出这一行：
+     * 一次取出多行的模型会被标记为禁止延迟加载（Model::preventLazyLoading()），授权时读取 user 关联就会失败。
      *
      * @param  mixed  $value
      * @param  string|null  $field
@@ -151,7 +152,9 @@ class Session extends Model
             return null;
         }
 
-        return static::query()->online()->where('id', 'like', $value.'%')->get()
-            ->first(fn (self $session): bool => str_starts_with($session->id, $value));
+        $id = static::query()->online()->where('id', 'like', $value.'%')->pluck('id')
+            ->first(fn (mixed $id): bool => is_string($id) && str_starts_with($id, $value));
+
+        return $id === null ? null : static::query()->online()->whereKey($id)->first();
     }
 }

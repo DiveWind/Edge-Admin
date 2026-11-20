@@ -123,12 +123,13 @@ describe('show', function (): void {
         $actor = userWithDataScope('all', 'monitor.operation-log');
         $log = OperationLog::factory()->causedBy($actor)->withProperties(['route_parameters' => ['user' => '5']])->create();
 
-        $this->actingAs($actor)
+        $response = $this->actingAs($actor)
             ->getJson("/api/admin/monitor/operation-logs/{$log->id}")
             ->assertOk()
             ->assertJsonPath('data.id', $log->id)
-            ->assertJsonPath('data.route_parameters', ['user' => '5'])
-            ->assertJsonPath('data.payload', ['username' => 'alice', 'password' => '******']);
+            ->assertJsonPath('data.route_parameters', ['user' => '5']);
+
+        expect($response->json('data.payload'))->toBeIgnoringKeyOrder(['username' => 'alice', 'password' => '******']);
     });
 
     it('returns 403 outside of the data scope', function (): void {

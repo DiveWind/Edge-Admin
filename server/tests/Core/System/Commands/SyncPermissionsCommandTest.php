@@ -153,8 +153,8 @@ it('corrects the structural fields from the declaration', function (): void {
         ->type->toBe(PermissionType::Menu)
         ->path->toBe('/demo/page')
         ->component->toBe('/demo/page/index')
-        ->meta->toBe(['hideInTab' => true])
-        ->and(node('demo.docs')->meta)->toBe(['badge' => 'new', 'link' => 'https://example.com/v2']);
+        ->meta->toBeIgnoringKeyOrder(['hideInTab' => true])
+        ->and(node('demo.docs')->meta)->toBeIgnoringKeyOrder(['badge' => 'new', 'link' => 'https://example.com/v2']);
 });
 
 it('adopts a custom node with the same name', function (): void {

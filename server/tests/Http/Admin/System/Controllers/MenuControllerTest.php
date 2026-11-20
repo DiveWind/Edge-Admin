@@ -229,7 +229,7 @@ describe('store', function (): void {
             ->title->toBe('Demo')
             ->icon->toBe('lucide:box')
             ->sort->toBe(15)
-            ->meta->toBe([
+            ->meta->toBeIgnoringKeyOrder([
                 'activePath' => '/demo', 'activeIcon' => 'lucide:box-select', 'keepAlive' => true, 'affixTab' => false,
                 'hideInMenu' => true, 'hideChildrenInMenu' => false, 'hideInTab' => false,
                 'badge' => 'new', 'badgeType' => 'normal', 'badgeVariants' => 'destructive',

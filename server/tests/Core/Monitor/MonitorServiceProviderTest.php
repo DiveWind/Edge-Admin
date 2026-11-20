@@ -8,7 +8,7 @@ use App\Core\System\Models\{Attachment, Export};
 use Illuminate\Console\Scheduling\{Event, Schedule};
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Env;
-use Illuminate\Support\Facades\{Gate, Request};
+use Illuminate\Support\Facades\{DB, Gate, Request};
 use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Health\Checks\Check;
 use Spatie\Health\Facades\Health;
@@ -209,7 +209,11 @@ function healthCheckNames(): array
 
 it('registers the default health checks', function (): void {
     expect(Health::registeredChecks()->map(fn (Check $check): string => $check->getName())->all())
-        ->toBe(['Database', 'Cache', 'UsedDiskSpace', 'Queue', 'Schedule', 'DebugMode', 'Environment', 'OptimizedApp']);
+        ->toBe(array_values(array_filter([
+            'Database',
+            DB::connection()->getDriverName() === 'sqlite' ? null : 'DatabaseConnectionCount',
+            'Cache', 'UsedDiskSpace', 'Queue', 'Schedule', 'DebugMode', 'Environment', 'OptimizedApp',
+        ])));
 });
 
 it('checks the backups only when the backup schedule is on', function (bool $scheduled): void {
@@ -219,7 +223,7 @@ it('checks the backups only when the backup schedule is on', function (bool $sch
 })->with(['on' => [true], 'off' => [false]]);
 
 it('checks the database connection count only on MySQL, MariaDB and PostgreSQL', function (string $driver, bool $registered): void {
-    config(['database.connections.sqlite.driver' => $driver]);
+    config(['database.connections.'.config('database.default').'.driver' => $driver]);
 
     expect(in_array('DatabaseConnectionCount', healthCheckNames(), true))->toBe($registered);
 })->with([['mysql', true], ['mariadb', true], ['pgsql', true], ['sqlite', false]]);

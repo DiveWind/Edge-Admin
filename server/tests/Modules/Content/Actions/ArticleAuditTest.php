@@ -53,7 +53,7 @@ it('logs the creation with all audited fields, the causer and a digest of the co
         ->subject_id->toBe($article->id)
         ->causer_type->toBe('user')
         ->causer_id->toBe($actor->id)
-        ->and($activity->properties->all())->toBe([
+        ->and($activity->properties->all())->toBeIgnoringKeyOrder([
             'username' => 'alice',
             'attributes' => [
                 'title' => 'Hello',
@@ -76,8 +76,8 @@ it('logs only the changed fields of an update, with the content as a digest inst
     $activity = lastArticleActivity();
 
     expect($activity->event)->toBe('updated')
-        ->and($activity->getProperty('old'))->toBe(['title' => 'Old', 'content' => contentDigest('<p>Old</p>')])
-        ->and($activity->getProperty('attributes'))->toBe(['title' => 'New', 'content' => contentDigest($content)])
+        ->and($activity->getProperty('old'))->toBeIgnoringKeyOrder(['title' => 'Old', 'content' => contentDigest('<p>Old</p>')])
+        ->and($activity->getProperty('attributes'))->toBeIgnoringKeyOrder(['title' => 'New', 'content' => contentDigest($content)])
         ->and(strlen((string) json_encode($activity->properties)))->toBeLessThan(1000);
 });
 

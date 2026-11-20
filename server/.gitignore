@@ -11,3 +11,8 @@
 /storage/pail
 /vendor
 _ide_helper.php
+
+# Octane + FrankenPHP（octane:start 生成或下载，不提交）
+/frankenphp
+/public/frankenphp-worker.php
+**/caddy

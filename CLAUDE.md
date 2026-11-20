@@ -1,15 +1,15 @@
 # 仓库约定
 
-Laravel 13（PHP 8.5）+ Vben Admin 5（antdv-next）的中后台脚手架（Starter），前后端分离、同仓库。**目前处于重建中**，下列目录未全部就绪。
+Laravel 13（PHP 8.5）+ Vben Admin 5（antdv-next）的中后台脚手架（Starter），前后端分离、同仓库。各目录的现状见 [`README.md`](README.md)。
 
 ## 目录布局
 
 | 目录 | 职责 |
 |---|---|
-| `server/` | Laravel 纯 API 后端；在该目录下执行 composer / artisan 命令。规范见 `server/CLAUDE.md`（后续创建） |
-| `web/` | Vben 前端；在该目录下执行前端包管理命令。规范见 `web/CLAUDE.md`（后续创建） |
+| `server/` | Laravel 纯 API 后端；在该目录下执行 composer / artisan 命令。规范见 [`server/CLAUDE.md`](server/CLAUDE.md) |
+| `web/` | Vben 前端；在该目录下执行前端包管理命令。规范见 [`web/CLAUDE.md`](web/CLAUDE.md) |
 | `docs/` | 项目文档，索引见 [`docs/README.md`](docs/README.md) |
-| `deploy/` | 部署文件（Nginx / Caddy、Dockerfile、Supervisor 等，后续创建） |
+| `deploy/` | 部署文件（Nginx / Caddy、Dockerfile、Supervisor 等；尚未创建） |
 | `.legacy/` | 旧版本代码的只读参考（见下文） |
 
 - [`docs/backend-design.md`](docs/backend-design.md) 是后端设计的**唯一依据**；与其冲突的做法以它为准，需要调整设计时先改文档。

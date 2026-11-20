@@ -14,7 +14,7 @@
 - 健康检查（spatie/laravel-health，检查项在本模块 Provider 中注册）与系统信息（`Queries/SystemInfo`）；
 - 脱敏与截断的共用规则（`Services/DataMasker`）：操作日志、失败任务、定时任务的输出。
 
-不负责：接口的路由与输出格式（`app/Http/Admin/Monitor`）；Pulse 暂未接入（设计文档 §14）。
+不负责：接口的路由与输出格式（`app/Http/Admin/Monitor`）；Pulse 不默认安装，接入方式见设计文档 §12.3。
 
 ## 对外提供
 

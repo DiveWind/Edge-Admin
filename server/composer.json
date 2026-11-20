@@ -14,6 +14,7 @@
         "php": "^8.5",
         "laravel/fortify": "^1.43",
         "laravel/framework": "^13.17",
+        "laravel/octane": "^2.25",
         "laravel/sanctum": "^4.5",
         "laravel/tinker": "^3.0",
         "spatie/laravel-activitylog": "^5.1",
@@ -26,6 +27,7 @@
         "symfony/html-sanitizer": "^8.1"
     },
     "require-dev": {
+        "dedoc/scramble": "^0.13.55",
         "driftingly/rector-laravel": "^2.7",
         "fakerphp/faker": "^1.23",
         "larastan/larastan": "^3.15",
@@ -87,6 +89,10 @@
             "@php artisan config:clear --ansi",
             "@php artisan test --group=generator-e2e"
         ],
+        "test:octane": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php tests/Http/Admin/Fixtures/octane-smoke.php serve"
+        ],
         "ci": [
             "@lint",
             "@analyse",
@@ -120,6 +126,8 @@
         "analyse": "Larastan 静态分析",
         "refactor": "Rector 重构（CI 中以 --dry-run 检查）",
         "test": "运行 Pest 测试（含架构测试）",
+        "test:generator-e2e": "在项目副本中运行生成器并跑全部检查（约 1.5 分钟）",
+        "test:octane": "用 Octane + FrankenPHP（2 个 worker）起服务并发一组冒烟请求，检查请求间的状态泄露（需要 frankenphp 可执行文件）",
         "ci": "lint + analyse + rector --dry-run + test"
     },
     "extra": {

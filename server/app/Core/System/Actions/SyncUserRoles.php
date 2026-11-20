@@ -5,10 +5,11 @@ namespace App\Core\System\Actions;
 use App\Core\System\Models\{Role, User};
 use App\Core\System\Services\{Manageability, SuperAdminGuard};
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * 保存用户的角色（设计文档 §8.5、§8.6），由 CreateUser、UpdateUser 在各自的事务中调用；分配用 spatie 的 syncRoles()。
+ * 保存用户的角色（设计文档 §8.5、§8.6），由 CreateUser、UpdateUser 在各自的事务中调用（单独调用时自己开事务）；分配用 spatie 的 syncRoles()。
  *
  * 防提权（非超管）：
  * 1. 授予或收回 super-admin → 422（roles）；
@@ -18,7 +19,7 @@ use Illuminate\Validation\ValidationException;
  * 超管不受以上限制。
  *
  * 最后一个启用的超管不能去掉 super-admin 角色 → 422（roles，SuperAdminGuard，加锁防并发）。
- * 修改用户时，调用方（UpdateUser）已在事务开头锁住 super-admin 角色行（锁顺序见 SuperAdminGuard）。
+ * 已有的用户：事务的第一条语句锁住 super-admin 角色行（锁顺序见 SuperAdminGuard；UpdateUser 在它自己的事务开头已锁过）。
  */
 class SyncUserRoles
 {
@@ -36,27 +37,37 @@ class SyncUserRoles
      */
     public function handle(User $user, array $names, User $actor): void
     {
-        $original = $user->exists ? array_values(array_filter($user->roles()->pluck('name')->all(), is_string(...))) : [];
-        $names = array_values(array_unique($names));
+        DB::transaction(function () use ($user, $names, $actor): void {
+            // 已有的用户可能因此失去 super-admin：第一条语句锁住 super-admin 角色行（锁顺序见 SuperAdminGuard；UpdateUser 已锁过，重复加锁无害）
+            if ($user->exists) {
+                $this->superAdminGuard->lock();
+            }
 
-        // 共享锁：与 DeleteRole 的行锁互斥（删除角色前的“已分配”检查不会被并发的分配绕过）
-        $roles = Role::query()
-            ->with('permissions')
-            ->where('guard_name', User::GUARD)
-            ->whereIn('name', [...$names, ...$original])
-            ->sharedLock()
-            ->get()
-            ->keyBy('name');
+            $original = $user->exists ? array_values(array_filter($user->roles()->pluck('name')->all(), is_string(...))) : [];
+            $names = array_values(array_unique($names));
 
-        if (! $actor->isSuperAdmin()) {
-            $names = $this->restrictToManageable($names, $original, $roles, $actor);
-        }
+            // 共享锁：与 DeleteRole 的行锁互斥（删除角色前的“已分配”检查不会被并发的分配绕过）。与 DeleteRole 一样按主键加锁：
+            // 按 name 索引加锁会先锁住二级索引、再等主键，与正在删除这一行的事务互相等待（MySQL 实测为死锁）
+            $ids = Role::query()->where('guard_name', User::GUARD)->whereIn('name', [...$names, ...$original])->pluck('id')->all();
+            $roles = Role::query()->with('permissions')->whereKey($ids)->sharedLock()->get()->keyBy('name');
 
-        if (in_array(Role::SUPER_ADMIN, $original, true) && ! in_array(Role::SUPER_ADMIN, $names, true)) {
-            $this->superAdminGuard->ensureRemains($user, 'roles');
-        }
+            // 校验之后、拿到共享锁之前被并发删除的角色：与“分配不存在的角色”相同，不静默忽略
+            if (array_diff($names, $roles->keys()->all()) !== []) {
+                throw ValidationException::withMessages([
+                    'roles' => [__('validation.exists', ['attribute' => __('Roles')])],
+                ]);
+            }
 
-        $user->syncRoles($roles->filter(fn (Role $role): bool => in_array($role->name, $names, true))->values());
+            if (! $actor->isSuperAdmin()) {
+                $names = $this->restrictToManageable($names, $original, $roles, $actor);
+            }
+
+            if (in_array(Role::SUPER_ADMIN, $original, true) && ! in_array(Role::SUPER_ADMIN, $names, true)) {
+                $this->superAdminGuard->ensureRemains($user, 'roles');
+            }
+
+            $user->syncRoles($roles->filter(fn (Role $role): bool => in_array($role->name, $names, true))->values());
+        });
     }
 
     /**

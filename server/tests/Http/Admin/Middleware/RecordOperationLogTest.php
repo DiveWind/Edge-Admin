@@ -40,7 +40,7 @@ it('records a write request with the operator, route, status, duration and clien
         ->description->toBe('admin.system.users.store')
         ->causer_type->toBe('user')
         ->causer_id->toBe($this->actor->id)
-        ->and($log->properties->except('duration_ms')->all())->toBe([
+        ->and($log->properties->except('duration_ms')->all())->toBeIgnoringKeyOrder([
             'username' => $this->actor->username,
             'method' => 'POST',
             'path' => '/api/admin/system/users',
@@ -62,7 +62,7 @@ it('records the route parameters and failed requests', function (): void {
     expect(soleOperationLog())
         ->description->toBe('admin.system.users.destroy')
         ->and(soleOperationLog()->properties->only(['method', 'route_parameters', 'status'])->all())
-        ->toBe(['method' => 'DELETE', 'route_parameters' => ['user' => (string) $this->actor->id], 'status' => 403]);
+        ->toBeIgnoringKeyOrder(['method' => 'DELETE', 'route_parameters' => ['user' => (string) $this->actor->id], 'status' => 403]);
 });
 
 it('records validation failures with the submitted payload', function (): void {
@@ -73,7 +73,7 @@ it('records validation failures with the submitted payload', function (): void {
         ->assertUnprocessable();
 
     expect(soleOperationLog()->properties->only(['payload', 'status'])->all())
-        ->toBe(['payload' => ['status' => 'unknown', 'nested' => ['token' => '******']], 'status' => 422]);
+        ->toBeIgnoringKeyOrder(['payload' => ['status' => 'unknown', 'nested' => ['token' => '******']], 'status' => 422]);
 });
 
 it('does not record read requests', function (): void {
@@ -103,7 +103,7 @@ it('records the profile settings but not the login flow', function (): void {
 
     expect(soleOperationLog())
         ->description->toBe('user-password.update')
-        ->and(soleOperationLog()->getProperty('payload'))->toBe([
+        ->and(soleOperationLog()->getProperty('payload'))->toBeIgnoringKeyOrder([
             'current_password' => '******',
             'password' => '******',
             'password_confirmation' => '******',

@@ -5,8 +5,9 @@ namespace App\Http\Admin;
 use App\Core\System\Data\{SettingData, SettingGroupData};
 use App\Core\System\Services\SettingRegistry;
 use App\Http\Admin\Middleware\{ForceJson, FormatResponse, RecordOperationLog};
-use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenResponse};
+use App\Http\Admin\Responses\{FailedPasswordResetResponse, PasswordResetLinkResponse, VbenOpenApiDocument, VbenResponse};
 use App\Http\Middleware\EnsureUserIsEnabled;
+use Dedoc\Scramble\Scramble;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Request;
@@ -73,6 +74,19 @@ class AdminServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
         $this->configureResponses();
         $this->configureRoutes();
+        $this->configureApiDocumentation();
+    }
+
+    /**
+     * 本地的 OpenAPI 文档（dedoc/scramble 是开发依赖，只在 local 环境开放 `/docs/api`，设计文档 §12.2）：
+     * 文档的范围是本入口的前缀（config/scramble.php 的 api_path），响应按 Vben 格式改写（VbenOpenApiDocument）。
+     * 没有安装 Scramble（生产环境 `composer install --no-dev`）时什么都不做；登记的是类名，重复启动不会重复登记。
+     */
+    protected function configureApiDocumentation(): void
+    {
+        if (class_exists(Scramble::class)) {
+            Scramble::configure()->withDocumentTransformers(VbenOpenApiDocument::class);
+        }
     }
 
     /**

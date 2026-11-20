@@ -38,7 +38,7 @@ it('records a successful login with the account, IP, user agent and request id',
         ->description->toBe('login')
         ->causer_id->toBe($alice->id)
         ->causer_type->toBe('user')
-        ->and(soleLoginLog()->properties->all())->toBe([
+        ->and(soleLoginLog()->properties->all())->toBeIgnoringKeyOrder([
             'username' => 'alice',
             'reason' => null,
             'via_remember' => false,
@@ -176,6 +176,6 @@ it('records a password reset without the password or the token', function (): vo
     expect(soleLoginLog())
         ->event->toBe('password_reset')
         ->causer_id->toBe($alice->id)
-        ->and(soleLoginLog()->properties->keys()->all())->toBe(['username', 'reason', 'ip_address', 'user_agent', 'request_id'])
+        ->and(soleLoginLog()->properties->keys()->all())->toEqualCanonicalizing(['username', 'reason', 'ip_address', 'user_agent', 'request_id'])
         ->and(DB::table('activity_log')->pluck('properties')->implode(''))->not->toContain('brand-new-password', $token);
 });

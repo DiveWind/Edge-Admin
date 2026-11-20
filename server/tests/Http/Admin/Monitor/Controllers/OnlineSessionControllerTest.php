@@ -160,6 +160,18 @@ describe('destroy', function (): void {
             ->assertNotFound();
     })->with(['unknownSession00', 'expiredSessionaa', 'guestSession0000', 'too-short', str_repeat('a', 40)]);
 
+    it('binds the session whose id starts with the given prefix in the same case, also under case-insensitive collations', function (): void {
+        $upper = Session::factory()->create(['id' => 'ABCDEFGHabcdefgh'.str_repeat('x', 24)]);
+        $lower = Session::factory()->create(['id' => 'abcdefghABCDEFGH'.str_repeat('y', 24)]);
+        $actor = userWithDataScope('all', 'monitor.online.logout');
+
+        $this->actingAs($actor)->deleteJson('/api/admin/monitor/online/sessions/abcdefghABCDEFGH')->assertOk();
+        $this->actingAs($actor)->deleteJson('/api/admin/monitor/online/sessions/ABCDEFGHABCDEFGH')->assertNotFound();
+
+        expect(Session::query()->pluck('id')->all())->toBe([$upper->id])
+            ->and(Session::query()->find($lower->id))->toBeNull();
+    });
+
     it('returns 404 when the session driver is not database', function (): void {
         $session = Session::factory()->create();
         config(['session.driver' => 'redis']);

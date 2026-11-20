@@ -52,7 +52,7 @@
 | `Queries/RoleList` | 角色列表的查询（筛选与排序白名单） |
 | `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`（角色表单的授权树与数据范围） |
 | `Actions/CreateUser`、`UpdateUser`、`DeleteUser`、`ChangeUserStatus` | 用户的新增、修改、删除、启用 / 停用（规则见下文“用户管理”）；重置密码复用 `ResetUserPassword::handle()` |
-| `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管（由 CreateUser、UpdateUser 调用） |
+| `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管、与删除角色互斥的共享锁（由 CreateUser、UpdateUser 调用） |
 | `Services/SuperAdminGuard` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用）；`lock()` 是可能减少启用超管的事务的第一条语句（锁顺序） |
 | `Services/Manageability` | “管得到”的统一判定（§8.5）：`canManageRole()`、`canManageUser()`、可授予的权限码与数据范围、`ensureGrantableDataScope()`（422）；Policy（403）与 `SyncRolePermissions`、`SyncUserRoles`、`CreateRole`、`UpdateRole`（422）共用 |
 | `Events/UserDeleting`、`Events/UserDeleted` | Core 事件：`DeleteUser` 在事务中删除前派发 `UserDeleting`（同步清理属于该用户的数据），提交后派发 `UserDeleted`；本模块的 `Listeners/DeleteExportsOfUser` 监听前者 |
@@ -237,7 +237,8 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 
 - 用户名统一存为小写（`CreateUser::only()`，表单也先转小写再校验唯一）；`created_by` 写入操作者；
 - 分配角色（`SyncUserRoles`，spatie 的 `syncRoles()`）：非超管只能分配、移除权限码全部在自己有效权限码之内、且数据范围可授予的角色；
-  用户原本就有、但操作者管不到的角色（含 `super-admin`）无论是否提交都保留；超管不受限；
+  用户原本就有、但操作者管不到的角色（含 `super-admin`）无论是否提交都保留；超管不受限。单独调用时也在自己的事务中（已有的用户先锁 `super-admin` 角色行）；
+  对涉及的角色**按主键**加共享锁，与 `DeleteRole` 的行锁互斥（按 `name` 索引加锁在 MySQL 上会与删除互相等待而死锁），分配时角色已被并发删除 → 422（`roles`）；
 - 最后一个启用的超管（`SuperAdminGuard`）：可能减少启用超管的事务（`DeleteUser`、`ChangeUserStatus` 停用、`UpdateUser` 提交了 `roles`
   或停用）**第一条语句**是对 `super-admin` 角色那一行 `lockForUpdate()`（`lock()`），之后才读写用户行——锁顺序一致，避免死锁，
   MySQL REPEATABLE READ 下快照也不会早于拿锁；计数用加锁读（`sharedLock()`）读最新提交的版本。不在事务中调用时抛出 `LogicException`；
@@ -328,7 +329,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 
 ## 系统参数
 
-接口见设计文档 §6.7（`/system/settings`、`/system/setting-groups/{group}`、`/settings/public`）。只放管理员在运行时调整的业务参数；部署级的配置留在 config 与环境变量。
+接口见设计文档 §6.7（`/system/settings`、`/system/setting-groups/{setting_group}`、`/settings/public`）。只放管理员在运行时调整的业务参数；部署级的配置留在 config 与环境变量。
 
 - 声明（扩展点 `SettingRegistry`，单例）：本模块的分组在 `resources/settings.php`（`site`：站点名称、登录页提示，公开；`auth`：登录限流次数；`attachment`：上传的类型白名单与大小上限）。
   业务模块同样注册自己的分组（一个分组只属于一个模块，键为 `<分组>.<参数名>`）：

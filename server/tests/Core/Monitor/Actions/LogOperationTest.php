@@ -38,7 +38,7 @@ it('masks the sensitive keys at any depth, including lists', function (): void {
         'recovery_code' => 'abcd-efgh',
         'profile' => ['api_token' => 'xyz', 'client_secret' => ['nested' => 'value'], 'name' => 'Alice'],
         'devices' => [['name' => 'phone', 'access_token' => 'xyz'], ['name' => 'tablet']],
-    ]))->toBe([
+    ]))->toBeIgnoringKeyOrder([
         'username' => 'alice',
         'Password' => '******',
         'password_confirmation' => '******',
@@ -52,21 +52,21 @@ it('masks the sensitive keys at any depth, including lists', function (): void {
 
 it('does not mask keys that only contain the word code', function (): void {
     expect(maskPayload(['postcode' => '100000', 'codes' => ['system.user']]))
-        ->toBe(['postcode' => '100000', 'codes' => ['system.user']]);
+        ->toBeIgnoringKeyOrder(['postcode' => '100000', 'codes' => ['system.user']]);
 });
 
 it('masks the keys added in the configuration', function (): void {
     config(['core.monitor.masked_keys' => [...config()->array('core.monitor.masked_keys'), 'id_card*']]);
 
     expect(maskPayload(['id_card_number' => '110101', 'password' => 'secret', 'name' => 'Alice']))
-        ->toBe(['id_card_number' => '******', 'password' => '******', 'name' => 'Alice']);
+        ->toBeIgnoringKeyOrder(['id_card_number' => '******', 'password' => '******', 'name' => 'Alice']);
 });
 
 it('truncates long string values at any depth', function (): void {
     config(['core.monitor.operation_log.max_value_length' => 5]);
 
     expect(maskPayload(['title' => '一二三四五六', 'short' => 'abcde', 'items' => [['body' => 'abcdefgh']], 'password' => 'a-long-secret', 'count' => 1234567]))
-        ->toBe(['title' => '一二三四五…(truncated)', 'short' => 'abcde', 'items' => [['body' => 'abcde…(truncated)']], 'password' => '******', 'count' => 1234567]);
+        ->toBeIgnoringKeyOrder(['title' => '一二三四五…(truncated)', 'short' => 'abcde', 'items' => [['body' => 'abcde…(truncated)']], 'password' => '******', 'count' => 1234567]);
 });
 
 it('replaces a payload that is still too large with its original size', function (): void {
@@ -80,7 +80,7 @@ it('replaces a payload that is still too large with its original size', function
     ]);
 
     expect(OperationLog::query()->sole()->getProperty('payload'))
-        ->toBe(['_truncated' => true, '_bytes' => strlen((string) json_encode($payload))]);
+        ->toBeIgnoringKeyOrder(['_truncated' => true, '_bytes' => strlen((string) json_encode($payload))]);
 });
 
 it('keeps a payload within the size limit', function (): void {

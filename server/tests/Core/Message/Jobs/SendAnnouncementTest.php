@@ -105,7 +105,7 @@ describe('delivery on the sync queue', function (): void {
 
         expect(announcementRecipientIds($announcement))->toBe([$first->id, $second->id])
             ->and(Notification::query()->whereIn('notifiable_id', [$other->id, $disabled->id])->count())->toBe(0)
-            ->and(Notification::query()->where('notifiable_id', $first->id)->sole()->data)->toBe([
+            ->and(Notification::query()->where('notifiable_id', $first->id)->sole()->data)->toBeIgnoringKeyOrder([
                 'title' => 'Maintenance',
                 'content' => 'The system is down tonight.',
                 'level' => 'warning',

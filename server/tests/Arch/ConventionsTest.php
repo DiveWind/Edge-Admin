@@ -1,7 +1,7 @@
 <?php
 
 use App\Core\Message\Notifications\InboxNotification;
-use App\Core\System\Contracts\Exporter;
+use App\Core\System\Contracts\{DataScopeProvider, Exporter};
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
 use App\Support\Enums\HasLabel;
 use Illuminate\Container\Attributes\{Scoped, Singleton};
@@ -219,7 +219,7 @@ if (($exporters = archNamespaces('Core/*/Exporters', 'Modules/*/Exporters')) !==
         ->toHaveSuffix('Exporter');
 }
 
-test('注册表都是 #[Singleton] 的具体类，单例不注入 #[Scoped] 的请求级服务（设计文档 §5.5、§10.3）', function (): void {
+test('注册表都是 #[Singleton] 的具体类，单例（含数据范围提供者）不注入 #[Scoped] 的请求级服务（设计文档 §5.5、§10.3）', function (): void {
     $violations = [];
 
     foreach (archClasses() as $class) {
@@ -228,7 +228,8 @@ test('注册表都是 #[Singleton] 的具体类，单例不注入 #[Scoped] 的�
         }
 
         $reflection = new ReflectionClass($class);
-        $singleton = $reflection->getAttributes(Singleton::class) !== [];
+        // 数据范围提供者在启动时由 DataScopeRegistry 解析并保存在单例中，同样是常驻的实例
+        $singleton = $reflection->getAttributes(Singleton::class) !== [] || $reflection->implementsInterface(DataScopeProvider::class);
 
         if (str_ends_with($class, 'Registry') && str_contains($class, '\\Services\\') && ! $singleton) {
             $violations[] = "{$class} 是注册表，应为 #[Singleton] 的具体类";

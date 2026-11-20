@@ -20,7 +20,7 @@ it('finds the notifications about a record through the stored subject', function
     $user->notify(new DemoNotification);
 
     expect(Notification::query()->about($first)->count())->toBe(1)
-        ->and(Notification::query()->about($first)->sole()->data['subject'])->toBe(['type' => 'announcement', 'id' => $first->id]);
+        ->and(Notification::query()->about($first)->sole()->data['subject'])->toBeIgnoringKeyOrder(['type' => 'announcement', 'id' => $first->id]);
 });
 
 it('deletes the notifications of a deleted user', function (): void {

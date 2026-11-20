@@ -258,3 +258,27 @@ describe('Fortify', function (): void {
             ->assertExactJson(['code' => 0, 'data' => ['two_factor' => false], 'message' => 'ok']);
     });
 });
+
+describe('OpenAPI document (dedoc/scramble, development only)', function (): void {
+    it('is not served outside of the local environment', function (): void {
+        $this->getJson('/docs/api.json')->assertForbidden();
+    });
+
+    it('documents the routes of the admin entry in the Vben response format', function (): void {
+        app()->detectEnvironment(fn (): string => 'local');
+
+        $document = $this->getJson('/docs/api.json')->assertOk()->json();
+        $schema = fn (string $path, string $method, int $status): array => $document['paths'][$path][$method]['responses'][$status]['content']['application/json']['schema'];
+
+        expect(array_keys($document['paths']))->each->not->toStartWith('/api/admin')
+            ->and($document['servers'][0]['url'])->toEndWith('/api/admin')
+            // 分页列表：{ code, data: { items, total }, message }
+            ->and($schema('/system/users', 'get', 200)['required'])->toBe(['code', 'data', 'message'])
+            ->and(array_keys($schema('/system/users', 'get', 200)['properties']['data']['properties']))->toBe(['items', 'total'])
+            // 单动作控制器返回的 API Resource：data 是 Resource 本身，不是 { data }
+            ->and($schema('/system/users/{user}/status', 'put', 200)['properties']['data']['allOf'][0]['$ref'])->toBe('#/components/schemas/UserResource')
+            // 错误：在 message、errors 之外有 code 与 data: null
+            ->and($document['components']['responses']['ValidationException']['content']['application/json']['schema']['required'])
+            ->toBe(['message', 'errors', 'code', 'data']);
+    });
+});

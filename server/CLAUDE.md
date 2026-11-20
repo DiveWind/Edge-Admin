@@ -283,3 +283,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 | `composer refactor` | Rector（CI 中 `--dry-run`） |
 | `composer test` | Pest（含 `tests/Arch` 架构测试） |
 | `composer ci` | 以上检查全部执行；提交前必须通过 |
+| `composer test:generator-e2e` | 生成器端到端检查（修改生成器后执行） |
+| `composer test:octane` | Octane + FrankenPHP 下的冒烟请求（修改常驻内存相关的代码后执行，见 `README.md` 的“Octane”） |
+
+- 改动查询、锁、事务或 JSON 列的读写时，另在 MySQL 与 PostgreSQL 上跑相关测试（`DB_CONNECTION=mysql …`，见 `README.md` 的“测试”）；读回 JSON 列的断言用 `toBeIgnoringKeyOrder()`。

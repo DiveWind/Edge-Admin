@@ -343,7 +343,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
    | 与业务无关的技术性重复 | **Support** | `UniqueConstraint`（唯一冲突转 422）、`BusinessRuleViolation` |
 
    一句话：会写库并且能独立成立的，做 Action；只是“算”或“判断”的，按依赖范围放到模型、枚举、Service；只是“拼查询”的，放到 scope 或 Query。
-4. **唯一性**：有唯一索引的字段，新增与修改的 Action 都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存——它在保存点中保存（PostgreSQL 在语句失败后会中止整个事务，必须回滚到保存点），撞上唯一索引时返回 422 并挂在冲突的字段上。Form Request 的 `Rule::unique` 可选，Action 的兜底必须有（并发、命令行、受限入口都经过它）。
+4. **唯一性**：有唯一索引的字段，新增与修改的 Action 都用 `App\Support\Database\UniqueConstraint::save($model, [字段 => 显示名])` 保存——它在保存点中保存（PostgreSQL 在语句失败后会中止整个事务，必须回滚到保存点；已在 PostgreSQL 上实测调用方的事务仍可继续），撞上唯一索引时返回 422 并挂在冲突的字段上。Form Request 的 `Rule::unique` 可选，Action 的兜底必须有（并发、命令行、受限入口都经过它）。
 5. **业务规则违反**：领域层不依赖 HTTP，不抛 Symfony 的 `HttpException`。与字段无关的（只有草稿能发布、最后一个超管不能删除、并发时状态已变）抛 `App\Support\Exceptions\BusinessRuleViolation`（可带挂靠的字段）；某个字段的值不合法抛 `ValidationException`。状态码由入口决定：后台入口（Admin）把 `BusinessRuleViolation` 映射为 422 + `message`（带字段时加 `errors`），与 §6.1 的格式一致；没有自己格式的入口与其他请求由 `bootstrap/app.php` 的全局兜底按 Laravel 校验失败的标准 JSON 返回 422（`{ message }`，带字段时加 `errors: { 字段: [message] }`，在全部入口的渲染之后登记），不会变成 500；`AuthorizationException`（403）与 `ModelNotFoundException`（404）是框架的领域异常，照常使用。
 6. **唯一的“模型 → Action”例外**：模型 trait `HasAttachments` 与 `Attachment` 的模型事件在记录被彻底删除时调用 `DeleteAttachment`，让“连同附件与文件一起删除”对所有模块自动生效；除此之外模型、Query、Policy、Rule 不调用 Action（读侧不使用 Action 由 `tests/Arch` 检查，模型不在检查范围内）。
 7. **读写分开**：Action 不返回查询结果（返回被写入的模型即可）；需要写后再读的，入口先调 Action 再调 Query（如立即健康检查）。
@@ -386,7 +386,7 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 ### 5.6 强制手段
 
 - **Pest 架构测试**：§5.1、§5.3 的依赖规则；入口不得依赖 `DB` 门面；入口内不得出现模型；受限入口不得依赖任何 `Models` 命名空间；Core 不得依赖 `App\Modules`；业务模块的测试只在 `tests/Modules/<模块>` 与 `tests/Http/<入口>/<模块>` 中（Core 与其他模块的测试不引用它，删除业务模块后其余测试不受影响；Core 的菜单树测试按 name 定位节点、只比较 Core 的目录）。
-- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Http` 中调用模型写方法（落地前核实版本）。
+- **“写必须走 Action”**：Pest 无法检测方法调用，使用 PHPStan 扩展 `spaze/phpstan-disallowed-calls` 禁止 `App\Http` 中调用模型写方法（4.15，`phpstan.neon` 的 `disallowedMethodCalls` / `disallowedStaticCalls`）。
 - **授权只走 Gate**：同样用 `spaze/phpstan-disallowed-calls` 加架构测试，禁止直接调用 spatie 的判定 API（§8.1）。
 - **Core 的内部方向**（Pest 架构测试）：System 是底座，不依赖 Monitor、Message；Monitor 与 Message 互不依赖。读侧（Query、Policy、Rule、导出类、Data）不使用 Action。领域层（Core、Modules）不使用 Symfony 的 `HttpKernel\Exception`（§5.4）。
 - **分层的写法**（Pest 架构测试）：Action 只暴露 `handle()`，没有其他公开方法、公开静态方法与公开常量（§5.4 的 Action 边界）；`Data` 目录的类是 `readonly`；导出类实现 `Exporter`；`Services` 中的注册表是 `#[Singleton]`，单例不注入 `#[Scoped]` 的类；列表请求校验的 `filter.*` 与 Query 类的筛选白名单一致（§5.4）；模块语言包各语言的键一致。
@@ -626,7 +626,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 操作日志、登录日志与各模块的数据变更审计统一存在 spatie/laravel-activitylog 的 `activity_log` 表中，按日志名（`log_name`）区分：`operation`（操作日志）、`login`（登录日志）为 Monitor 保留，模块的审计使用模块自己的日志名（§5.5）。
 - 模型：`App\Core\Monitor\Models\Activity` 继承 spatie 的模型（`config('activitylog.activity_model')` 指向它，多态别名 `activity`），写入时自动在 `properties.request_id` 中记下当前请求 ID（`Context` 的 `request_id`，§9；随队列任务传递），模块的审计日志同样带上，可与同一请求的操作日志关联。`OperationLog`、`LoginLog` 继承它，各带日志名的全局作用域：路由模型绑定、列表都只能取到本类日志（用操作日志的 id 请求登录日志详情为 404）。
 - `causer` 是关联的后台用户（多态别名 `user`）；日志另存 `properties.username` 作为写入时的快照，用户改名、被删除后仍能看到是谁。
-- 筛选的 `properties.*` 字段用 JSON 路径查询（查询构造器的 `properties->username`，三种数据库通用），没有索引；日志量很大时再按需加生成列与索引。
+- 筛选的 `properties.*` 字段用 JSON 路径查询（查询构造器的 `properties->username`；`status` 按整数比较），三种数据库上都已实测，没有索引；日志量很大时再按需加生成列与索引。
 - 清理：调度每天执行 `activitylog:clean --force`（`routes/console.php`），删除早于 `activitylog.clean_after_days`（环境变量 `ACTIVITYLOG_CLEAN_AFTER_DAYS`，默认 365）天的全部日志（含模块的审计）。
 
 **操作日志**（`log_name = operation`）
@@ -637,7 +637,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
   - 认证请求只记登录日志，不记操作日志：路由名在 `config('core.monitor.operation_log.except_routes')` 中的不记，默认是登录（`login.store`）、登出（`logout`）、两步验证登录（`two-factor.login.store`）；个人设置中的修改资料、修改密码、开启 / 关闭两步验证等照常记录；
   - 无论成功失败都记，`status` 为最终的 HTTP 状态码（含 403、422、500）。
 - 记录内容：`causer`（操作者）、`description`（路由名，如 `admin.system.users.store`、`user-password.update`；路由没有名称时为 `<方法> /<路由 URI>`）与 `properties`：`username`、`method`、`path`（实际请求路径，以 `/` 开头）、`route_parameters`（路由参数，取原始值）、`payload`（请求体，脱敏）、`status`、`duration_ms`（从进入本中间件到得到响应的毫秒数）、`ip_address`、`user_agent`（最长 500 字符）、`request_id`。
-- `payload` 只取请求体（JSON 或表单字段，不含查询字符串；上传的文件不记录），在进入后续中间件之前读取，即提交的原始内容。
+- `payload` 只取请求体（JSON 或表单字段，不含查询字符串；上传的文件不记录），在进入后续中间件之前读取，即提交的原始内容。`properties` 是 JSON 列：MySQL 会按键长与字典序重排对象的键（PostgreSQL 的 jsonb 同样），详情中 `payload` 的键顺序可能与提交时不同，值不变。
 - **截断**（与脱敏一起在 Action 中完成）：字符串值超过 `config('core.monitor.operation_log.max_value_length')`（默认 1000）个字符的，保留前面部分并加上 `…(truncated)`，递归处理，`route_parameters` 同样适用；脱敏、截断后的 `payload` 编码为 JSON 仍超过 `max_payload_bytes`（默认 65536 字节）时，整体替换为 `{ "_truncated": true, "_bytes": 原始请求体的 JSON 字节数 }`。
 - **脱敏**：键名（不区分大小写，支持 `*` 通配）与 `config('core.monitor.masked_keys')` 匹配的值整体替换为 `******`，递归处理嵌套对象与数组；默认 `*password*`（含 `password_confirmation`、`current_password`）、`*token*`、`*secret*`、`code`、`recovery_code`。`route_parameters` 同样脱敏。脱敏在 Action 中完成，任何调用方写入的操作日志都经过它。脱敏与截断的规则由 Monitor 的 `DataMasker` 实现，失败任务、定时任务的输出共用同一份规则与键名（下文“失败任务”）。
 - **写入失败不影响响应**：在响应发送之后写入（`defer(...)->always()`，4xx / 5xx 也写），异常只 `report()`，不抛出。PHP-FPM 下在 `fastcgi_finish_request()` 之后执行；Octane 下由 worker 在发送响应后执行（框架的 `InvokeDeferredCallbacks`），不延迟响应，但该 worker 要等写完才接下一个请求。数据只在闭包中捕获，不放静态属性或单例。
@@ -657,7 +657,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 **在线会话与 token**（§7.3）
 
 - **会话**：读取 database 会话驱动的会话表（`config('session.table')`，`config('session.connection')`），模型 `App\Core\Monitor\Models\Session`（只读，删除走 Action）。“在线”是 `user_id` 非空、`last_activity` 在 `session.lifetime` 分钟之内的会话。
-  - 输出字段：`id`（**会话 ID 的前 16 位**：完整的会话 ID 就是登录凭据，不对外输出；前 16 位足以唯一定位，剩余部分仍无法猜测）、`user`（`{ id, username, name }`）、`ip_address`、`user_agent`、`last_activity`、`is_current`（是否为发起本次请求的会话）。不输出会话内容（`payload`）。
+  - 输出字段：`id`（**会话 ID 的前 16 位**：完整的会话 ID 就是登录凭据，不对外输出；前 16 位足以唯一定位，剩余部分仍无法猜测；路由绑定按 `LIKE '<前 16 位>%'` 查找后再按大小写精确比较，MySQL 默认的排序规则不区分大小写，已实测）、`user`（`{ id, username, name }`）、`ip_address`、`user_agent`、`last_activity`、`is_current`（是否为发起本次请求的会话）。不输出会话内容（`payload`）。
   - 列表：筛选 `user_id`（精确）、`username`、`ip_address`（模糊）；排序 `last_activity`，默认 `-last_activity`。
   - 会话驱动不是 `database` 时：会话表不是会话的来源，视同没有在线会话——列表为空（`{ items: [], total: 0 }`），下线返回 404；token 不受影响。生产使用 Redis 会话时，在线会话需另行记录（§7.3）。
 - **token**：Sanctum 的 `personal_access_tokens` 中属于后台用户、仍然有效的 token：`expires_at` 为空或晚于现在，且配置了 `sanctum.expiration` 时创建于该分钟数之内（与 Sanctum 的校验一致）。
@@ -771,8 +771,8 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 | `PUT /system/dict-items/{dict_item}` | 修改字典项：字段同新增 | `system.dict.update` |
 | `DELETE /system/dict-items/{dict_item}` | 删除字典项 | `system.dict.delete` |
 | `GET /system/settings` | 全部已声明的参数，按分组（数组，**不分页**，§6.3 的例外） | `system.setting` |
-| `PUT /system/settings/{key}` | 修改单个参数：`{ value }` | `system.setting.update` |
-| `PUT /system/setting-groups/{group}` | 按分组批量修改：`{ <参数名>: 值, … }` | `system.setting.update` |
+| `PUT /system/settings/{setting}` | 修改单个参数（`{setting}` 是参数的键，如 `site.name`；`{setting_group}` 是分组）：`{ value }` | `system.setting.update` |
+| `PUT /system/setting-groups/{setting_group}` | 按分组批量修改：`{ <参数名>: 值, … }` | `system.setting.update` |
 
 **节点**（`app/Core/System/resources/menus.php`，`system` 目录下）：`system.dict`（`/system/dict`，组件 `/system/dict/list`，`lucide:book-open-text`，`order` 40；按钮 `create`、`update`、`delete`，字典类型与字典项共用）、`system.setting`（`/system/setting`，组件 `/system/setting/index`，`lucide:sliders-horizontal`，`order` 50；按钮 `update`——参数不能新增、删除，没有对应按钮）。字典页是“类型列表 + 选中类型的字典项”，参数页是按分组的表单（与 `monitor.health` 一样用 `index`）。
 
@@ -835,7 +835,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 读取（给代码用）：注入或 `resolve()` 服务 `App\Core\System\Services\Settings`，**不提供全局 helper 与 facade**：`get($key)`，以及按声明类型返回的 `string()`、`integer()`、`float()`、`boolean()`、`array()`（声明类型不符时抛出 `LogicException`）。读取未声明的键抛出 `InvalidArgumentException`（参数必须先声明）。值的来源：库中的值（类型与声明一致时）→ 否则声明的默认值（`default`，或读取 `config`）。整张表的值整体缓存（带版本号的键 `core:settings:<版本>`，经 `Cache::memo()`，规则同字典的缓存），写入（事务提交后）与同步命令换一个新版本。服务不保存状态，常驻内存安全。
 - 管理接口：
   - `GET /system/settings`：`[{ group, title, settings: [...] }]`，分组按 `order`、注册顺序，参数按声明顺序；参数输出 `key`、`name`、`remark`、`type`、`value`（当前生效的值）、`default`（声明的默认值）、`is_customized`（库中有管理员改过的值）、`is_public`、`dict`（引用的字典类型，没有时为 null）。只列出已声明的参数。
-  - `PUT /system/settings/{key}`：`{ value }`（必须提交，可为 null）；`PUT /system/setting-groups/{group}`：请求体的键是该分组的参数名（不带分组前缀，校验错误挂在参数名上，前端表单字段名 = 参数名），只修改提交的参数，未声明的键 → 422。**`value` 为 null 表示恢复默认值**（空字符串经框架的 `ConvertEmptyStringsToNull` 同样视为 null，因此字符串参数不能存空字符串，除非默认值就是空字符串）。按类型校验（`int` 为整数，`bool` 接受 `true` / `false` / `0` / `1`，`json` 为数组或对象）并追加声明的 `rules`（引用字典时再加 `InDict`），不通过 → 422（单个挂在 `value`，分组挂在参数名）；保存前按类型转换（`"10"` → `10`，`"1"` → `true`）。未声明的键或分组 → 404。响应为修改后的参数 / 分组（格式同列表）。
+  - `PUT /system/settings/{setting}`：`{ value }`（必须提交，可为 null）；`PUT /system/setting-groups/{setting_group}`：请求体的键是该分组的参数名（不带分组前缀，校验错误挂在参数名上，前端表单字段名 = 参数名），只修改提交的参数，未声明的键 → 422。**`value` 为 null 表示恢复默认值**（空字符串经框架的 `ConvertEmptyStringsToNull` 同样视为 null，因此字符串参数不能存空字符串，除非默认值就是空字符串）。按类型校验（`int` 为整数，`bool` 接受 `true` / `false` / `0` / `1`，`json` 为数组或对象）并追加声明的 `rules`（引用字典时再加 `InDict`），不通过 → 422（单个挂在 `value`，分组挂在参数名）；保存前按类型转换（`"10"` → `10`，`"1"` → `true`）。未声明的键或分组 → 404。响应为修改后的参数 / 分组（格式同列表）。
   - **只能修改已声明的参数，接口不能新增、删除参数**：参数是给代码读的，代码不读的参数没有意义；需要新参数就在模块中声明（随代码发布，类型、默认值、校验一起评审）。需要后台自由增减的键值，用字典或模块自己的表。
   - Policy：`SettingPolicy`：`viewAny` / `view`（`system.setting`）、`update`（`system.setting.update`），`create`、`delete` 等一律拒绝。
 - 声明与同步见下文。
@@ -1016,7 +1016,7 @@ return [
 
 **通知的存储**
 
-- 表：官方的 `notifications`（`php artisan make:notifications-table`）：`id`（UUID）、`type`、`notifiable_type` / `notifiable_id`（多态，存别名 `user`，§4.5）、`data`、`read_at`、时间戳。唯一的改动：`data` 由 `text` 改为 `json`——撤回公告时按 `data->subject` 查找已发出的通知，PostgreSQL 的 JSON 路径查询要求列是 json 类型；MySQL、SQLite 不受影响，框架的 `array` 转换照常工作。
+- 表：官方的 `notifications`（`php artisan make:notifications-table`）：`id`（UUID）、`type`、`notifiable_type` / `notifiable_id`（多态，存别名 `user`，§4.5）、`data`、`read_at`、时间戳。唯一的改动：`data` 由 `text` 改为 `json`——撤回公告时按 `data->subject` 查找已发出的通知，PostgreSQL 的 JSON 路径查询要求列是 json 类型；MySQL、SQLite 不受影响，框架的 `array` 转换照常工作（三种数据库上已实测）。
 - 写入用框架的 database 通道（`$user->notify()`、`Notification::send()`，写入 `User::notifications()`，模型是框架的 `DatabaseNotification`）；读取、授权与清理用 Message 的模型 `App\Core\Message\Models\Notification`（继承 `DatabaseNotification`，同一张表，多态别名 `notification`）。System 不依赖 Message，`User` 保持框架的 `Notifiable`。
 - 用户被删除时，他的通知一并删除（Message 监听 Core 事件 `UserDeleting`，在删除的事务中，§5.5）。
 
@@ -1510,7 +1510,7 @@ public function delete(User $actor, User $user): Response
 - 超管用户只有超管能编辑、重置密码、停用、删除 —— 403。
 - 非超管只能编辑、重置密码、启停、删除“管得到”的用户（§8.5：他的全部角色，含停用的，权限码与数据范围都不超过操作者）—— 403。
 - 系统至少保留一个启用的超管（账号启用且拥有启用的 `super-admin` 角色）：最后一个启用的超管不能删除（`message`）、不能停用（`status`，修改接口与状态接口都拦）、不能去掉超管角色（`roles`）—— 422。
-  - 并发与**锁顺序**：检查与写入在同一事务中。凡是可能减少启用超管的事务——删除用户（`DeleteUser`）、停用用户（`ChangeUserStatus`，状态接口与修改接口）、修改用户时提交了 `roles` 或停用（`UpdateUser`）——**第一条语句**都是对 `super-admin` 角色那一行 `lockForUpdate()`（`SuperAdminGuard::lock()`），之后才读写用户行、角色分配等其他行。统一的顺序是“先 `super-admin` 角色行，再用户行”，避免两条路径互相等待而死锁；MySQL / MariaDB 默认的 REPEATABLE READ 下，事务的一致性快照在第一条普通读取时建立，拿锁之前不做任何读取，快照就不会早于前一个持锁者的提交。计数本身也是加锁读（`sharedLock()`，只锁 `super-admin` 的持有者及其分配行），加锁读总是读最新提交的版本。这样“两个超管同时停用对方后一个不剩”的写操作被串行化。PostgreSQL（READ COMMITTED）每条语句取新快照；SQLite 不支持行锁，但同一时间只有一个写事务。MySQL 上的并发实测见 §14。
+  - 并发与**锁顺序**：检查与写入在同一事务中。凡是可能减少启用超管的事务——删除用户（`DeleteUser`）、停用用户（`ChangeUserStatus`，状态接口与修改接口）、修改用户时提交了 `roles` 或停用（`UpdateUser`）——**第一条语句**都是对 `super-admin` 角色那一行 `lockForUpdate()`（`SuperAdminGuard::lock()`），之后才读写用户行、角色分配等其他行。统一的顺序是“先 `super-admin` 角色行，再用户行”，避免两条路径互相等待而死锁；MySQL / MariaDB 默认的 REPEATABLE READ 下，事务的一致性快照在第一条普通读取时建立，拿锁之前不做任何读取，快照就不会早于前一个持锁者的提交。计数本身也是加锁读（`sharedLock()`，只锁 `super-admin` 的持有者及其分配行），加锁读总是读最新提交的版本。这样“两个超管同时停用对方后一个不剩”的写操作被串行化。PostgreSQL（READ COMMITTED）每条语句取新快照；SQLite 不支持行锁，但同一时间只有一个写事务。MySQL 8 与 PostgreSQL 16 上已用两个进程实测（§10.5 的 `ConcurrentActionsTest`）：停用、删除、去掉超管角色两两并发时只有先拿到锁的成功，另一个 422，最后剩一个启用的超管，没有死锁。
   - 其他路径不会减少启用超管：`super-admin` 角色不能删除（403）、不能停用（422，状态接口与修改接口都拦）、标识不能改，同步命令不改它的状态；个人资料不能改状态与角色。
   - 通过接口时，非超管操作超管用户先被 403 拦住，超管操作者自己就是一个启用的超管，因此删除、停用的这条 422 实际只在并发时出现；去掉自己的超管角色在只剩自己时直接出现。
 - 非超管授予或收回 `super-admin` 角色 —— 422（`roles`）。
@@ -1522,7 +1522,7 @@ public function delete(User $actor, User $user): Response
 
 - 非超管只能修改、删除、启停“管得到”的角色（§8.5）—— 403；查看不受限。
 - `super-admin` 不能删除 —— 403；只有超管能修改、启停它 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树；修改时提交 `permissions` —— 422（`permissions`）。
-- 已分配给用户的角色不能删除 —— 422（`message`）。检查前先锁住角色行，分配角色时对涉及的角色加共享锁，二者互斥：不会在检查之后又被分配、随后被级联外键静默移除。
+- 已分配给用户的角色不能删除 —— 422（`message`）。检查前先锁住角色行，分配角色时（`SyncUserRoles`，单独调用时也在自己的事务中）对涉及的角色加共享锁，二者互斥：不会在检查之后又被分配、随后被级联外键静默移除；分配时角色已被并发删除 → 422（`roles`）。两边都**按主键**加锁：按 `name` 索引加共享锁会先锁住二级索引、再等主键，与正在删除这一行的事务互相等待（MySQL 实测为死锁）。
 - 授予的权限码超出自己的有效权限码 —— 422（`permissions`）；选用自己不可授予的数据范围 —— 422（`data_scope`，§8.5）。
 - 停用角色的权限与数据范围都不生效。
 
@@ -1655,7 +1655,7 @@ public function delete(User $actor, User $user): Response
 - 管道运算符：Pint 不会给 `|>` 补空格，约定**两侧手写空格、每段一行**；
 - `clone(...)`：Pint 会改写为 `clone (...)`，接受这种写法。
 
-Scramble 的兼容性在引入时另行验证。
+Scramble（0.13.55，§12.2）已实测：能解析使用了上表特性的全部代码，为后台入口的 114 条路由生成文档，局限见 `server/README.md` 的“接口文档”。
 
 ### 10.3 常驻内存兼容规则
 
@@ -1664,9 +1664,12 @@ Scramble 的兼容性在引入时另行验证。
 - 禁止用静态属性或单例保存请求相关数据；需要请求级状态时用 `#[Scoped]`、`Cache::memo()`、`Context`。
 - 禁止在请求中修改 `config()`。
 - 禁止 `exit()`、`die()`。
-- 引入第三方包前确认其支持 Octane；有状态的服务登记到 Octane 的 `flush` 配置。
+- 引入第三方包前确认其支持 Octane；有状态的服务登记到 Octane 的 `flush` 配置（`config/octane.php`，目前没有需要登记的绑定）。
+- **只有启动时解析的实例会常驻 worker**：Octane 每个请求克隆一个沙箱，请求中才解析的单例随沙箱丢弃；Provider 的 `boot()` 中解析的实例（如各注册表）与预热（`octane.warm`）的才跨请求存在。因此 Provider 中只在闭包里、用到时再 `resolve()`（如 `Gate::before`、`Fortify::authenticateUsing()`、限流器、`Route::bind()`），不在 `boot()` 中解析请求级的服务；数据范围提供者在启动时由 `DataScopeRegistry` 解析并常驻，同样不得注入 `#[Scoped]` 的类（`tests/Arch`）。
+- spatie 的 `PermissionRegistrar` 在 Octane 下由它自己的监听在每个请求结束时清空内存集合（`permission.register_octane_reset_listener`）：这个监听只在 `config/octane.php` 存在（有 `listeners`）且不是命令行进程时注册，因此 `config/octane.php` 随代码提交。目前它在启动时不被解析（`register_permission_check_method` 为 false），每个请求本来就是新实例，监听是兜底。
 - **常驻的队列 worker 同样要在任务之间重置状态**：框架在任务之间重置 `#[Scoped]` 实例与 `Cache::memo()`；第三方的单例注册器要自己处理。spatie 的 `PermissionRegistrar` 把节点与授权保存在内存中，Web 端改动授权时只能清掉本进程的副本与共享缓存，worker 中的副本不会更新——`SystemServiceProvider` 监听 `JobProcessing`，每个任务开始前调用 `clearPermissionsCollection()`（只清内存集合，下次读取时从共享缓存重新载入），保证任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。`EffectivePermissions` 是 `#[Scoped]`，参数与字典经 `Cache::memo()` 读取，其余单例（`MenuRegistry`、`DataScopeRegistry` 等）只保存启动时的声明，不需要额外处理。
-- 以上能自动检查的（静态属性、`exit`）加入架构测试。
+- 以上能自动检查的（静态属性与静态变量、`exit` / `die` / 调试函数、单例注入 `#[Scoped]`）加入架构测试；请求之间的状态泄露由 Octane 冒烟检查（§10.5）。
+- 第三方包的核查结果（2026-11）：activitylog（有状态的服务以 `scoped` 注册）、backup、health、schedule-monitor、simple-excel、html-sanitizer 见 §12.1；query-builder 没有静态状态（每次 `QueryBuilder::for()` 从当前请求取参数）；Fortify、Sanctum 的静态配置只在启动时设置；health 的 `InMemoryHealthResultStore` 有静态结果，但本项目用 `CacheHealthResultStore`。都不需要登记到 `flush`。
 
 ### 10.4 代码生成
 
@@ -1751,7 +1754,12 @@ php artisan core:make-crud Tag --module=Blog                                    
   - 代码里用到的权限码都已在 `MenuRegistry` 中声明；
   - 不直接调用 spatie 的判定 API（§8.1）。
 - 安全相关模块（认证、权限、数据权限）运行 Pest 变异测试。
-- CI 在 Linux + PHP 8.5 下运行全部测试，并在 Octane 下额外运行一遍，确保可无缝切换。
+- **CI 在 Linux + PHP 8.5 下、在 SQLite、MySQL 与 PostgreSQL 上分别运行全部测试**（`.github/workflows/server.yml` 的 `quality` 与 `database` 矩阵，本地用环境变量覆盖 `DB_*` 即可，命令见 `server/README.md`）。写测试时注意：
+  - 读回 JSON 列（`activity_log.properties`、`notifications.data`、`permissions.meta` 等）的断言用 `toBeIgnoringKeyOrder()`（`tests/Pest.php`）：MySQL 的 JSON 列按键长与字典序重排对象的键，PostgreSQL 的 jsonb 同样不保留顺序，接口输出这些对象时键的顺序因数据库而异（值不变）；
+  - 不按 SQLite 的方言断言 SQL 文本（引号、锁子句），不把驱动名、默认连接名写死；
+  - 依赖行序的结果要显式排序（spatie 加载节点不排序，PostgreSQL 中修改过的行排到最后，`EffectivePermissions` 按 id 排序）。
+- **并发与锁**在两个进程中真正并发地验证（`tests/Core/System/Actions/ConcurrentActionsTest.php`，只在 MySQL / PostgreSQL 上运行）：两个超管同时停用、删除对方或去掉对方的超管角色，删除角色与分配角色，删除节点与新增子节点，附件清理与绑定。先启动的进程拿到锁后停留，另一个进程必须等待，并看到前者提交的结果（422 或跳过，不是 500、不是死锁）。
+- **Octane**：§10.3 的规则加入架构测试；另用同一组冒烟请求（`tests/Http/Admin/Fixtures/octane-smoke.php`：多个用户交替请求、数据范围、授权变更后立即生效、语言、请求 ID、响应后写入的操作日志、停用账号立即失效）检查请求之间的状态泄露——`composer test` 中的 `OctaneWorkerTest` 在进程内用 Octane 的 `Worker`（每个请求一个沙箱，与 FrankenPHP 的 worker 相同）处理，CI 的 `octane` job（`composer test:octane`）再用真实的 FrankenPHP（2 个 worker）跑一遍。全部测试不在 Octane 下重跑：Pest 每个测试重建应用，跑在 Octane 下也测不到跨请求的状态。
 
 ## 11. 运行、开发与部署
 
@@ -1760,7 +1768,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 方式 | 说明 |
 |---|---|
 | Herd（Windows / macOS） | 本机开发的推荐方式，PHP-FPM 模式，与默认生产形态一致 |
-| Sail（Docker） | 团队统一环境；也用于验证 FrankenPHP |
+| Sail（Docker） | 团队统一环境；也用于验证 FrankenPHP（Linux / WSL2 上也可以直接把 FrankenPHP 二进制放在 `server/frankenphp`，见 `server/README.md` 的“Octane”） |
 | 本机 PHP | `php artisan serve` |
 
 - 队列开发时用 `queue:listen`；Horizon 依赖 `pcntl`，Windows 本机不可用，仅在 Linux 环境使用。
@@ -1784,7 +1792,8 @@ php artisan core:make-crud Tag --module=Blog                                    
 **可选：FrankenPHP（Octane worker 模式）**
 
 - 一个进程同时托管 API 与静态文件，Caddy 自动申请 HTTPS 证书；
-- 路由分流规则与默认形态相同。
+- 路由分流规则与默认形态相同；
+- `laravel/octane` 已在依赖中、`config/octane.php` 已提交（默认服务器 `frankenphp`），切换只需在运行时镜像中放入 FrankenPHP 二进制，用 `php artisan octane:start --server=frankenphp --workers=<N> --max-requests=<N>` 启动（或 Caddyfile 中的 worker 配置）；发布时必须 `octane:reload`（§11.4）。上线前在本地用 `composer test:octane`（§10.5）确认没有请求之间的状态泄露。
 
 `deploy/` 同时提供两套配置（Nginx + PHP-FPM、Caddyfile + FrankenPHP）。镜像用多阶段构建：Node 构建前端 → Composer 安装后端 → 运行时镜像。构建产物不进 git。
 
@@ -1833,8 +1842,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | laravel/framework 13 | 框架 |
 | laravel/fortify 1.43 | **完整使用**：登录、两步验证、找回密码、邮箱验证、确认密码、个人资料（连带安装 laravel/passkeys 0.3，功能关闭） |
 | laravel/sanctum 4.5 | SPA 会话认证 + token |
-| laravel/pulse 1.11 | 生产性能监控（接入方式待定，暂不安装，§14） |
-| laravel/octane 2.25 | 可选：常驻内存运行（FrankenPHP） |
+| laravel/octane 2.25 | 常驻内存运行（FrankenPHP worker 模式，§11.2）。**放在 `require`**：切换到 FrankenPHP 只改部署、不改依赖（生产 `composer install --no-dev` 也带着它），PHP-FPM 下它只注册命令与监听，不影响请求；`config/octane.php` 随代码提交（spatie 的 Octane 监听依赖它，§10.3）。FrankenPHP 二进制不进仓库（`.gitignore`），CI 下载固定版本 |
 | laravel/horizon 5.52 | 可选：Redis 队列管理（需 pcntl，Linux） |
 | laravel/reverb 1.14 | 可选：实时推送 |
 | laravel/pennant 1.28 | 可选：功能开关 |
@@ -1855,7 +1863,6 @@ php artisan core:make-crud Tag --module=Blog                                    
 
 | 包 | 用途 |
 |---|---|
-| dedoc/scramble 0.13 | OpenAPI 文档（仅本地环境开放） |
 | symfony/html-sanitizer 8.1 | 富文本净化（§9）。已核实 8.1：`HtmlSanitizer` 构造后只读（配置不可变），作为单例注册，不保存请求数据 |
 
 ### 12.2 开发与 CI
@@ -1864,18 +1871,20 @@ php artisan core:make-crud Tag --module=Blog                                    
 |---|---|
 | laravel/pint | 代码风格（含分组导入规则） |
 | larastan/larastan + phpstan | 静态分析，level max，不使用 baseline；`phpstan-deprecation-rules` |
-| spaze/phpstan-disallowed-calls | “写必须走 Action”等禁止调用规则（落地前核实） |
+| spaze/phpstan-disallowed-calls | “写必须走 Action”、禁止 spatie 判定 API 等禁止调用规则（`phpstan.neon`） |
 | rector/rector + driftingly/rector-laravel | 语法升级、Laravel 升级 |
-| pestphp/pest 5 + pest-plugin-mutate | 测试、架构测试、变异测试 |
-| laravel/telescope | 本地调试 |
+| pestphp/pest 5 + pest-plugin-mutate | 测试、架构测试、变异测试（变异测试尚未接入，§14） |
+| dedoc/scramble 0.13 | OpenAPI 文档（`require-dev`，只在 `local` 环境开放 `/docs/api`；响应按 Vben 格式改写，见 `server/README.md` 的“接口文档”） |
 | laravel/boost | AI 辅助开发（MCP、规范） |
-| laravel/sail | 开发环境 |
-| PCOV | CI 覆盖率 |
+| PCOV | 覆盖率（按需；CI 目前不收集覆盖率，`coverage: none`） |
 | composer audit / npm audit | 依赖安全审计 |
 
 ### 12.3 按需（写进规范，不默认安装）
 
-`saloonphp/saloon`（对接第三方 API）、`deptrac/deptrac`（模块变多后的分层可视化）、`spatie/laravel-medialibrary`（附件缩略图）、`laravel-model-states`、`laravel-pdf`、`laravel-webhook-*`、`laravel-multitenancy`、`laravel/passport`（开放平台）、`laravel/mcp`（AI 调用后台能力）。
+- **laravel/telescope**（本地调试）：不默认安装。它把每个请求、查询、任务写进数据库并提供自己的页面，脚手架默认装上会拖慢本地与测试、多一组迁移；需要时只装在开发环境：`composer require laravel/telescope --dev`、`php artisan telescope:install`、`php artisan migrate`，在 `composer.json` 的 `extra.laravel.dont-discover` 中加 `laravel/telescope`，并只在 `local` 环境注册 `TelescopeServiceProvider` 与 Telescope 自己的 Provider（`AppServiceProvider::register()` 中 `if ($this->app->environment('local') && class_exists(TelescopeServiceProvider::class))`）；`phpunit.xml` 已设 `TELESCOPE_ENABLED=false`。
+- **laravel/pulse**（生产性能监控）：不默认安装。它的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突；健康检查与系统信息（§6.6）已覆盖“服务是否正常”。需要请求耗时、慢查询、队列吞吐这类趋势时再接入：只用它的记录器写 `pulse_*` 表（`PULSE_ENABLED`，`phpunit.xml` 已设为 false），在 Monitor 中加只读的 Query 与后台接口（权限码 `monitor.pulse`）读取聚合数据给前端图表；`/pulse` 页面最多作为只对超管开放的运维入口（`viewPulse` Gate）。
+- laravel/sail：团队需要统一的 Docker 开发环境、或在本机验证 FrankenPHP 时使用（§11.1）。
+- `saloonphp/saloon`（对接第三方 API）、`deptrac/deptrac`（模块变多后的分层可视化）、`spatie/laravel-medialibrary`（附件缩略图）、`laravel-model-states`、`laravel-pdf`、`laravel-webhook-*`、`laravel-multitenancy`、`laravel/passport`（开放平台）、`laravel/mcp`（AI 调用后台能力）。
 
 ### 12.4 明确不使用
 
@@ -1909,7 +1918,7 @@ php artisan core:make-crud Tag --module=Blog                                    
 | 通知中心 | 我的通知（列表、未读数、已读、全部已读、删除）的接口与本人校验；通知类的基类 `InboxNotification`（固定的输出结构 `NotificationContentData`、对外的类型名、停用用户不接收；`tests/Arch` 强制模块的通知继承它）；按记录查找通知（`subject`）；已读通知的定期清理 | Laravel 数据库通知（官方 `notifications` 表、`databaseType()`、`shouldSend()`）、`MassPrunable` |
 | 公告 | 公告管理（草稿 → 已发布 → 已撤回，目标为全部用户或指定角色，附件，数据范围）、发布后分批群发（锁行复核、入队后重新筛选接收人）、撤回时删除已发出的通知、我收到的公告 | Notifications、`Bus::batch`、`ShouldQueueAfterCommit`、数据库行锁 |
 | 定时任务 / 失败任务 | 定时任务与执行记录的只读接口（读 schedule-monitor 的表）；立即执行（按任务名在调度事件中查找、入队，与 `schedule:run` 相同地派发事件）；失败任务的只读模型与列表、详情；payload 与异常的脱敏、截断（与操作日志共用 `DataMasker`） | spatie/laravel-schedule-monitor、`queue:retry`、`FailedJobProviderInterface` |
-| 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 待定（§14） |
+| 系统监控 | 健康检查的选择与阈值、最新结果与立即检查接口、系统信息接口 | spatie/laravel-health（`health:check`）；Pulse 按需接入（§12.3） |
 | 枚举选项 | `HasLabel` / `HasColor` 接口、显式白名单 `EnumRegistry`（模块在 Provider 中登记对外名称，登记时校验颜色）、选项下发接口（`/options/enums`，按 `Accept-Language` 翻译，有颜色时输出 `color`） | PHP backed enum、翻译 |
 | 异步导出 | 扩展点 `Exporter` + `ExporterRegistry`（显式白名单）；列表的 Query 类供列表与导出共用（同一份筛选白名单与数据范围）；导出任务表与状态流转、发起时同步校验参数、并发上限（锁用户行）与限流；队列任务（执行时复核权限、`lazy()` 分块流式写出、按发起时的语言翻译、防公式注入、超时与失败处理）；文件存为附件并绑定到导出记录（签名下载、`PrivateAttachable` 只限发起人）；完成 / 失败事件与 Message 的通知；到期清理 | simple-excel（openspout）、队列（`ShouldQueueAfterCommit`、`failed()`）、附件（§6.8）、通知中心（§6.9）、`Prunable` |
 | 富文本净化 | 统一入口 `HtmlSanitizers`（按配置的档位 `basic` / `rich` 构造只读的净化器，可限定图片主机）与类型转换 `SanitizedHtml`（`:档位` 参数，写入属性时净化）；`tests/Arch` 保证只有这一个入口（§9） | symfony/html-sanitizer |
@@ -1926,11 +1935,10 @@ php artisan core:make-crud Tag --module=Blog                                    
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
-| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）、在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）与撤回公告、重发公告分块时按 `notifications.data->subject` 查找通知（§6.9）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
-| 并发与锁的 MySQL 实测 | 待 CI 加入 MySQL / MariaDB（REPEATABLE READ）后实测（§8.6）：两个超管同时停用、删除对方，或在修改用户时去掉对方的超管角色，最后仍剩一个启用的超管（另一个请求 422），且不出现死锁（500）；删除角色与分配角色、删除节点与新增子节点、附件清理与绑定的互斥。SQLite 不生成 `FOR UPDATE` / `LOCK IN SHARE MODE`，目前的测试只检查“先锁 `super-admin` 角色行”的语句顺序 |
+| MariaDB | 代码与配置支持 `mariadb` 连接（§3），但目前只在 MySQL 8.0（本机）/ 8.4（CI）上实测过；MariaDB 与 MySQL 的 JSON 列（MariaDB 的 JSON 是 `LONGTEXT` 的别名，保留键顺序）、锁与死锁检测有差异。需要支持时在 `server.yml` 的 `database` 矩阵中加一项 `mariadb`（服务镜像 `mariadb:11`），跑通后删去本条 |
 | 尚未实现的安全措施 | §7.4 的 token 过期时间（Sanctum `expiration` 目前为 null）、token 的签发接口，以及 §7.3 的“指定角色必须开启两步验证”：目前没有签发 token 的入口，暂不构成风险，开放设备 / App 入口时一并实现。个人资料修改邮箱暂不要求确认密码（会话被盗后可借此改邮箱、走找回密码），需要时给 Fortify 的资料接口加 `password.confirm` 并同步前端 |
-| 单个参数修改的日志脱敏 | `PUT /system/settings/{key}` 的请求体是 `{ value }`，操作日志按请求体键名脱敏，按参数键声明的密钥类参数会以明文记录。目前没有这类参数；加入时让参数声明 `sensitive`，并在操作日志中按路由参数的键脱敏 |
-| Pulse | 设计原定“系统监控依托 Pulse”，但 Pulse 的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突。暂不安装；接入时只用它的记录器写入 `pulse_*` 表，由后台接口读取聚合数据给前端图表，`/pulse` 页面最多作为只对超管开放的运维入口 |
+| 单个参数修改的日志脱敏 | `PUT /system/settings/{setting}` 的请求体是 `{ value }`，操作日志按请求体键名脱敏，按参数键声明的密钥类参数会以明文记录。目前没有这类参数；加入时让参数声明 `sensitive`，并在操作日志中按路由参数的键脱敏 |
 | 通用导入 | 暂不做（§6.10 的“导入”）：有第一个使用方时，按“附件上传 → 队列逐行校验并调用模块的 Action → 错误报告附件 → 完成通知”实现 |
 | 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `https` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
+| 变异测试 | §10.5 的“安全相关模块运行 Pest 变异测试”尚未接入：`pest-plugin-mutate` 已安装，但测试中还没有 `mutates()` 声明，CI 也不运行（全量变异很慢）。接入时在认证、权限码判定（`EffectivePermissions`、`Gate::before`）、数据范围（`HasDataScope`、`DataScopeRegistry`）、防提权（`Manageability`、`SyncUserRoles`、`SyncRolePermissions`）的测试中声明 `mutates()`，CI 另设一个只在推送到 main 或手动触发时运行的 job（`php artisan test --mutate`），不阻塞 PR |
 | 下载备份 | 不提供（§6.10）；确有需要时须同时满足：只限超管、确认密码（`password.confirm`）、单独的权限码、操作日志 |

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * 修改系统参数的值（PUT /system/settings/{key}、PUT /system/setting-groups/{group}，设计文档 §6.7）：
+ * 修改系统参数的值（PUT /system/settings/{setting}、PUT /system/setting-groups/{setting_group}，设计文档 §6.7）：
  *
  * - 只能修改已声明的参数（SettingRegistry），不能新增、删除；未声明的键抛出 InvalidArgumentException（接口在此之前已返回 404 / 422）；
  * - 值已按类型与声明的规则校验（入口的 Form Request），这里按类型转换后保存（`"10"` → 10、`"1"` → true）；
