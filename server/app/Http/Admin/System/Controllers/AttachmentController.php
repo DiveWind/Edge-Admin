@@ -2,7 +2,7 @@
 
 namespace App\Http\Admin\System\Controllers;
 
-use App\Core\System\Actions\{DeleteAttachment, StoreAttachment};
+use App\Core\System\Actions\{DeleteUnboundAttachment, StoreAttachment};
 use App\Core\System\Models\{Attachment, User};
 use App\Http\Admin\System\Requests\{AttachmentIndexRequest, AttachmentUploadRequest};
 use App\Http\Admin\System\Resources\AttachmentResource;
@@ -74,10 +74,10 @@ class AttachmentController
     }
 
     /**
-     * 删除（连同文件，事务提交后）：已绑定的附件 403（Policy）。
+     * 删除（连同文件，事务提交后）：已绑定的附件 403（Policy）；并发时（检查后被绑定）在锁内复核 → 422（Action）。
      */
     #[Authorize('delete', 'attachment')]
-    public function destroy(Attachment $attachment, DeleteAttachment $action): void
+    public function destroy(Attachment $attachment, DeleteUnboundAttachment $action): void
     {
         $action->handle($attachment);
     }

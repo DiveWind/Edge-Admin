@@ -12,7 +12,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - 停用自己 → 422（status）：状态接口由 UserPolicy 先返回 403，这里拦的是修改接口中提交的 status；
  * - 最后一个启用的超管不能停用 → 422（status，EnsureSuperAdminRemains，加锁防并发）；
- * - 停用走 DisableUser（已登录的会话与 token 立即失效），启用走 EnableUser。
+ * - 停用走 DisableUser（已登录的会话与 token 立即失效），启用走 EnableUser；
+ * - 锁顺序（§8.6）：停用时事务的第一条语句是锁住 super-admin 角色行（EnsureSuperAdminRemains），之后才写用户行。
  */
 class ChangeUserStatus
 {
@@ -40,6 +41,7 @@ class ChangeUserStatus
                 throw ValidationException::withMessages(['status' => [__('You cannot disable yourself.')]]);
             }
 
+            // 先锁 super-admin 角色行（锁顺序），再计数、写用户行
             $this->ensureSuperAdminRemains->handle($user, 'status');
             $this->disableUser->handle($user);
         });

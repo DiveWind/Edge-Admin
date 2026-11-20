@@ -5,9 +5,12 @@ namespace {{ namespace }};
 use {{ namespacedModel }};
 use {{ namespacedUserModel }};
 use Illuminate\Support\Facades\DB;
+{{#softDeletes}}
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+{{/softDeletes}}
 
 /**
- * 删除{{ model }}{{#softDeletes}}（软删除，可恢复，设计文档 §10.1）{{/softDeletes}}：在事务中锁行，已被别人删除 → 404。
+ * 删除{{ model }}{{#softDeletes}}（软删除，可恢复，设计文档 §10.1）{{/softDeletes}}：在事务中锁行，{{#softDeletes}}并发时已被别人删除 → 422（message），已被彻底删除 → 404。{{/softDeletes}}{{^softDeletes}}已被别人删除 → 404。{{/softDeletes}}
 {{#audit}}
  * 审计日志 `{{ permission }}.deleted`（只记事件）。
 {{/audit}}
@@ -20,11 +23,25 @@ class {{ class }}
 {{/audit}}
     /**
      * Execute the action.
+{{#softDeletes}}
+     *
+     * @throws UnprocessableEntityHttpException
+{{/softDeletes}}
      */
     public function handle({{ model }} ${{ modelVariable }}, {{ userModel }} $actor): void
     {
         DB::transaction(function () use (${{ modelVariable }}{{#audit}}, $actor{{/audit}}): void {
+{{#softDeletes}}
+            $locked = {{ model }}::query()->withTrashed()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
+
+            if ($locked->trashed()) {
+                throw new UnprocessableEntityHttpException(__('{{ lang }}.messages.already_deleted'));
+            }
+
+{{/softDeletes}}
+{{^softDeletes}}
             $locked = {{ model }}::query()->lockForUpdate()->findOrFail(${{ modelVariable }}->id);
+{{/softDeletes}}
             $locked->delete();
 {{#audit}}
 

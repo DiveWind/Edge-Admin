@@ -16,9 +16,11 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\{JsonResponse, Request};
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\{Event, Gate, RateLimiter};
 use Illuminate\Support\{ServiceProvider, Str};
 use Laravel\Fortify\Fortify;
+use Spatie\Permission\PermissionRegistrar;
 
 /**
  * System（内核模块）：职责与对外提供的能力见同目录的 README.md。
@@ -97,6 +99,7 @@ class SystemServiceProvider extends ServiceProvider
         }
 
         $this->configureAuthorization();
+        $this->configureQueueWorkers();
         $this->configureFortify();
         $this->configureRateLimiting();
         $this->configurePasswordReset();
@@ -123,6 +126,21 @@ class SystemServiceProvider extends ServiceProvider
             $registry = resolve(PermissionRegistry::class);
 
             return $registry->isRegistered($ability) ? $registry->allows($user, $ability) : null;
+        });
+    }
+
+    /**
+     * 常驻的队列 worker（设计文档 §10.3）：每个任务开始前清掉 spatie PermissionRegistrar（单例）在内存中的节点与授权集合
+     * （不清共享的缓存存储），下次读取时从缓存重新载入，任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。
+     * Web 端改动授权时 spatie 只能清掉本进程的内存副本与缓存存储，worker 中的副本不会随之更新；
+     * #[Scoped] 的 PermissionRegistry、Cache::memo() 由框架在任务之间重置，不需要额外处理。Octane 由 spatie 的 reset 监听处理。
+     */
+    protected function configureQueueWorkers(): void
+    {
+        Event::listen(JobProcessing::class, function (): void {
+            if ($this->app->resolved(PermissionRegistrar::class)) {
+                $this->app->make(PermissionRegistrar::class)->clearPermissionsCollection();
+            }
         });
     }
 

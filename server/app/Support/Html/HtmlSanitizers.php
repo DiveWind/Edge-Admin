@@ -15,7 +15,7 @@ use Symfony\Component\HtmlSanitizer\{HtmlSanitizer, HtmlSanitizerConfig, HtmlSan
  * - 输入最长 config('core.html.max_input_length') 字节（包的默认 20000 字节，超出部分会被静默截掉；字段的长度上限由 Form Request 校验）。
  *
  * 档位的键：
- * - media：是否允许图片等媒体（img、audio、video、source、track、picture）；允许时地址只能是 config('core.html.media_schemes')（默认 http、https）；
+ * - media：是否允许图片等媒体（img、audio、video、source、track、picture）；允许时地址只能是 config('core.html.media_schemes')（默认只有 https）；
  * - media_hosts：只允许这些主机的媒体（null 表示不限主机）。
  *
  * 单例：净化器构造后只读（配置不可变），按档位缓存在本实例中，不保存请求数据（常驻内存安全，§10.3）。

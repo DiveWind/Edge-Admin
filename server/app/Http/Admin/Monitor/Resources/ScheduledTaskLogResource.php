@@ -9,7 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * 定时任务执行记录的输出格式（Admin 入口，设计文档 §6.6）：meta 展开为 runtime（秒）、exit_code、memory（字节）、failure_message、output，
- * 不适用的为 null。output 只有任务调用 storeOutputInDb() 时才有，按失败任务的规则脱敏、截断（DataMasker）。
+ * 不适用的为 null。output 只有任务调用 storeOutputInDb() 时才有；output、failure_message 按失败任务的规则脱敏、截断（DataMasker）。
  *
  * @mixin ScheduledTaskLog
  */
@@ -23,6 +23,7 @@ class ScheduledTaskLogResource extends JsonResource
     public function toArray(Request $request): array
     {
         $output = $this->metaValue('output');
+        $failure = $this->metaValue('failure_message');
 
         return [
             'id' => $this->id,
@@ -30,7 +31,7 @@ class ScheduledTaskLogResource extends JsonResource
             'runtime' => $this->metaValue('runtime'),
             'exit_code' => $this->metaValue('exit_code'),
             'memory' => $this->metaValue('memory'),
-            'failure_message' => $this->metaValue('failure_message'),
+            'failure_message' => is_string($failure) ? $this->masked($failure) : null,
             'output' => is_string($output) ? $this->masked($output) : null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

@@ -66,7 +66,7 @@ php artisan schedule:work
 | `composer analyse` | Larastan 静态分析（最高级别，无 baseline） |
 | `composer refactor` | Rector 重构；只检查不修改：`composer refactor -- --dry-run` |
 | `composer test` | Pest 测试，含 `tests/Arch` 架构测试（SQLite 内存库） |
-| `composer ci` | lint + analyse + rector --dry-run + test，与 CI 一致 |
+| `composer ci` | lint + analyse + rector --dry-run + test，与 CI 一致；不需要 `.env`（测试的环境变量与只用于测试的 `APP_KEY` 都在 `phpunit.xml` 中） |
 
 ## 目录
 

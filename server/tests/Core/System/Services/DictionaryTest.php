@@ -3,7 +3,7 @@
 use App\Core\System\Actions\{DeleteDictType, UpdateDictItem};
 use App\Core\System\Models\{DictItem, DictType};
 use App\Core\System\Services\Dictionary;
-use Illuminate\Support\Facades\{Cache, DB};
+use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
@@ -50,12 +50,14 @@ it('clears the cache only after the transaction commits', function (): void {
     $dictionary = resolve(Dictionary::class);
     $dictionary->options('user_gender');
 
-    DB::transaction(function (): void {
+    $version = Dictionary::cache()->version();
+
+    DB::transaction(function () use ($version): void {
         $this->item->forceFill(['label' => 'Man'])->save();
 
-        expect(Cache::has(Dictionary::CACHE_KEY))->toBeTrue();
+        expect(Dictionary::cache()->version())->toBe($version);
     });
 
-    expect(Cache::has(Dictionary::CACHE_KEY))->toBeFalse()
+    expect(Dictionary::cache()->version())->not->toBe($version)
         ->and($dictionary->options('user_gender')[0]['label'])->toBe('Man');
 });

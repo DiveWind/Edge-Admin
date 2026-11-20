@@ -27,6 +27,7 @@ return [
     'messages' => [
         'publish_draft_only' => 'Only draft articles can be published.',
         'unpublish_published_only' => 'Only published articles can be unpublished.',
+        'already_deleted' => 'The article has already been deleted.',
         'restore_trashed_only' => 'Only deleted articles can be restored.',
         'force_delete_trashed_only' => 'Only deleted articles can be permanently deleted. Delete the article first.',
         'view_trashed' => 'You are not allowed to view deleted articles.',

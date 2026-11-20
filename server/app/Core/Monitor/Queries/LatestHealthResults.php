@@ -2,6 +2,7 @@
 
 namespace App\Core\Monitor\Queries;
 
+use App\Core\Monitor\Services\DataMasker;
 use Carbon\CarbonImmutable;
 use Spatie\Health\ResultStores\ResultStore;
 use Spatie\Health\ResultStores\StoredCheckResults\{StoredCheckResult, StoredCheckResults};
@@ -10,7 +11,8 @@ use Spatie\Health\ResultStores\StoredCheckResults\{StoredCheckResult, StoredChec
  * 最近一次健康检查的结果（GET /monitor/health，设计文档 §6.6）：读取 spatie/laravel-health 的结果存储（config('health.result_stores')，
  * 本项目为缓存）。尚无结果时 finished_at 为 null、checks 为 []。
  *
- * label、notification_message、short_summary 是包的英文文案，前端按 name 翻译标签；meta 原样输出（检查项的数值，如磁盘使用率）。
+ * label、notification_message、short_summary 是包的英文文案，前端按 name 翻译标签；notification_message 按失败任务的规则脱敏（DataMasker，
+ * 如数据库连接错误中的密码）；meta 原样输出（检查项的数值，如磁盘使用率）。
  */
 class LatestHealthResults
 {
@@ -37,7 +39,7 @@ class LatestHealthResults
                     'label' => $check->label,
                     'status' => $check->status,
                     'short_summary' => $check->shortSummary,
-                    'notification_message' => $check->notificationMessage ?? '',
+                    'notification_message' => resolve(DataMasker::class)->maskText($check->notificationMessage ?? ''),
                     'meta' => $check->meta,
                 ])
                 ->all()),

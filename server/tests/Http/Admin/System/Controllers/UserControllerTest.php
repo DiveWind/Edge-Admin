@@ -506,13 +506,15 @@ describe('update', function (): void {
             expect(assignedRoles($this->user))->toBe([]);
         });
 
-        it('keeps the roles that the operator cannot manage, whether submitted or not', function (array $submitted): void {
+        it('returns 403 for a user holding a role that the operator cannot manage, whether submitted or not', function (array $submitted): void {
             $this->user->assignRole($this->menuAdmin);
 
             $this->actingAs($this->operator)
                 ->putJson("/api/admin/system/users/{$this->user->id}", [...$this->payload, 'roles' => $submitted])
-                ->assertOk()
-                ->assertJsonPath('data.roles.*.name', ['viewer', 'menu-admin']);
+                ->assertForbidden()
+                ->assertJsonPath('message', 'You cannot manage users with permissions or data scopes beyond your own.');
+
+            expect(assignedRoles($this->user))->toBe(['menu-admin']);
         })->with([
             'not submitted' => [['viewer']],
             'submitted' => [['viewer', 'menu-admin']],
@@ -531,17 +533,17 @@ describe('update', function (): void {
             expect(assignedRoles($own))->toBe([]);
         });
 
-        it('keeps the roles with a data scope that the operator cannot grant', function (): void {
+        it('returns 403 for a user holding a role with a data scope that the operator cannot grant', function (): void {
             $this->viewer->update(['data_scope' => 'all']);
             $actor = userWithPermissions('system.user', 'system.user.update');
             $own = User::factory()->create(['created_by' => $actor->id])->assignRole($this->viewer);
-            $selfViewer = roleWithCodes('self-viewer', 'system', 'system.user');
+            roleWithCodes('self-viewer', 'system', 'system.user');
 
             $this->actingAs($actor)
                 ->putJson("/api/admin/system/users/{$own->id}", ['username' => $own->username, 'name' => $own->name, 'roles' => ['self-viewer']])
-                ->assertOk();
+                ->assertForbidden();
 
-            expect(assignedRoles($own))->toBe(['self-viewer', 'viewer']);
+            expect(assignedRoles($own))->toBe(['viewer']);
         });
 
         it('lets super admins assign roles with any data scope', function (): void {

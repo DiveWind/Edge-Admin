@@ -17,6 +17,7 @@ return [
 {{#softDeletes}}
 
     'messages' => [
+        'already_deleted' => 'The {{ modelWords }} has already been deleted.',
         'restore_trashed_only' => 'Only deleted {{ modelWordsPlural }} can be restored.',
         'force_delete_trashed_only' => 'Only deleted {{ modelWordsPlural }} can be permanently deleted. Delete the {{ modelWords }} first.',
         'view_trashed' => 'You are not allowed to view deleted {{ modelWordsPlural }}.',

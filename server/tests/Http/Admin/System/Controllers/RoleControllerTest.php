@@ -334,11 +334,13 @@ describe('update', function (): void {
         expect(grantedCodes($this->role))->toBe(['system', 'system.user', 'system.user.create']);
     });
 
-    it('keeps the codes that the operator does not have', function (): void {
+    it('returns 403 for a role with codes that the operator does not have', function (): void {
         $this->actingAs(userWithPermissions('system.role.update', 'system.user'))
             ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Editor', 'permissions' => ['system.role']])
-            ->assertOk()
-            ->assertJsonPath('data.permissions', ['system', 'system.user', 'system.user.create', 'system.role']);
+            ->assertForbidden()
+            ->assertJsonPath('message', 'You cannot manage roles with permissions or data scopes beyond your own.');
+
+        expect(grantedCodes($this->role))->toBe(['system', 'system.user', 'system.user.create']);
     });
 
     it('lets the operator remove the codes they have', function (): void {
@@ -359,7 +361,7 @@ describe('update', function (): void {
     });
 
     it('returns 422 when changing the data scope to one that the operator cannot grant', function (): void {
-        $this->actingAs(userWithPermissions('system.role.update'))
+        $this->actingAs(userWithPermissions('system.role.update', 'system.user.create'))
             ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Editor', 'data_scope' => 'all'])
             ->assertUnprocessable()
             ->assertJsonPath('errors.data_scope.0', 'You cannot grant a data scope you do not have.');
@@ -367,14 +369,17 @@ describe('update', function (): void {
         $this->assertDatabaseHas('roles', ['id' => $this->role->id, 'data_scope' => 'self']);
     });
 
-    it('keeps a data scope that the operator cannot grant when it is unchanged', function (bool $submitted): void {
+    it('returns 403 for a role with a data scope that the operator cannot grant, even with codes the operator has', function (bool $submitted): void {
         $this->role->update(['data_scope' => 'all']);
 
-        $this->actingAs(userWithPermissions('system.role.update'))
-            ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Changed', ...($submitted ? ['data_scope' => 'all'] : [])])
-            ->assertOk()
-            ->assertJsonPath('data.title', 'Changed')
-            ->assertJsonPath('data.data_scope', 'all');
+        // “码 × 范围”组合越权（§8.5）：不能把自己的码加到范围比自己大的角色上
+        $this->actingAs(userWithPermissions('system.role.update', 'system.user.create', 'system.user.delete'))
+            ->putJson("/api/admin/system/roles/{$this->role->id}", ['name' => 'editor', 'title' => 'Changed', 'permissions' => ['system.user.create', 'system.user.delete'], ...($submitted ? ['data_scope' => 'all'] : [])])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'You cannot manage roles with permissions or data scopes beyond your own.');
+
+        expect(grantedCodes($this->role))->toBe(['system', 'system.user', 'system.user.create'])
+            ->and($this->role->fresh()->title)->toBe('Editor');
     })->with(['submitted' => true, 'not submitted' => false]);
 
     it('lets super admins change the data scope to any registered scope', function (): void {

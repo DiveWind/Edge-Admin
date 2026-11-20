@@ -25,10 +25,15 @@ it('removes images and other media in the basic profile but keeps text formattin
         ->not->toContain('<video');
 });
 
-it('keeps http(s) images in the rich profile, which is the default', function (?string $profile): void {
+it('keeps https images in the rich profile, which is the default', function (?string $profile): void {
     expect(resolve(HtmlSanitizers::class)->sanitize('<img src="https://example.com/a.png" alt="a">', $profile))
         ->toBe('<img src="https://example.com/a.png" alt="a" />');
 })->with(['default' => null, 'rich' => 'rich']);
+
+it('drops plain http images by default, which would be mixed content', function (): void {
+    expect(resolve(HtmlSanitizers::class)->sanitize('<img src="http://example.com/a.png" alt="a">', 'rich'))
+        ->not->toContain('http://example.com');
+});
 
 it('removes scripts and event handlers in every profile', function (string $profile): void {
     $html = resolve(HtmlSanitizers::class)->sanitize('<p onclick="alert(1)">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">x</a>', $profile);

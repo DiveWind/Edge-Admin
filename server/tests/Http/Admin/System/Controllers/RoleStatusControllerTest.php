@@ -27,7 +27,7 @@ it('returns 403 without the system.role.status code', function (): void {
 });
 
 it('disables and enables the role', function (): void {
-    $actor = userWithPermissions('system.role.status');
+    $actor = userWithPermissions('system.role.status', 'system.user');
 
     $this->actingAs($actor)
         ->putJson("/api/admin/system/roles/{$this->role->id}/status", ['status' => 'disabled'])

@@ -39,7 +39,7 @@
 | `Actions/LogoutSession`、`Actions/RevokeToken` | 强制下线：删除会话、吊销 token |
 | `Enums/LoginEvent`、`Enums/LoginFailureReason` | 登录日志的事件（login、logout、failed、lockout、password_reset）与失败原因（invalid_credentials、disabled、two_factor） |
 | `Policies/OperationLogPolicy`、`LoginLogPolicy` | 日志的查看（`monitor.operation-log`、`monitor.login-log`，数据范围委托给 causer），写入一律拒绝 |
-| `Policies/SessionPolicy`、`PersonalAccessTokenPolicy` | 查看 `monitor.online`；强制下线 `monitor.online.logout`：不能是自己当前的会话 / 本次请求的 token，超管只有超管能下线，所属用户在数据范围内。后者在 `MonitorServiceProvider` 中用 `Gate::policy()` 绑定 |
+| `Policies/SessionPolicy`、`PersonalAccessTokenPolicy` | 查看 `monitor.online`；强制下线 `monitor.online.logout`：不能是自己当前的会话 / 本次请求的 token，超管只有超管能下线，所属用户在数据范围内，非超管只能下线“管得到”的用户的（System 的 `Services/Manageability`，自己的其他会话与 token 除外）。后者在 `MonitorServiceProvider` 中用 `Gate::policy()` 绑定 |
 | `Policies/ActivityPolicy` | 模块审计日志：暂无查看接口，一律拒绝 |
 | `Policies/ScheduledTaskPolicy`、`ScheduledTaskLogPolicy` | 查看 `monitor.schedule`；立即执行 `run`：`monitor.schedule.run`；其余拒绝 |
 | `Policies/FailedJobPolicy` | 查看 `monitor.failed-job`；`retry` / `retryAny`：`monitor.failed-job.retry`；`delete` / `deleteAny`（清空）：`monitor.failed-job.delete`；其余拒绝 |
@@ -106,7 +106,7 @@
 
 ## 依赖 Core 的能力
 
-- System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`。
+- System：菜单与权限节点扩展点 `MenuRegistry`（`resources/menus.php`）、用户模型与数据范围（`User::visibleTo()`、`DataScopeRegistry::isUnrestrictedFor()`）、超管判断 `isSuperAdmin()`、“管得到”的判定 `Services/Manageability`。
 - System：枚举选项的白名单 `EnumRegistry`：登记 `login_event`（`Enums/LoginEvent`，实现 `HasColor`）、`login_failure_reason`（`Enums/LoginFailureReason`），由 `/options/enums` 下发（设计文档 §6.7）。
 - 包：spatie/laravel-activitylog、spatie/laravel-schedule-monitor、spatie/laravel-health、spatie/laravel-backup；框架的 `failed_jobs`、`queue:retry`。
 

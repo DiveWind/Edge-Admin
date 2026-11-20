@@ -12,7 +12,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - super-admin 角色：标识不能改 → 422（name）；不能停用 → 422（status）；权限隐含全部，不能提交 permissions → 422（permissions）；
  * - 标识唯一 → 422（name）；
- * - 数据范围防提权：非超管把 data_scope 改为自己不可授予的范围 → 422（data_scope）；保持原值不拦（CreateRole::ensureGrantableDataScope()）；
+ * - 数据范围防提权：非超管把 data_scope 改为自己不可授予的范围 → 422（data_scope）；未改动时不检查（CreateRole::ensureGrantableDataScope()）；
+ *   非超管只能修改“管得到”的角色（RolePolicy，403，§8.5），因此 status 随 fill 写入不会被用来启用管不到的角色；
  * - 提交了 permissions 时按 SyncRolePermissions 的规则保存（防提权、保留操作者管不到的授权、补齐祖先）；未提交时权限不变。
  */
 class UpdateRole

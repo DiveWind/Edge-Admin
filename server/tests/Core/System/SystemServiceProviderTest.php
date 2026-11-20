@@ -2,7 +2,7 @@
 
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\{Permission, Role, User};
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\{Cache, DB, Gate};
 
 /*
 |--------------------------------------------------------------------------
@@ -74,4 +74,22 @@ it('does not register the spatie permission check on the gate', function (): voi
     $this->role->update(['status' => Status::Disabled]);
 
     expect($this->user->refresh()->can('demo'))->toBeFalse();
+});
+
+it('reloads the grants of the permission registrar before each queued job, as a long-running worker needs', function (): void {
+    // worker 处理过一个任务：PermissionRegistrar（单例）已把节点与授权读进内存
+    expect($this->user->can('demo'))->toBeTrue();
+
+    // 另一个进程（Web）收回授权：改库并清掉 spatie 的缓存存储，worker 内存中的副本不受影响
+    DB::table(config()->string('permission.table_names.role_has_permissions'))->where('role_id', $this->role->id)->delete();
+    Cache::forget(config()->string('permission.cache.key'));
+    app()->forgetScopedInstances();
+
+    // 下一个任务（sync 队列同样触发 JobProcessing）：按最新的授权判定
+    $id = $this->user->id;
+    dispatch(static function () use ($id): void {
+        Cache::put('job-result', User::query()->findOrFail($id)->can('demo'));
+    });
+
+    expect(Cache::get('job-result'))->toBeFalse();
 });

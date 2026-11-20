@@ -2,6 +2,7 @@
 
 namespace App\Core\System\Models;
 
+use App\Core\System\Actions\DeleteUnboundAttachment;
 use App\Core\System\Contracts\PrivateAttachable;
 use App\Core\System\Models\Concerns\HasDataScope;
 use App\Support\Eloquent\Concerns\UsesAppTimezone;
@@ -24,9 +25,10 @@ use Throwable;
  * - attachable（可空的多态关联）与 collection（用途名，如 `avatar`）：绑定对象，为空表示尚未绑定（孤儿）；
  *   绑定对象实现 PrivateAttachable（如导出记录）时是“私有附件”：访问权只跟随记录，附件管理不列出、管理员不能访问（§6.10）。
  *
- * 写入只在 System 模块的 Action 中进行（StoreAttachment、SyncAttachments、DeleteAttachment，设计文档 §5.2）。
+ * 写入只在 System 模块的 Action 中进行（StoreAttachment、SyncAttachments、DeleteAttachment、DeleteUnboundAttachment，设计文档 §5.2）。
  * 记录删除后，文件在事务提交后删除（booted() 的 deleted 事件），事务回滚时文件保留。
- * 未绑定、创建超过 config('core.attachments.orphan_ttl') 小时的附件由 `model:prune` 逐条删除（Prunable，触发删除文件）。
+ * 未绑定、创建超过 config('core.attachments.orphan_ttl') 小时的附件由 `model:prune` 逐条删除（Prunable，触发删除文件）；
+ * 逐条删除时在锁内复核“仍未绑定”（prune() → DeleteUnboundAttachment），读出这一批之后才被绑定的附件跳过。
  *
  * @property int $id
  */
@@ -180,6 +182,16 @@ class Attachment extends Model
         return static::query()
             ->whereNull('attachable_type')
             ->where('created_at', '<=', now()->subHours(config()->integer('core.attachments.orphan_ttl')));
+    }
+
+    /**
+     * 清理一条（model:prune 逐条调用）：在锁内复核仍未绑定才删除；读出之后才被绑定的跳过（§6.8）。
+     */
+    public function prune(): bool
+    {
+        $this->pruning();
+
+        return resolve(DeleteUnboundAttachment::class)->handle($this, skipIfBound: true);
     }
 
     /**

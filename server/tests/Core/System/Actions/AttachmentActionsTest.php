@@ -1,10 +1,12 @@
 <?php
 
-use App\Core\System\Actions\{DeleteAttachment, DeleteUser, StoreAttachment, SyncAttachments};
+use App\Core\System\Actions\{DeleteAttachment, DeleteUnboundAttachment, DeleteUser, StoreAttachment, SyncAttachments};
 use App\Core\System\Models\{Attachment, User};
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\{DB, Storage};
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -138,4 +140,49 @@ it('prunes the orphans older than the configured hours, with their files', funct
     Storage::disk('local')->assertMissing($old->path);
     Storage::disk('local')->assertExists($recent->path);
     Storage::disk('local')->assertExists($bound->path);
+});
+
+describe('DeleteUnboundAttachment', function (): void {
+    it('skips an orphan that was bound after the prune read it, and keeps its file', function (): void {
+        $owner = User::factory()->create();
+        $attachment = Attachment::factory()->withFile()->create(['created_by' => $owner->id, 'created_at' => now()->subDays(3)]);
+
+        // model:prune 已经读出这一批；用户随后在表单中提交并绑定了它
+        $stale = (new Attachment)->prunable()->sole();
+        resolve(SyncAttachments::class)->handle($owner, User::AVATAR_COLLECTION, [$attachment->id]);
+
+        expect($stale->prune())->toBeFalse();
+
+        $this->assertModelExists($attachment);
+        Storage::disk('local')->assertExists($attachment->path);
+    });
+
+    it('returns 422 to attachment management for an attachment bound after the policy check, and keeps it', function (): void {
+        $attachment = Attachment::factory()->withFile()->create();
+        $stale = Attachment::query()->findOrFail($attachment->id);
+        resolve(SyncAttachments::class)->handle(User::factory()->create(), 'files', [$attachment->id]);
+
+        expect(fn () => resolve(DeleteUnboundAttachment::class)->handle($stale))
+            ->toThrow(UnprocessableEntityHttpException::class, 'Attachments in use cannot be deleted.');
+
+        $this->assertModelExists($attachment);
+        Storage::disk('local')->assertExists($attachment->path);
+    });
+
+    it('deletes an attachment that is still unbound, with its file', function (): void {
+        $attachment = Attachment::factory()->withFile()->create();
+
+        expect(resolve(DeleteUnboundAttachment::class)->handle($attachment))->toBeTrue();
+
+        $this->assertModelMissing($attachment);
+        Storage::disk('local')->assertMissing($attachment->path);
+    });
+
+    it('returns 404 to attachment management for an attachment deleted meanwhile, and skips it when pruning', function (): void {
+        $attachment = Attachment::factory()->create();
+        resolve(DeleteAttachment::class)->handle(Attachment::query()->findOrFail($attachment->id));
+
+        expect(resolve(DeleteUnboundAttachment::class)->handle($attachment, skipIfBound: true))->toBeFalse()
+            ->and(fn () => resolve(DeleteUnboundAttachment::class)->handle($attachment))->toThrow(ModelNotFoundException::class);
+    });
 });

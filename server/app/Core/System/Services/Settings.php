@@ -6,7 +6,7 @@ use App\Core\System\Contracts\SettingRegistry;
 use App\Core\System\Data\{SettingData, SettingGroupData, SettingValueData};
 use App\Core\System\Enums\SettingType;
 use App\Core\System\Models\Setting;
-use Illuminate\Support\Facades\Cache;
+use App\Support\Cache\VersionedCache;
 use InvalidArgumentException;
 use LogicException;
 
@@ -19,7 +19,7 @@ use LogicException;
  *
  * - 只能读取已声明的参数（SettingRegistry），未声明的键抛出 InvalidArgumentException；
  * - 值：库中管理员改过的值（类型与声明一致时）→ 否则为声明的默认值（`default`，或读取 `config` 键的当前值）；
- * - 库中的值整体缓存（rememberForever，键 CACHE_KEY），经 Cache::memo() 读取：同一请求（队列任务）内只访问一次缓存存储；
+ * - 库中的值整体缓存（带版本号的键 `CACHE_KEY:<版本>`，VersionedCache），经 Cache::memo() 读取：同一请求（队列任务）内只访问一次缓存存储；
  *   参数写入后（事务提交后）由 SettingObserver 调用 flush()，同步命令结束时也调用。
  *
  * 不保存任何状态：每次调用都取 Cache::memo()（它是 scoped 绑定，每个请求重置），常驻内存安全（§10.3）。
@@ -148,11 +148,11 @@ class Settings
     }
 
     /**
-     * 清除缓存（本请求的 memo 与缓存存储）。
+     * 清除缓存：换一个新版本（本请求的 memo 一并更新），之后的读取从库中重新加载。
      */
     public function flush(): void
     {
-        Cache::memo()->forget(self::CACHE_KEY);
+        self::cache()->flush();
     }
 
     /**
@@ -187,10 +187,18 @@ class Settings
     private function stored(): array
     {
         /** @var array<string, mixed> */
-        return Cache::memo()->rememberForever(self::CACHE_KEY, fn (): array => Setting::query()
+        return self::cache()->remember(fn (): array => Setting::query()
             ->whereNotNull('value')
             ->get(['key', 'value'])
             ->mapWithKeys(fn (Setting $setting): array => [$setting->key => $setting->value])
             ->all());
+    }
+
+    /**
+     * 带版本号的缓存（键 CACHE_KEY）：flush() 换新版本，避免未命中回填的竞态把旧值永久写回（设计文档 §6.7）。
+     */
+    public static function cache(): VersionedCache
+    {
+        return new VersionedCache(self::CACHE_KEY);
     }
 }

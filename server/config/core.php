@@ -260,9 +260,10 @@ return [
     |
     | - default_profile：未指定档位时使用的档位；
     | - max_input_length：输入的最大字节数（symfony 的默认 20000 字节，超出部分会被静默截掉）；
-    | - link_schemes：链接允许的协议；media_schemes：图片等媒体允许的协议（不允许 data:、javascript:）；
+    | - link_schemes：链接允许的协议；media_schemes：图片等媒体允许的协议（默认只有 https：避免混合内容；不允许 data:、javascript:）；
     | - profiles：档位。media 是否允许图片等媒体；media_hosts 只允许这些主机的媒体（null 不限）。
-    |   正文中的图片不要引用附件的签名地址（会过期），CORE_HTML_MEDIA_HOSTS 可限定为自己的图床或 CDN（逗号分隔）。
+    |   正文中的图片不要引用附件的签名地址（会过期）。生产环境应设置 CORE_HTML_MEDIA_HOSTS，限定为自己的图床或 CDN（逗号分隔）：
+    |   不限主机时，正文可以嵌入外部的跟踪图片，收到公告的人一打开就把 IP 暴露给外部主机。
     |
     */
 
@@ -270,12 +271,12 @@ return [
         'default_profile' => 'rich',
         'max_input_length' => 1_000_000,
         'link_schemes' => ['http', 'https', 'mailto'],
-        'media_schemes' => ['http', 'https'],
+        'media_schemes' => ['https'],
         'profiles' => [
             // 基础：文字格式、标题、列表、表格、引用、链接；不允许图片等媒体
             'basic' => ['media' => false],
 
-            // 含图片：另允许 http(s) 的图片等媒体
+            // 含图片：另允许 https 的图片等媒体
             'rich' => [
                 'media' => true,
                 'media_hosts' => $list(env('CORE_HTML_MEDIA_HOSTS')),

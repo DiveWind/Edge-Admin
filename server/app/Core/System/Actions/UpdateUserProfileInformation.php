@@ -59,7 +59,8 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
                 $user->email_verified_at = null;
             }
 
-            $user->save();
+            // 邮箱唯一：表单已校验，并发写入撞上唯一索引时同样返回 422（email），而不是 500
+            CreateUser::save($user);
 
             if (array_key_exists('avatar_id', $attributes)) {
                 $avatar = $attributes['avatar_id'];

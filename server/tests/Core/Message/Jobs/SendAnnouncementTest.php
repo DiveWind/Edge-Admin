@@ -172,3 +172,14 @@ describe('chunks', function (): void {
         expect(Notification::query()->count())->toBe(0);
     });
 });
+
+it('does not notify a user twice when a chunk runs again after it was committed', function (): void {
+    $users = User::factory()->count(2)->create();
+    $announcement = Announcement::factory()->published()->create();
+    $chunk = new SendAnnouncementChunk($announcement->id, $users->modelKeys());
+
+    $chunk->handle();
+    $chunk->handle();
+
+    expect(announcementRecipientIds($announcement))->toBe($users->modelKeys());
+});

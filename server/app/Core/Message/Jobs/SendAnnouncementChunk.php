@@ -2,8 +2,9 @@
 
 namespace App\Core\Message\Jobs;
 
-use App\Core\Message\Models\Announcement;
+use App\Core\Message\Models\{Announcement, Notification as StoredNotification};
 use App\Core\Message\Notifications\AnnouncementPublished;
+use App\Core\System\Models\User;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -17,7 +18,8 @@ use Illuminate\Support\Facades\{DB, Notification};
  * - 在事务中锁住公告行、复核仍是已发布（与 RevokeAnnouncement 用同一行锁互斥：撤回之后不会再写入），
  *   再按 Announcement::recipients() 重新查询这一批的用户——入队后被停用、删除、移出目标角色的不再收到；
  * - Notification::sendNow() 写入 AnnouncementPublished（database 通道，InboxNotification 另对停用用户不发送）；
- * - 整批在一个事务中：失败时回滚，重试不会重复发送（最多 3 次）。
+ * - 整批在一个事务中：失败时回滚，重试不会重复发送（最多 3 次）；提交之后才失败的重试（worker 在确认任务前崩溃、
+ *   在“失败任务”中重试 SendAnnouncement）跳过已经收到这条公告的用户（按 Notification::about() 与本批的用户 id 查找）。
  */
 #[Tries(3)]
 #[Backoff([10, 60])]
@@ -46,7 +48,14 @@ class SendAnnouncementChunk implements ShouldQueue
                 return;
             }
 
-            $users = $announcement->recipients()->whereKey($this->userIds)->get();
+            // 重试（worker 在提交之后、确认任务之前崩溃，或在“失败任务”中重试整批）时跳过已经收到这条公告的用户
+            $notified = StoredNotification::query()->about($announcement)
+                ->where('notifiable_type', (new User)->getMorphClass())
+                ->whereIn('notifiable_id', $this->userIds)
+                ->pluck('notifiable_id')
+                ->all();
+
+            $users = $announcement->recipients()->whereKey($this->userIds)->whereKeyNot($notified)->get();
 
             Notification::sendNow($users, new AnnouncementPublished($announcement));
         });

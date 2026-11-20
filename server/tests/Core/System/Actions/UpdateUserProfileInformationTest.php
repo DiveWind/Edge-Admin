@@ -4,6 +4,7 @@ use App\Core\System\Actions\UpdateUserProfileInformation;
 use App\Core\System\Models\User;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Features;
 
 /*
@@ -45,4 +46,14 @@ it('keeps the verification when the email does not change', function (): void {
 
     expect($user->refresh()->email_verified_at)->not->toBeNull();
     Notification::assertNothingSent();
+});
+
+it('returns 422 on email when a concurrent write already took the address', function (): void {
+    User::factory()->create(['email' => 'taken@example.com']);
+    $user = User::factory()->create();
+
+    expect(fn () => resolve(UpdateUserProfileInformation::class)->handle($user, ['email' => 'taken@example.com']))
+        ->toThrow(function (ValidationException $e): void {
+            expect(array_keys($e->errors()))->toBe(['email']);
+        });
 });

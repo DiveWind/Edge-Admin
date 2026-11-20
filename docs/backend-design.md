@@ -306,9 +306,9 @@ Http（入口）  →  Modules（业务）  →  Core（内核）  →  Support
 - 提示文案语言：按请求头 `Accept-Language`（`zh-CN` / `en-US` 等）选择，不支持的语言回退到 `APP_LOCALE`。
 - **后台入口不返回 204**：没有内容的成功响应（包括 Fortify 的登出、两步验证等）统一返回 HTTP 200 与 `{ "code": 0, "data": null, "message": "ok" }`。Vben 的默认响应拦截器遇到空响应体会报错，这是唯一一处为前端调整状态码的约定。
 - **403 与 422 的分工**：
-  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）、查看或删除他人的导出（§6.10）。
-  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、导出的筛选与排序不在白名单或格式不对（`filter.<字段>` 等，与列表相同，§6.10）、唯一性冲突。
-  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）、并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9）与取决于全局状态、没有对应字段的 422（同时进行的导出超过上限、立即备份时备份任务未同步，§6.10）用 `message` 说明即可。
+  - **403**（带 `message`）：只看“操作者 + 目标记录本身”就能判定的，由 Policy 返回。包括没有权限码、超出数据范围、操作自己（删除 / 停用自己、在用户管理中重置自己的密码、强制下线自己当前的会话或 token）、非超管操作超管用户（含强制下线超管的会话与 token）、非超管修改或启停 `super-admin` 角色、非超管修改、删除、启停“管不到”的角色，编辑、重置密码、启停、删除“管不到”的用户，强制下线“管不到”的用户的会话与 token（§8.5）、删除内置节点、删除 `super-admin` 角色、删除内置的字典类型或字典项、删除已绑定的附件、访问无权访问的附件（§6.8）、操作他人的通知、修改或发布非草稿的公告、撤回非已发布的公告、删除已发布的公告、查看不是发给自己的公告（§6.9）、查看或删除他人的导出（§6.10）。
+  - **422**（带字段错误 `errors`）：取决于提交内容或全局状态的，由 Action 抛出，错误挂在对应字段上。包括停用 `super-admin` 角色或生命线节点（`status`）、最后一个超管（停用挂在 `status`，去掉超管角色挂在 `roles`）、在修改用户时停用自己（`status`）、内置节点改结构性字段（`name` / `type` / `path` / `component` / `meta.iframeSrc` / `meta.link`）、节点类型层级不合法或成环、授予的权限码超出自身范围（`permissions`）、非超管授予或收回 `super-admin`、选用不可授予的数据范围（`data_scope`）、非超管让不生效的菜单节点生效（启用挂 `status`，移出停用的祖先挂 `parent_id`，§8.6）、分配超出自身权限码或数据范围的角色（`roles`）、内置字典类型改 `code`、内置字典项改 `value`、参数值不符合类型或声明的校验规则（对应字段）、上传的文件类型或大小不符（`file`）、引用不能使用的附件（对应字段，§6.8）、公告的目标角色与 `target` 不符（`roles`，§6.9）、导出的筛选与排序不在白名单或格式不对（`filter.<字段>` 等，与列表相同，§6.10）、唯一性冲突。
+  - 删除类的 422（有子节点不能删、角色已分配不能删、删除最后一个超管）、并发时状态已变的 422（两人同时发布、撤回同一条公告，§6.9；删除时文章已被别人删除，§10.1；附件管理删除时附件刚被绑定，§6.8）与取决于全局状态、没有对应字段的 422（同时进行的导出超过上限、立即备份时备份任务未同步，§6.10）用 `message` 说明即可。
   - 逐条标注见 §8.6。
 
 ### 6.2 认证与菜单相关接口
@@ -546,7 +546,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 模型：`ScheduledTask`、`ScheduledTaskLog` 继承包的模型（`config/schedule-monitor.php` 的 `models` 指向它们，包写入时也使用它们），多态别名 `scheduled_task`、`scheduled_task_log`。写入全部由包完成，接口只读。
 - 输出字段：`id`、`name`、`type`（`command` / `job` / `shell`）、`cron_expression`、`timezone`（调度的时区；未单独设置时为 null，按应用时区执行）、`last_started_at`、`last_finished_at`、`last_failed_at`、`last_skipped_at`（都可为 null）、`next_run_at`（按 cron 表达式与时区计算）、`is_running`（`last_started_at` 晚于上次结束与上次失败；进程被强制终止时会一直显示为运行中，直到下一次运行）。
 - 列表：筛选 `name`（模糊）、`type`（精确）；排序 `id`、`name`、`last_started_at`，默认 `name`。
-- 执行记录：输出 `id`、`type`（`starting` / `finished` / `failed` / `skipped`：每次运行一条开始，再加一条结束或失败）、`runtime`（秒）、`exit_code`、`memory`（字节）、`failure_message`、`output`（只有任务调用 `->storeOutputInDb()` 时才有，按失败任务的规则脱敏、截断）、`created_at`；不适用的字段为 null。筛选 `type`（精确，可用逗号传多个）、`created_at`（区间）；排序 `id`，默认 `-id`。
+- 执行记录：输出 `id`、`type`（`starting` / `finished` / `failed` / `skipped`：每次运行一条开始，再加一条结束或失败）、`runtime`（秒）、`exit_code`、`memory`（字节）、`failure_message`（按失败任务的规则脱敏、截断）、`output`（只有任务调用 `->storeOutputInDb()` 时才有，同样脱敏、截断）、`created_at`；不适用的字段为 null。筛选 `type`（精确，可用逗号传多个）、`created_at`（区间）；排序 `id`，默认 `-id`。
 - 清理：调度每天执行 `model:prune --model=ScheduledTaskLog`（包的执行记录模型使用框架的 `MassPrunable`），删除早于 `schedule-monitor.delete_log_items_older_than_days`（`SCHEDULE_MONITOR_LOG_DAYS`，默认 30）天的执行记录。
 - **立即执行**（`POST /monitor/schedules/{schedule}/run`）：
   - **不接受任何命令字符串**：路由只绑定库中已同步的任务；Action `RunScheduledTask` 派发队列任务 `ExecuteScheduledTask`（只带任务名）。队列 worker 是加载了调度定义的命令行进程，按与同步相同的规则（在当前环境运行、被监控、名称相同）在 `Schedule::events()` 中查找，**执行的永远是代码中定义的调度事件**，任务名只用作查找的键；找不到（同步后调度被删改）→ 该队列任务失败，出现在失败任务中。
@@ -586,7 +586,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - 结果存储：包自带的 `CacheHealthResultStore`，只保留最近一次结果，不建表、不需要清理（缓存 `HEALTH_CACHE_STORE`，默认为默认缓存）。队列与调度的心跳同样存在缓存中，因此缓存必须是 Web、worker、调度进程共享的驱动（database、Redis、file），不能是 `array`。
 - 调度（`routes/console.php`，都 `->doNotMonitor()`）：每分钟 `health:check --no-notification`（执行检查并保存结果）、`health:schedule-check-heartbeat`、`health:queue-check-heartbeat`。包的通知关闭（`HEALTH_NOTIFICATIONS_ENABLED`，默认 false）。
 - **不开放包自带的 HTTP 端点**：不注册 `HealthCheckResultsController` / `HealthCheckJsonResultsController` 的路由，`health.oh_dear_endpoint.enabled` 为 false。给负载均衡用的存活探针使用 Laravel 自带的 `/up`（`bootstrap/app.php` 的 `health`）：只表示应用能启动并处理请求，不检查数据库等依赖，避免依赖抖动时整组实例被摘除。
-- 输出：`{ finished_at, checks: [{ name, label, status, short_summary, notification_message, meta }] }`；尚无结果时 `finished_at` 为 null、`checks` 为 `[]`。`status`：`ok`、`warning`、`failed`、`crashed`（检查本身抛出异常）、`skipped`。`label`、`notification_message`、`short_summary` 是包的英文文案：前端按 `name` 翻译标签，消息原样显示。
+- 输出：`{ finished_at, checks: [{ name, label, status, short_summary, notification_message, meta }] }`；尚无结果时 `finished_at` 为 null、`checks` 为 `[]`。`status`：`ok`、`warning`、`failed`、`crashed`（检查本身抛出异常）、`skipped`。`label`、`notification_message`、`short_summary` 是包的英文文案：前端按 `name` 翻译标签，消息原样显示；`notification_message` 按失败任务的规则脱敏（`crashed` 时可能带数据库连接错误等细节）。
 - **立即检查**：Action `RunHealthChecks` 同步执行 `health:check --no-notification`（同一套检查，同时更新保存的结果），返回最新结果。耗时取决于检查项，通常不到 1 秒（数据库、缓存的连接超时除外），因此限流。
 
 **系统信息**（`GET /monitor/system-info`，Query `SystemInfo`，每次请求实时读取，开销很小，不缓存）
@@ -657,9 +657,9 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 
 - `types` 必填，逗号分隔的类型编码（最多 50 个，格式同 `code`，重复的去掉），否则 422（`types`）。响应是以请求的类型为键的对象，按请求顺序；每个类型的值是 `[{ value, label, color }]`：只含**启用类型下的启用项**，按 `sort`、`id` 排序，`color` 没有设置时为 null。不存在或已停用的类型返回 `[]`，不报错：类型是后台可删改的数据，页面不应因此报错。
 - **登录即可访问**（`LOGIN_ONLY_ROUTES`），不需要权限码：字典是各模块表单共用的参考数据（不是业务数据），按权限码控制就要给每个用到下拉的角色都授权字典，授权会失控。默认拒绝仍然成立：未登录 401（停用账号 401）；只输出启用项的 `value`、`label`、`color`，不输出 `remark`、`is_builtin`、停用项等管理字段；**敏感的值列表不要做成字典**——放在模块自己的表中，由模块的接口按权限码与数据范围下发（§8.4）。
-- 缓存：Service `Dictionary` 把全部启用类型的启用项整体缓存（`Cache::rememberForever('core:dicts')`，经 `Cache::memo()` 读取，同一请求内只访问一次缓存存储）；字典类型、字典项的任何写入（模型的 saved / deleted，**事务提交后**）与同步命令都清除缓存，下一次读取重新加载。`Dictionary` 不保存任何状态（每次调用 `Cache::memo()`，它是 scoped 绑定），常驻内存安全。
+- 缓存：Service `Dictionary` 把全部启用类型的启用项整体缓存（带版本号的键 `core:dicts:<版本>`，`App\Support\Cache\VersionedCache`，经 `Cache::memo()` 读取，同一请求内只访问一次缓存存储）；字典类型、字典项的任何写入（模型的 saved / deleted，**事务提交后**）与同步命令都换一个新版本，下一次读取重新加载。用版本号而不是删除键：并发的读取未命中、读到旧值后，若在写入方清除之后才写回，旧值只会写在旧版本的键下，不会永久留在缓存里；旧版本的数据 1 天后过期。`Dictionary` 不保存任何状态（每次调用 `Cache::memo()`，它是 scoped 绑定），常驻内存安全。
 - 校验：`App\Core\System\Rules\InDict`——`'source' => ['required', new InDict('content.article_source')]`：值必须是该类型（启用）下启用项的 `value`（接受字符串或整数，按字符串比较），否则为 `validation.in` 的错误；类型不存在或已停用时一律不通过。读的是同一份缓存。
-  - **修改记录时保持原值不拦**：`new InDict('<类型>')->allowing($record?->source)` 另外放行给出的值（null 忽略，返回新的规则）。记录当前保存的值即使已停用（字典项或类型停用、被删除）也可以原样提交，改成其他值、新增记录时仍只接受启用项——与角色修改时 `data_scope` 保持原值不拦（§8.5）同一思路：停用一个字典项只影响以后的选择，不应让已经用了它的记录再也保存不了。
+  - **修改记录时保持原值不拦**：`new InDict('<类型>')->allowing($record?->source)` 另外放行给出的值（null 忽略，返回新的规则）。记录当前保存的值即使已停用（字典项或类型停用、被删除）也可以原样提交，改成其他值、新增记录时仍只接受启用项——与角色修改时 `data_scope` 未改动不检查（§8.5）同一思路：停用一个字典项只影响以后的选择，不应让已经用了它的记录再也保存不了。
 
 **系统参数**
 
@@ -695,7 +695,7 @@ Fortify 路由前缀与后台入口一致（`fortify.prefix`）。表中路径�
 - **引用字典**（`dict`）：值的可选范围由字典决定——校验自动追加 `new InDict('<code>')`（只接受启用项的 `value`，`int` 按字符串比较），管理接口输出 `dict`，前端据此调用 `/options/dicts` 渲染下拉。引用的字典类型在库中不存在（或已停用）时任何非 null 的值都校验失败，这是预期行为（null 仍可恢复默认值）；默认值不检查是否在字典中。不另设静态的可选值列表，可选值一律用字典表达。
 - 类型（`SettingType`）：`string`（单行，最长 255）、`text`（多行，最长 65535）、`int`、`float`、`bool`、`json`（数组或对象）。决定接口的校验规则与读取时的类型；声明的 `rules` 追加在类型规则之后。
 - 表 `settings`：`key`（唯一）、`group`、`type`、`name`、`remark`、`value`（JSON 编码，可空）、`is_public`、`is_builtin`。**`value` 为 null 表示管理员没有改过**，读取时使用声明的默认值；改过才存值。因此“管理员改过的值”与“默认值”始终可区分：同步不写 `value`，默认值（含 config 中的环境变量）的变化对没改过的参数立即生效。
-- 读取（给代码用）：注入或 `resolve()` 服务 `App\Core\System\Services\Settings`，**不提供全局 helper 与 facade**：`get($key)`，以及按声明类型返回的 `string()`、`integer()`、`float()`、`boolean()`、`array()`（声明类型不符时抛出 `LogicException`）。读取未声明的键抛出 `InvalidArgumentException`（参数必须先声明）。值的来源：库中的值（类型与声明一致时）→ 否则声明的默认值（`default`，或读取 `config`）。整张表的值整体缓存（`Cache::rememberForever('core:settings')`，经 `Cache::memo()`），写入（事务提交后）与同步命令清除缓存。服务不保存状态，常驻内存安全。
+- 读取（给代码用）：注入或 `resolve()` 服务 `App\Core\System\Services\Settings`，**不提供全局 helper 与 facade**：`get($key)`，以及按声明类型返回的 `string()`、`integer()`、`float()`、`boolean()`、`array()`（声明类型不符时抛出 `LogicException`）。读取未声明的键抛出 `InvalidArgumentException`（参数必须先声明）。值的来源：库中的值（类型与声明一致时）→ 否则声明的默认值（`default`，或读取 `config`）。整张表的值整体缓存（带版本号的键 `core:settings:<版本>`，经 `Cache::memo()`，规则同字典的缓存），写入（事务提交后）与同步命令换一个新版本。服务不保存状态，常驻内存安全。
 - 管理接口：
   - `GET /system/settings`：`[{ group, title, settings: [...] }]`，分组按 `order`、注册顺序，参数按声明顺序；参数输出 `key`、`name`、`remark`、`type`、`value`（当前生效的值）、`default`（声明的默认值）、`is_customized`（库中有管理员改过的值）、`is_public`、`dict`（引用的字典类型，没有时为 null）。只列出已声明的参数。
   - `PUT /system/settings/{key}`：`{ value }`（必须提交，可为 null）；`PUT /system/setting-groups/{group}`：请求体的键是该分组的参数名（不带分组前缀，校验错误挂在参数名上，前端表单字段名 = 参数名），只修改提交的参数，未声明的键 → 422。**`value` 为 null 表示恢复默认值**（空字符串经框架的 `ConvertEmptyStringsToNull` 同样视为 null，因此字符串参数不能存空字符串，除非默认值就是空字符串）。按类型校验（`int` 为整数，`bool` 接受 `true` / `false` / `0` / `1`，`json` 为数组或对象）并追加声明的 `rules`（引用字典时再加 `InDict`），不通过 → 422（单个挂在 `value`，分组挂在参数名）；保存前按类型转换（`"10"` → `10`，`"1"` → `true`）。未声明的键或分组 → 404。响应为修改后的参数 / 分组（格式同列表）。
@@ -781,7 +781,7 @@ return [
 - 下载、预览一律经过本入口的签名路由（`URL::temporarySignedRoute()`），由 `Storage::disk()->download()` / `response()` 流式输出。
 - **过期时间对齐到固定的时间窗口**：`expires = (floor(now / ttl) + 2) × ttl`（Unix 秒）。同一个窗口内签出的地址**完全相同**，浏览器可以缓存；有效期在 ttl 与 2 × ttl 之间，至少一个 ttl，不会刚签出就过期。窗口长度：下载、预览为 `config('core.attachments.url_ttl')` 分钟（`CORE_ATTACHMENT_URL_TTL`，默认 30）；头像为 `config('core.attachments.avatar_url_ttl')` 分钟（`CORE_ATTACHMENT_AVATAR_URL_TTL`，默认 1440，即 24 小时）。**不使用**框架 `local` 盘的 `storage.local` 签名路由（`config/filesystems.php` 中 `local.serve` 为 false，不注册 `/storage/{path}`）与 S3 的 `temporaryUrl()`：
   - 同一套做法适用于任何盘，响应头（下文“安全”）在一处统一设置，过期、篡改的处理也只有一种；
-  - 授权在**签发时**完成：只有已经通过授权的接口（上传、附件详情、业务记录自己的接口）才签发 URL；签名路由本身不需要登录，`<img src>`、`<a href>`、新标签页都能直接使用，不依赖 Cookie 与 `Authorization` 头；
+  - 授权在**签发时**完成：只有已经通过授权的接口（上传、附件详情、业务记录自己的接口）才签发 URL；签名路由本身不需要登录，`<img src>`、`<a href>`、新标签页都能直接使用，不依赖 Cookie 与 `Authorization` 头。代价是地址不绑定用户：签发之后收回权限（数据范围、撤回公告、改动角色）不会让已发出的地址失效，在有效期内（最长 2 × ttl）仍可下载，地址也可能进入浏览器历史与代理日志——因此 ttl 保持较短，不要调大 `url_ttl`；
   - 代价是文件经过 PHP 输出；大文件走 S3 时，以后可以按需改为 S3 的 `temporaryUrl()`（带 `ResponseContentDisposition`），接口字段不变。
 - 签名为绝对地址（含域名）：前端与 API 不同子域时也可直接使用。反向代理后须配置可信代理（§11.5），否则签发与校验的地址不一致。过期或签名不对 → 403（框架的 `InvalidSignatureException`）；附件不存在 → 404。
 - **头像也用签名 URL，不放公开盘**：只有一种存储与一种访问方式，S3 私有桶同样适用，不需要 `storage:link`；上传的文件不会因为“设为头像”而变成永久公开的地址。头像地址的窗口更长（默认 24 小时，有效 24～48 小时），同一窗口内 `/user/info` 返回的地址不变，页面上已加载的头像可以被浏览器缓存，不会在一次使用中途失效；前端启动、刷新页面时会拿到新窗口的地址。
@@ -943,7 +943,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 不支持“指定用户”：需要一个按数据范围过滤的用户选择接口，而按角色已覆盖多数场景；以后需要时加一种 `target` 与关联表。不支持定时发布。
 - **富文本**（§9）：`content` 是 HTML，**保存时净化**：模型的类型转换 `App\Support\Eloquent\Casts\SanitizedHtml` 在写入属性时调用 `symfony/html-sanitizer`，任何写入路径（Action、工厂、填充）存进库的都是净化后的内容，接口输出的也就是它。规则（`AppServiceProvider` 中绑定的 `HtmlSanitizerInterface` 单例，无状态）：`allowSafeElements()`（W3C 的安全元素与属性：去掉 `script`、`style`、`iframe`、`form`、`on*` 事件属性等）；链接只允许 `http`、`https`、`mailto`，图片等媒体只允许 `http`、`https`（不允许 `javascript:`、`data:`）；`a` 一律加 `rel="noopener noreferrer"`；输入最长 1,000,000 字节（包的默认 20000 字节，超出部分会被静默截掉）。公告使用默认的 `rich` 档位（含图片），档位与声明方式见 §9。
   - 不只存纯文本或 Markdown 的原因：后台的公告编辑器产出 HTML；Markdown 渲染成 HTML 同样要净化，只是把净化挪到了前端；§9 已选定“保存时在后端净化”，现在就按它存，以后不用迁移数据。
-  - 内容中的图片只能引用外部 `http(s)` 地址（可用 `CORE_HTML_MEDIA_HOSTS` 限定为自己的图床，§9）：附件的签名地址会过期，不要嵌进正文；文件作为公告的附件（`attachment_ids`）。
+  - 内容中的图片只能引用外部 `https` 地址（可用 `CORE_HTML_MEDIA_HOSTS` 限定为自己的图床，§9）：附件的签名地址会过期，不要嵌进正文；文件作为公告的附件（`attachment_ids`）。
 - 输出字段：`id`、`title`、`level`、`status`、`target`、`roles`（`[{ name, title }]`，目标为全部用户时为 `[]`）、`published_at`、`publisher`（`{ id, username, name }`，未发布或发布人已删除时为 null）、`revoked_at`、`created_by`、`created_at`、`updated_at`；详情与新增、修改、发布、撤回的响应另含 `content` 与 `attachments`（附件数组，格式同 §6.8，签名地址由本接口签发）。列表不含 `content`、`attachments`。
 - 列表：经过数据范围（`visibleTo`）；筛选 `title`（模糊）、`status`、`level`、`target`（精确）、`created_at`、`published_at`（区间）；排序 `id`、`created_at`、`published_at`，默认 `-id`。
 - 新增、修改：`title`、`content`（最长 65535 字符，按净化前计）、`target` 必填；`level` 可选（新增默认 `info`，修改时未提交表示不变）；`roles`（角色标识 `string[]`，已存在的角色）在 `target` 为 `roles` 时必填且不能为空，为 `all` 时不能提交非空值（422，`roles`），保存时按 `target` 整体替换目标角色；`attachment_ids`（附件 id 数组，`OwnedAttachment`：自己上传的未绑定附件，或本公告已有的附件，§6.8）在修改时未提交表示不变，提交 `[]` 去掉全部附件。新增的公告是草稿，`created_by` 写入操作者，成功返回 201。
@@ -952,7 +952,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - **发布**：Action `PublishAnnouncement` 锁行复核仍是草稿 → `published`、`published_at`、`published_by` → 派发队列任务 `SendAnnouncement`（`ShouldQueueAfterCommit`，事务提交后才入队），接口立即返回公告。
   - **接收人**：启用的用户；目标为 `roles` 时，另须拥有任一目标角色且该角色启用（停用的角色不生效，与 §8.4 一致）。
   - `SendAnnouncement`（worker 中执行）：公告仍是已发布时，按 `chunkById` 取接收人的 id，每 `config('core.message.announcements.batch_size')`（`CORE_ANNOUNCEMENT_BATCH_SIZE`，默认 500）个一批，派发一个 `Bus::batch`（名称 `announcement:<id>`，`allowFailures()`：一批失败不影响其他批，失败的批在失败任务中重试），每批一个 `SendAnnouncementChunk`。没有接收人时不派发。
-  - `SendAnnouncementChunk`：批次已取消时跳过；在事务中锁住公告行、复核仍是已发布，按上面的条件重新查询这一批的用户（入队后被停用、删除、移出目标角色的不再收到），`Notification::sendNow()` 写入通知 `AnnouncementPublished`：`type` 为 `message.announcement`，`title` 为公告标题（纯文本），`content` 为正文的纯文本摘要（前 100 个字符），`level` 同公告，`link` 为 `config('core.message.announcements.link')`（`CORE_ANNOUNCEMENT_LINK`，默认 `/announcements/{id}`，前端路由，与 §6.2 的 `home_path` 同属部署级配置），`subject` 为公告。一批在一个事务中：失败时整批回滚，重试不会重复发送（`#[Tries(3)]`）；与撤回用同一行锁互斥，撤回之后不会再写入。
+  - `SendAnnouncementChunk`：批次已取消时跳过；在事务中锁住公告行、复核仍是已发布，按上面的条件重新查询这一批的用户（入队后被停用、删除、移出目标角色的不再收到），`Notification::sendNow()` 写入通知 `AnnouncementPublished`：`type` 为 `message.announcement`，`title` 为公告标题（纯文本），`content` 为正文的纯文本摘要（前 100 个字符），`level` 同公告，`link` 为 `config('core.message.announcements.link')`（`CORE_ANNOUNCEMENT_LINK`，默认 `/announcements/{id}`，前端路由，与 §6.2 的 `home_path` 同属部署级配置），`subject` 为公告。一批在一个事务中：失败时整批回滚，重试不会重复发送（`#[Tries(3)]`）；提交之后才失败的重试（worker 在确认任务前崩溃、在“失败任务”中重试 `SendAnnouncement`）跳过已经收到这条公告的用户（按 `Notification::about()` 与这一批的用户 id 查找）；与撤回用同一行锁互斥，撤回之后不会再写入。
   - 任务在默认队列（worker 须处理，§11.3）；队列驱动为 `sync` 时在请求中执行（只用于开发、测试）。批处理需要框架的 `job_batches` 表（`0001_01_01_000002_create_jobs_table` 已创建）。
 - **撤回**：Action `RevokeAnnouncement` 锁行复核仍是已发布 → `revoked`、`revoked_at`，并在同一事务中**删除已经发出的通知**（`Notification::about($announcement)`，按 `data->subject` 查找，没有索引；撤回是低频操作）：接收人的通知中心里不再出现它，也不会点进一个看不了的公告。尚未执行的批在锁住公告行后看到已撤回，直接跳过。不采用“标记失效”：失效的通知仍要显示标题，等于撤回后内容仍在传播。
 - 删除：草稿与已撤回的公告可以删除，附件一并删除（`HasAttachments`）；已撤回的通知在撤回时已删除。
@@ -1084,7 +1084,7 @@ $user->notify(new ArticleApproved($article));       // 发送；大量接收人�
 - 表 `articles`：`title`（最长 255）、`summary`（摘要，纯文本，可空，最长 500）、`content`（净化后的 HTML，§9）、`category`（字典 `content.article_category` 的 `value`，最长 64）、`status`（`ArticleStatus`：`draft` 草稿、`published` 已发布）、`published_at`（可空）、`created_by`（外键，用户删除后置空）、时间戳、`deleted_at`（软删除）。模型 `App\Modules\Content\Models\Article`（多态别名 `content.article`，§4.5），`HasDataScope`（归属列 `created_by`）、`HasAttachments`（封面在 `cover` 用途上）、`SoftDeletes`。
 - **分类用字典**（§6.7 的分工：管理员可增删改、代码只校验是否合法）：模块在 `resources/dicts.php` 声明类型 `content.article_category`（`content.dict.articleCategory`）与初始项 `news`、`tutorial`、`case`（`label` 为前端 i18n key `content.dict.articleCategory.<value>`），由 `core:sync-dicts` 写入。
 - **状态用枚举**（代码按值分支）：`ArticleStatus` 实现 `HasLabel` 与 `HasColor`（`draft` 为 `default`、`published` 为 `success`），登记为 `content.article_status`（`/options/enums`，§6.7）。
-- **富文本**：`content` 在模型的 `casts()` 中用 `SanitizedHtml`（默认档位 `rich`，§9），任何写入路径存的都是净化后的内容；`title`、`summary` 是纯文本，不存 HTML。正文中的图片只引用外部 `http(s)` 地址（§9），封面是附件。
+- **富文本**：`content` 在模型的 `casts()` 中用 `SanitizedHtml`（默认档位 `rich`，§9），任何写入路径存的都是净化后的内容；`title`、`summary` 是纯文本，不存 HTML。正文中的图片只引用外部 `https` 地址（§9），封面是附件。
 - **封面**：附件（§6.8），只接受图片：`cover_id` 用 `OwnedAttachment`（`collection: 'cover'`、`mimeTypes: Attachment::PREVIEWABLE_MIME_TYPES`），绑定用 `SyncAttachments`；访问权委托给文章的 `view`（`AttachmentPolicy` 第 2 条，模块不写附件授权代码）。软删除时封面保留（恢复后仍在），**彻底删除时连同文件删除**（`HasAttachments`，事务提交后）。
 
 **输出字段**：`id`、`title`、`summary`、`category`（字典的 `value`，前端用 `/options/dicts?types=content.article_category` 显示名称）、`status`、`published_at`、`cover`（附件，格式同 §6.8，签名地址由本接口签发；没有封面时为 null）、`created_by`、`creator`（`{ id, username, name }`，创建人已删除时为 null）、`deleted_at`（未删除时为 null）、`created_at`、`updated_at`；详情与新增、修改、发布、取消发布、恢复的响应另含 `content`，列表不含。
@@ -1317,6 +1317,7 @@ public function delete(User $actor, User $user): Response
   2. 否则各启用角色的范围做 OR 并集；
   3. 没有启用角色，或范围 key 未登记 → 默认拒绝（查询加 `1=0`，单条判定为否）。范围 key 未登记的角色不贡献任何范围，用户其他角色的范围照常生效。
 - 停用的角色，其权限与数据范围都不生效。
+- 删除用户后，他创建的记录 `created_by` 置空（外键 `nullOnDelete`）：这些记录从此不属于任何人，“仅本人”范围的操作者都看不到，只有不受数据范围限制的操作者可见。这是预期行为；需要保留归属时先把记录转给别人再删除用户。
 - `DataScopeRegistry::isUnrestrictedFor($user)`：超管，或任一启用角色的范围是 `all` → 不受数据范围限制（`HasDataScope` 的第 1 条规则，二者共用）。
 - 不属于某个用户、而是“关于”某个用户的记录（日志、会话、token），数据范围委托给关联的用户：`whereHas` 到 `User::visibleTo()`；不受限制的操作者另可看到没有关联用户的记录（§6.6）。
 - 职责划分：**角色决定能做什么（功能权限），范围提供者决定能看哪些数据（数据权限）**。多角色取并集只会让可见范围变大，不会变得更细；更细的范围需要新增一个数据维度（即新增提供者）。
@@ -1344,12 +1345,20 @@ public function delete(User $actor, User $user): Response
 - `roles.name` 存角色**标识**：`alpha_dash`、唯一，内置角色的标识不可修改；`/user/info` 的 `roles` 输出启用角色的标识。超管角色的标识为 `super-admin`（`Role` 模型常量）。
 - 保存角色权限时，后端先把提交的权限码规范化：自动补齐每个节点的全部祖先节点，再 `syncPermissions()`。
 - `users` 表加 `created_by`（可空），供“仅本人”数据范围使用，由 Action 写入。
-- **防提权**：
-  - 非超管授予角色的权限码，必须是自己有效权限码的子集：提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422（`permissions`）；
-  - 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的权限码（对非超管是自己没有的码，对超管是停用节点的授权——它们不出现在授权树中），无论是否提交都保留，操作者既不能加也不能删；
-  - 只有超管能授予或收回 `super-admin` 角色（422，`roles`）。
-  - **数据范围**：操作者“可授予的数据范围”（`DataScopeRegistry::grantableKeysFor()`，只算启用角色）——超管，或任一启用角色的范围是 `all` → 全部已登记的范围；否则为各启用角色选用的（已登记的）范围 key。角色管理中非超管提交的 `data_scope` 不在其中 → 422（`data_scope`）；修改时 `data_scope` 保持原值不拦，与权限码的保留规则同一思路。角色表单的选项（`/system/roles/data-scopes`）只列出可授予的范围。
-  - **分配角色**：非超管只能分配或移除“管得到”的角色——角色的权限码全部在操作者的有效权限码之内（含停用节点授权的角色对非超管而言管不到），且角色的 `data_scope` 在操作者可授予的范围内。提交中新增的、管不到的角色 → 422（`roles`，列出角色标识）；用户原本就有、但操作者管不到的角色（含 `super-admin`），无论是否提交都保留不动，与上面权限码的保留规则同一思路。超管不受限。
+- **“管得到”（防提权的统一规则）**：非超管只能管理权限码与数据范围都不超过自己的角色和用户。判定只有一处：`App\Core\System\Services\Manageability`（纯判定的 Service，`#[Scoped]`）。
+  - **操作者管得到一个角色**，需同时满足：该角色**已授予的全部权限码**（不论角色是否启用、节点是否启用）都在操作者的**有效权限码**（§8.1）内；该角色的 `data_scope` 在操作者**可授予的数据范围**内；该角色不是 `super-admin`。因此停用节点上的码、停用角色的码，非超管都管不到（否则启用一个自己持有的停用角色、或改动范围比自己大的角色，即可提权）。
+  - **操作者管得到一个用户**，需同时满足：该用户不是超管；该用户的**全部角色**（含停用的）操作者都管得到；该用户在操作者的数据范围内（`isVisibleTo`）。
+  - **超管管得到一切**（超管专属的规则另见 §8.6：`super-admin` 角色不能删除、不能停用等）。
+  - **可授予的数据范围**（`DataScopeRegistry::grantableKeysFor()`，只算启用角色）：超管，或任一启用角色的范围是 `all` → 全部已登记的范围；否则为各启用角色选用的（已登记的）范围 key。角色表单的选项（`/system/roles/data-scopes`）只列出可授予的范围。
+  - **套用位置**（Policy 返回 403，文案统一为“不能管理权限或数据范围超出自己的角色 / 用户”）：
+    - 角色：`update`、`delete`、`changeStatus`（状态接口；修改接口里的 `status` 随 `update` 一起拦）。查看、角色下拉、授权树与数据范围选项不受限。
+    - 用户：`update`、`delete`、`changeStatus`、`resetPassword`（含改邮箱、用户名：防止改成自己的邮箱后走找回密码接管账号）。查看不受限。
+    - 在线会话与 token：强制下线、吊销（`SessionPolicy::delete`、`PersonalAccessTokenPolicy::delete`）。自己的其他会话与 token 总能下线。
+    - 以上是“对某个用户做写操作”的全部入口；通知、我的导出只限本人，附件、文章、公告等业务记录按各自的数据范围授权，不属于此列。
+  - **授予权限码**（`SyncRolePermissions`，422 `permissions`）：非超管提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422；操作者管不到的授权保持不变——角色原本就有、但不在操作者有效权限码中的权限码（对超管是停用节点的授权，它们不出现在授权树中），无论是否提交都保留。非超管只能修改管得到的角色，因此对非超管这条保留规则只在并发改动时起作用。
+  - **数据范围**（`CreateRole::ensureGrantableDataScope()`，422 `data_scope`）：非超管新增角色或改动 `data_scope` 时，提交的范围不在可授予的范围内 → 422；未改动时不检查（能修改的角色本来就在可授予的范围内）。
+  - **分配角色**（`SyncUserRoles`，422 `roles`）：非超管只能分配或移除管得到的角色。提交中新增的、管不到的角色 → 422（列出角色标识）；用户原本就有、但操作者管不到的角色（含 `super-admin`），无论是否提交都保留不动（同样只在并发改动时起作用）。只有超管能授予或收回 `super-admin` 角色（422，`roles`）。超管不受限。
+  - “码 × 范围”组合（把自己的码加到范围比自己大的角色上）由“管得到角色”覆盖：范围不在可授予范围内的角色，非超管不能修改。
 
 ### 8.6 业务保护规则
 
@@ -1360,8 +1369,10 @@ public function delete(User $actor, User $user): Response
 - 不能删除或停用自己 —— 403（状态接口）；在修改接口中提交 `status: disabled` 停用自己 —— 422（`status`）。
 - 不能在用户管理中重置自己的密码（应在个人设置中验证当前密码后修改）—— 403。
 - 超管用户只有超管能编辑、重置密码、停用、删除 —— 403。
+- 非超管只能编辑、重置密码、启停、删除“管得到”的用户（§8.5：他的全部角色，含停用的，权限码与数据范围都不超过操作者）—— 403。
 - 系统至少保留一个启用的超管（账号启用且拥有启用的 `super-admin` 角色）：最后一个启用的超管不能删除（`message`）、不能停用（`status`，修改接口与状态接口都拦）、不能去掉超管角色（`roles`）—— 422。
-  - 并发：检查与写入在同一事务中，检查前先对 `super-admin` 角色那一行 `lockForUpdate()`，把所有“减少启用超管”的写操作（删除、停用、去掉超管角色）串行化，避免两个超管同时停用对方后一个不剩（`EnsureSuperAdminRemains`）。SQLite 不支持行锁，但同一时间只有一个写事务。
+  - 并发与**锁顺序**：检查与写入在同一事务中。凡是可能减少启用超管的事务——删除用户（`DeleteUser`）、停用用户（`ChangeUserStatus`，状态接口与修改接口）、修改用户时提交了 `roles` 或停用（`UpdateUser`）——**第一条语句**都是对 `super-admin` 角色那一行 `lockForUpdate()`（`EnsureSuperAdminRemains::lock()`），之后才读写用户行、角色分配等其他行。统一的顺序是“先 `super-admin` 角色行，再用户行”，避免两条路径互相等待而死锁；MySQL / MariaDB 默认的 REPEATABLE READ 下，事务的一致性快照在第一条普通读取时建立，拿锁之前不做任何读取，快照就不会早于前一个持锁者的提交。计数本身也是加锁读（`sharedLock()`，只锁 `super-admin` 的持有者及其分配行），加锁读总是读最新提交的版本。这样“两个超管同时停用对方后一个不剩”的写操作被串行化。PostgreSQL（READ COMMITTED）每条语句取新快照；SQLite 不支持行锁，但同一时间只有一个写事务。MySQL 上的并发实测见 §14。
+  - 其他路径不会减少启用超管：`super-admin` 角色不能删除（403）、不能停用（422，状态接口与修改接口都拦）、标识不能改，同步命令不改它的状态；个人资料不能改状态与角色。
   - 通过接口时，非超管操作超管用户先被 403 拦住，超管操作者自己就是一个启用的超管，因此删除、停用的这条 422 实际只在并发时出现；去掉自己的超管角色在只剩自己时直接出现。
 - 非超管授予或收回 `super-admin` 角色 —— 422（`roles`）。
 - 停用走 `DisableUser`（吊销会话与 token，§7.3），启用走 `EnableUser`；管理员重置密码、删除用户后吊销对方的会话与 token（§7.4）。
@@ -1370,8 +1381,9 @@ public function delete(User $actor, User $user): Response
 
 **角色**
 
+- 非超管只能修改、删除、启停“管得到”的角色（§8.5）—— 403；查看不受限。
 - `super-admin` 不能删除 —— 403；只有超管能修改、启停它 —— 403；不能停用 —— 422（`status`）；标识不能改 —— 422（`name`）。权限隐含全部，角色表单中不显示权限树；修改时提交 `permissions` —— 422（`permissions`）。
-- 已分配给用户的角色不能删除 —— 422（`message`）。
+- 已分配给用户的角色不能删除 —— 422（`message`）。检查前先锁住角色行，分配角色时对涉及的角色加共享锁，二者互斥：不会在检查之后又被分配、随后被级联外键静默移除。
 - 授予的权限码超出自己的有效权限码 —— 422（`permissions`）；选用自己不可授予的数据范围 —— 422（`data_scope`，§8.5）。
 - 停用角色的权限与数据范围都不生效。
 
@@ -1381,8 +1393,9 @@ public function delete(User $actor, User $user): Response
 - 内置节点的结构性字段 `name`、`type`、`path`、`component`、`meta.iframeSrc`、`meta.link` 不可修改：前端只读，提交的值与库中不同 —— 422（对应字段，如 `meta.link`）；它们只能由同步命令修改（§8.2）。
 - `system.menu`、`system.menu.update` 两个节点及其祖先必须保持启用，防止把所有人锁在外面：停用它们或它们（修改后的）祖先 —— 422（`status`）；把它们或其祖先移到停用的节点下 —— 422（`parent_id`）。祖先按修改后的上级计算（`system.menu` 被移到别的目录下后，新目录不能停用，原来的 `system` 可以停用）；修改前就已失效的不拦，只拦本次修改造成的失效。
 - 类型层级：`catalog` / `menu` / `embedded` / `link` 只能挂在根或 `catalog` 下，`button` 只能挂在 `menu` 下 —— 422（新增、移动上级时挂 `parent_id`；只改类型时挂 `type`）；修改类型后仍要能容纳现有的子节点 —— 422（`type`）。
-- 上级不能是自己或自己的子孙（成环）—— 422（`parent_id`）。
-- 有子节点的节点不能删除 —— 422（`message`）。删除节点时角色的授权随之删除（spatie 在删除前解除，外键 `cascadeOnDelete` 兜底）。
+- 上级不能是自己或自己的子孙（成环）—— 422（`parent_id`）；新增时上级已不存在 —— 422（`parent_id`）。
+- **生效规则**：非超管不能让任何当前**不生效**的节点（本身或某个祖先停用）变为生效——启用节点、移动节点使它脱离停用的祖先，都算（比较修改前后每个节点的生效状态）。停用不删授权（§8.2），重新生效会让仍保留在角色上的授权立即恢复，等于给自己恢复被收回的权限 —— 422（启用挂 `status`，移动挂 `parent_id`）。超管不受限；生命线规则照常适用。
+- 有子节点的节点不能删除 —— 422（`message`）；检查前先锁住节点行，新增子节点时对上级加共享锁，二者互斥。删除节点时角色的授权随之删除（spatie 在删除前解除，外键 `cascadeOnDelete` 兜底）。
 - 权限码全局唯一 —— 422（`name`）；非按钮节点的 `path` 唯一，且以 `/` 开头 —— 422（`path`）。并发写入撞上唯一索引时 Action 同样返回 422。
 - 停用向子孙级联生效。
 
@@ -1400,7 +1413,7 @@ public function delete(User $actor, User $user): Response
 
 **附件**（§6.8）
 
-- 已绑定的附件不能在附件管理中删除 —— 403（超管也一样）；在绑定它的记录中替换、移除，或删除那条记录。
+- 已绑定的附件不能在附件管理中删除 —— 403（超管也一样）；在绑定它的记录中替换、移除，或删除那条记录。删除与清理在锁内复核“仍未绑定”（`DeleteUnboundAttachment`，绑定时同样先锁附件行）：附件管理中检查后刚被绑定 —— 422（`message`）；清理（`model:prune`）读出之后才被绑定的跳过。
 - 无权访问附件（未绑定的不是自己上传的；已绑定的看不了所属记录；附件管理之外，或超出数据范围）—— 403。
 - 上传的文件类型不在白名单、超过大小上限 —— 422（`file`）；引用不是自己上传的未绑定附件、也不是这条记录已有的附件，或 MIME 不符合用途 —— 422（对应字段，不区分原因）。
 
@@ -1422,6 +1435,7 @@ public function delete(User $actor, User $user): Response
 **文章**（业务模块示范，§6.11）
 
 - 只有草稿能发布、只有已发布的能取消发布 —— 403；并发时状态已变 —— 422（`message`）。
+- 删除时锁行复核（含已删除的）：并发时已被别人删除 —— 422（`message`）；已被彻底删除 —— 404（§10.1）。
 - 只有已删除的能恢复、能彻底删除（先删除再彻底删除）—— 403；查看已删除的文章（`filter[trashed]`）需要恢复或彻底删除的权限码 —— 403。
 - 记录级操作检查数据范围（按 `created_by`）—— 403。
 - 分类不是启用的字典项（修改时原样提交文章当前的分类除外）—— 422（`category`）；封面不是自己上传的未绑定图片、也不是这篇文章当前的封面 —— 422（`cover_id`）。
@@ -1430,6 +1444,7 @@ public function delete(User $actor, User $user): Response
 
 - 强制下线自己当前的会话、吊销本次请求使用的 token —— 403（应使用退出登录）；自己的其他会话与 token 可以下线。
 - 超管用户的会话与 token 只有超管能下线 —— 403。
+- 非超管只能下线“管得到”的用户的会话与 token（§8.5）—— 403；自己的其他会话与 token 不受此限。
 - 所属用户超出数据范围 —— 403（列表中本来就看不到）。
 
 ## 9. 安全规范
@@ -1457,7 +1472,7 @@ public function delete(User $actor, User $user): Response
   - 项目可在 `config/core.php` 中增加档位（同样的键：`media`、`media_hosts`）。
 - **声明**：富文本字段在模型的 `casts()` 中声明 `'content' => SanitizedHtml::class`（默认档位）或 `SanitizedHtml::class.':basic'`；写入属性时（fill、赋值、工厂、填充）即净化，任何写入路径存进库的都是净化后的内容。档位名不存在时抛出异常（开发期错误）。表单的长度上限按净化前计（Form Request）。
 - **约定**：存 HTML 的列一律用 `SanitizedHtml`，不在 Action、控制器中手动净化，也不存未净化的 HTML 再在输出时净化；纯文本字段（标题、摘要、通知内容）不存 HTML，前端按文本显示。“哪些列是富文本”无法从代码中可靠识别，由代码审查检查（`CONTRIBUTING.md` 的清单）；`tests/Arch` 保证只有一个净化入口。
-- **正文中的图片**：只引用外部的 `http(s)` 地址，**不要嵌入附件的签名地址**——它会在 `url_ttl` 的一到两倍时间后过期，正文中的图片随之失效。需要“上传图片插入正文”时，应另建一个不过期的公开图片通道（公开盘或 CDN 上的独立目录、不可枚举的文件名，图片白名单与大小上限），并用 `CORE_HTML_MEDIA_HOSTS` 限定正文只能引用它；本脚手架暂不提供（§14）。正文以外的文件作为记录的附件（如公告的 `attachment_ids`）。
+- **正文中的图片**：只引用外部的 `https` 地址（`config('core.html.media_schemes')` 默认只有 `https`，避免混合内容），**生产环境应设置 `CORE_HTML_MEDIA_HOSTS`**（不限主机时正文可以嵌入外部的跟踪图片，收到公告的人一打开就把 IP 暴露给外部主机）；**不要嵌入附件的签名地址**——它会在 `url_ttl` 的一到两倍时间后过期，正文中的图片随之失效。需要“上传图片插入正文”时，应另建一个不过期的公开图片通道（公开盘或 CDN 上的独立目录、不可枚举的文件名，图片白名单与大小上限），并用 `CORE_HTML_MEDIA_HOSTS` 限定正文只能引用它；本脚手架暂不提供（§14）。正文以外的文件作为记录的附件（如公告的 `attachment_ids`）。
 
 ## 10. 编码规范
 
@@ -1511,6 +1526,7 @@ Scramble 的兼容性在引入时另行验证。
 - 禁止在请求中修改 `config()`。
 - 禁止 `exit()`、`die()`。
 - 引入第三方包前确认其支持 Octane；有状态的服务登记到 Octane 的 `flush` 配置。
+- **常驻的队列 worker 同样要在任务之间重置状态**：框架在任务之间重置 `#[Scoped]` 实例与 `Cache::memo()`；第三方的单例注册器要自己处理。spatie 的 `PermissionRegistrar` 把节点与授权保存在内存中，Web 端改动授权时只能清掉本进程的副本与共享缓存，worker 中的副本不会更新——`SystemServiceProvider` 监听 `JobProcessing`，每个任务开始前调用 `clearPermissionsCollection()`（只清内存集合，下次读取时从共享缓存重新载入），保证任务按最新的授权判定（如执行导出时发起人已失去权限码，§8.6）。`PermissionRegistry` 是 `#[Scoped]`，参数与字典经 `Cache::memo()` 读取，其余单例（`MenuRegistry`、`DataScopeRegistry` 等）只保存启动时的声明，不需要额外处理。
 - 以上能自动检查的（静态属性、`exit`）加入架构测试。
 
 ### 10.4 代码生成
@@ -1770,8 +1786,11 @@ php artisan core:make-crud Tag --module=Blog                                    
 | Passkeys | `laravel/passkeys` 仍为 0.x，暂缓 |
 | 多租户 | 暂不做；做时采用 fail-closed 设计 |
 | 后端管理 Caddy（域名、证书） | 暂不做 |
-| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）、在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）与撤回公告时按 `notifications.data->subject` 查找通知（§6.9）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
+| 跨数据库实测 | 操作日志、登录日志的 JSON 路径筛选（`properties->…`，含 `status` 的整数比较）、在线会话的前缀绑定（`LIKE '<前16位>%'` 后按大小写精确比较）与撤回公告、重发公告分块时按 `notifications.data->subject` 查找通知（§6.9）目前只在 SQLite 上测试，待在 MySQL / PostgreSQL 上实测（CI 加入数据库矩阵时，§6.6） |
+| 并发与锁的 MySQL 实测 | 待 CI 加入 MySQL / MariaDB（REPEATABLE READ）后实测（§8.6）：两个超管同时停用、删除对方，或在修改用户时去掉对方的超管角色，最后仍剩一个启用的超管（另一个请求 422），且不出现死锁（500）；删除角色与分配角色、删除节点与新增子节点、附件清理与绑定的互斥。SQLite 不生成 `FOR UPDATE` / `LOCK IN SHARE MODE`，目前的测试只检查“先锁 `super-admin` 角色行”的语句顺序 |
+| 尚未实现的安全措施 | §7.4 的 token 过期时间（Sanctum `expiration` 目前为 null）、token 的签发接口，以及 §7.3 的“指定角色必须开启两步验证”：目前没有签发 token 的入口，暂不构成风险，开放设备 / App 入口时一并实现。个人资料修改邮箱暂不要求确认密码（会话被盗后可借此改邮箱、走找回密码），需要时给 Fortify 的资料接口加 `password.confirm` 并同步前端 |
+| 单个参数修改的日志脱敏 | `PUT /system/settings/{key}` 的请求体是 `{ value }`，操作日志按请求体键名脱敏，按参数键声明的密钥类参数会以明文记录。目前没有这类参数；加入时让参数声明 `sensitive`，并在操作日志中按路由参数的键脱敏 |
 | Pulse | 设计原定“系统监控依托 Pulse”，但 Pulse 的仪表盘是 Livewire 页面，与“不渲染页面”（§1）冲突。暂不安装；接入时只用它的记录器写入 `pulse_*` 表，由后台接口读取聚合数据给前端图表，`/pulse` 页面最多作为只对超管开放的运维入口 |
 | 通用导入 | 暂不做（§6.10 的“导入”）：有第一个使用方时，按“附件上传 → 队列逐行校验并调用模块的 Action → 错误报告附件 → 完成通知”实现 |
-| 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `http(s)` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
+| 正文中的上传图片 | 暂不做（§9）：富文本只引用外部 `https` 图片；需要时另建不过期的公开图片通道，并用 `CORE_HTML_MEDIA_HOSTS` 限定 |
 | 下载备份 | 不提供（§6.10）；确有需要时须同时满足：只限超管、确认密码（`password.confirm`）、单独的权限码、操作日志 |

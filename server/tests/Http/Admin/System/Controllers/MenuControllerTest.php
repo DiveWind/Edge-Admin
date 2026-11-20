@@ -583,6 +583,68 @@ describe('update', function (): void {
         })->with(['the menu node' => 'system.menu', 'its ancestor' => 'system']);
     });
 
+    describe('making nodes take effect', function (): void {
+        it('returns 422 when an operator who is not a super admin enables a disabled node granted to them', function (): void {
+            $actor = userWithPermissions('system.menu.update', 'system.user.delete');
+            $node = Permission::query()->where('name', 'system.user.delete')->sole();
+            $node->update(['status' => Status::Disabled]);
+
+            $this->actingAs($actor->fresh())
+                ->putJson("/api/admin/system/menus/{$node->id}", menuPayloadOf($node, ['status' => 'enabled']))
+                ->assertUnprocessable()
+                ->assertOnlyJsonValidationErrors(['status'])
+                ->assertJsonPath('errors.status.0', 'Only super admins can make disabled menu nodes take effect again.');
+
+            app()->forgetScopedInstances();
+            expect($node->fresh()?->status)->toBe(Status::Disabled)
+                ->and($actor->fresh()?->can('system.user.delete'))->toBeFalse();
+        });
+
+        it('returns 422 when an operator who is not a super admin enables an ancestor, which makes its descendants take effect', function (): void {
+            $system = Permission::query()->where('name', 'system.user')->sole();
+            $system->update(['status' => Status::Disabled]);
+
+            $this->actingAs(userWithPermissions('system.menu.update'))
+                ->putJson("/api/admin/system/menus/{$system->id}", menuPayloadOf($system, ['status' => 'enabled']))
+                ->assertUnprocessable()
+                ->assertOnlyJsonValidationErrors(['status']);
+        });
+
+        it('returns 422 when an operator who is not a super admin moves a node out of a disabled ancestor', function (): void {
+            $disabled = Permission::factory()->disabled()->create();
+            $child = Permission::factory()->childOf($disabled)->create();
+
+            $this->actingAs(userWithPermissions('system.menu.update'))
+                ->putJson("/api/admin/system/menus/{$child->id}", menuPayloadOf($child, ['parent_id' => null]))
+                ->assertUnprocessable()
+                ->assertOnlyJsonValidationErrors(['parent_id']);
+
+            expect($child->fresh()?->parent_id)->toBe($disabled->id);
+        });
+
+        it('lets operators who are not super admins make changes that keep nodes ineffective', function (): void {
+            $disabled = Permission::factory()->disabled()->create();
+            $child = Permission::factory()->disabled()->childOf($disabled)->create();
+            $actor = userWithPermissions('system.menu.update');
+
+            // 启用一个祖先仍停用的节点、移动停用的节点、停用节点、改标题：没有节点由不生效变为生效
+            $this->actingAs($actor)->putJson("/api/admin/system/menus/{$child->id}", menuPayloadOf($child, ['status' => 'enabled']))->assertOk();
+            $this->actingAs($actor)->putJson("/api/admin/system/menus/{$disabled->id}", menuPayloadOf($disabled, ['meta' => ['title' => 'Renamed']]))->assertOk();
+            $this->actingAs($actor)->putJson("/api/admin/system/menus/{$this->catalog->id}", menuPayloadOf($this->catalog, ['status' => 'disabled']))->assertOk();
+            $this->actingAs($actor)->putJson("/api/admin/system/menus/{$this->catalog->id}", menuPayloadOf($this->catalog, ['parent_id' => null, 'meta' => ['order' => 5]]))->assertOk();
+        });
+
+        it('lets super admins enable nodes and move them out of disabled ancestors', function (): void {
+            $node = Permission::query()->where('name', 'system.user.delete')->sole();
+            $node->update(['status' => Status::Disabled]);
+            $disabled = Permission::factory()->disabled()->create();
+            $child = Permission::factory()->childOf($disabled)->create();
+
+            $this->actingAs(superAdminActor())->putJson("/api/admin/system/menus/{$node->id}", menuPayloadOf($node, ['status' => 'enabled']))->assertOk();
+            $this->actingAs(superAdminActor())->putJson("/api/admin/system/menus/{$child->id}", menuPayloadOf($child, ['parent_id' => null]))->assertOk();
+        });
+    });
+
     it('changes /menu/all and /auth/codes right away', function (): void {
         $member = userWithPermissions('system.user', 'system.role');
         $user = Permission::query()->where('name', 'system.user')->sole();

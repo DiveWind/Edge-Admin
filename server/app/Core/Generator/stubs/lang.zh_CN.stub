@@ -16,6 +16,7 @@ return [
 {{#softDeletes}}
 
     'messages' => [
+        'already_deleted' => '记录已被删除。',
         'restore_trashed_only' => '只有已删除的记录能恢复。',
         'force_delete_trashed_only' => '只有已删除的记录能彻底删除，请先删除。',
         'view_trashed' => '没有查看已删除记录的权限。',

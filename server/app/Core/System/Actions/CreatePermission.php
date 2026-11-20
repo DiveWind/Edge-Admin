@@ -43,7 +43,12 @@ class CreatePermission
             $permission = new Permission([...self::only($attributes), 'guard_name' => User::GUARD]);
             $permission->is_builtin = false;
 
-            $parent = $permission->parent_id === null ? null : Permission::query()->find($permission->parent_id, ['id', 'type']);
+            // 共享锁：与 DeletePermission 的行锁互斥，上级在检查后被删除时不会撞上外键（500）
+            $parent = $permission->parent_id === null ? null : Permission::query()->sharedLock()->find($permission->parent_id, ['id', 'type']);
+
+            if ($permission->parent_id !== null && $parent === null) {
+                throw ValidationException::withMessages(['parent_id' => [__('validation.exists', ['attribute' => __('Parent node')])]]);
+            }
 
             if (! $permission->type->canBeChildOf($parent?->type)) {
                 throw ValidationException::withMessages(['parent_id' => [self::hierarchyMessage($permission->type)]]);

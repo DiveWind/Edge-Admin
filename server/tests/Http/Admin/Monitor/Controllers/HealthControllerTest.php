@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\{Cache, DB};
 use Spatie\Health\Checks\Checks\ScheduleCheck;
+use Spatie\Health\Checks\Result;
+use Spatie\Health\ResultStores\ResultStore;
 
 /*
 |--------------------------------------------------------------------------
@@ -56,6 +58,15 @@ describe('health', function (): void {
             ->and($checks['Environment']['status'])->toBe('failed')
             ->and($checks['Environment']['meta'])->toBe(['actual' => 'testing', 'expected' => 'production'])
             ->and($checks['Schedule']['status'])->toBe('failed');
+    });
+
+    it('masks the notification messages', function (): void {
+        $result = Result::make()->failed('Could not connect: password=hunter2')->check(ScheduleCheck::new());
+        resolve(ResultStore::class)->save(collect([$result->endedAt(now())]));
+
+        $response = $this->actingAs(userWithPermissions('monitor.health'))->getJson('/api/admin/monitor/health')->assertOk();
+
+        expect($response->json('data.checks.0.notification_message'))->toBe('Could not connect: password=******');
     });
 });
 

@@ -52,7 +52,8 @@
 | `Policies/RolePolicy` | 角色的授权：标准方法 + `changeStatus`、`viewFormOptions`、`viewOptions` |
 | `Actions/CreateUser`、`UpdateUser`、`DeleteUser`、`ChangeUserStatus` | 用户的新增、修改、删除、启用 / 停用（规则见下文“用户管理”）；重置密码复用 `ResetUserPassword::handle()` |
 | `Actions/SyncUserRoles` | 保存用户的角色：防提权、保留操作者管不到的角色、最后一个超管（由 CreateUser、UpdateUser 调用） |
-| `Actions/EnsureSuperAdminRemains` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用） |
+| `Actions/EnsureSuperAdminRemains` | 系统至少保留一个启用的超管：加锁检查，最后一个时 422（在事务中调用）；`lock()` 是可能减少启用超管的事务的第一条语句（锁顺序） |
+| `Services/Manageability` | “管得到”的统一判定（§8.5）：`canManageRole()`、`canManageUser()`、可授予的权限码与数据范围；Policy（403）与 `SyncRolePermissions`、`SyncUserRoles`、`CreateRole`（422）共用 |
 | `Policies/UserPolicy` | 用户的授权：标准方法 + `changeStatus`、`resetPassword`，记录级方法检查数据范围 |
 | `Contracts/DataScopeProvider`、`Services/DataScopeRegistry` | 扩展点：数据范围提供者与其登记（下文“数据权限”） |
 | `Actions/CreatePermission`、`UpdatePermission`、`DeletePermission` | 菜单节点的新增、修改、删除（规则见下文“菜单管理”） |
@@ -78,6 +79,7 @@
 | `Actions/StoreAttachment` | 保存上传的文件并登记为未绑定的附件（随机文件名、服务端探测 MIME、sha256） |
 | `Actions/SyncAttachments` | 把附件绑定到记录的某个用途上，替换、移除的删除；加锁复核“未绑定或已在这里”（422） |
 | `Actions/DeleteAttachment` | 删除附件，文件在事务提交后删除 |
+| `Actions/DeleteUnboundAttachment` | 附件管理的删除与孤儿清理：锁内复核仍未绑定才删除（管理时已被绑定 → 422，清理时跳过） |
 | `Rules/AllowedUpload` | 上传校验：内容 MIME 推断的扩展名与客户端扩展名都在白名单中、大小上限（系统参数 `attachment.*`） |
 | `Rules/OwnedAttachment` | 引用附件的归属校验：自己上传的未绑定附件，或这条记录已有的附件；可限定 MIME |
 | `Contracts/PrivateAttachable` | 标记接口：绑定在实现它的记录上的附件只跟随记录（附件管理不列出、管理员不能访问），`Export` 已实现 |
@@ -133,6 +135,7 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 ### 判定：`PermissionRegistry` 与 `Gate::before`
 
 - 节点从 spatie 的 `PermissionRegistrar` 缓存读取，不额外查库；`#[Scoped]`，每个请求内复用计算结果，spatie 的缓存被清除后重新计算；
+  队列 worker 中每个任务开始前（`JobProcessing`）清掉 registrar 的内存集合，任务按最新的授权判定（设计文档 §10.3）；
 - 生效节点：节点本身及全部祖先都启用（停用向子孙级联，超管也受约束）；
 - 有效权限码：普通用户要求节点本身及全部祖先都生效，且都授予了用户的**启用**角色；超管为全部生效节点；
 - `Gate::before`（`SystemServiceProvider`）：无参数的调用且 ability 是已登记的权限码 → 按有效权限码返回 true / false；
@@ -157,6 +160,8 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 | 修改类型后不能挂在现在的上级下，或容纳不了现有的子节点 | 422（`type`） | `UpdatePermission` |
 | 停用 `system.menu`、`system.menu.update` 或它们（当前）的祖先 | 422（`status`） | `UpdatePermission` |
 | 把这两个节点（或其祖先）移到停用的节点下 | 422（`parent_id`） | `UpdatePermission` |
+| 非超管让不生效的节点生效（启用；移出停用的祖先） | 422（`status` / `parent_id`） | `UpdatePermission`（比较修改前后每个节点的生效状态） |
+| 新增时上级已不存在 | 422（`parent_id`） | `CreatePermission`（对上级加共享锁，与 `DeletePermission` 的行锁互斥） |
 | 删除有子节点的节点 | 422（只有 `message`） | `DeletePermission` |
 | 权限码、path 重复 | 422（`name` / `path`） | 表单校验；并发时 `CreatePermission::save()` 捕获唯一索引冲突 |
 
@@ -175,17 +180,18 @@ menu 必须有 component、其他类型不能有；embedded 必须有 `meta.ifra
 |---|---|---|
 | 没有对应的权限码 | 403 | `RolePolicy` |
 | 删除 `super-admin` 角色 | 403 | `RolePolicy::delete()` |
+| 非超管修改、删除、启停管不到的角色（已授予的码不全在自己的有效权限码内，或数据范围不可授予；含停用角色、停用节点上的码） | 403 | `RolePolicy`（`Services/Manageability`） |
 | `super-admin` 改标识 / 停用 / 提交 `permissions` | 422（`name` / `status` / `permissions`） | `UpdateRole`、`ChangeRoleStatus` |
 | 删除已分配给用户的角色 | 422（只有 `message`） | `DeleteRole` |
 | 授予自己没有、且角色原本也没有的权限码（非超管） | 422（`permissions`） | `SyncRolePermissions` |
-| 选用（改为）自己不可授予的数据范围（非超管；保持原值不拦） | 422（`data_scope`） | `CreateRole::ensureGrantableDataScope()`（`CreateRole`、`UpdateRole` 调用） |
+| 选用（改为）自己不可授予的数据范围（非超管） | 422（`data_scope`） | `CreateRole::ensureGrantableDataScope()`（`CreateRole`、`UpdateRole` 调用） |
 | 标识重复 | 422（`name`） | 表单校验；并发时 `CreateRole::save()` 捕获唯一索引冲突 |
 
 保存权限码（`SyncRolePermissions`）：
 
 1. 防提权：非超管提交的权限码中，不在操作者有效权限码里、且角色原本也没有的 → 422；超管不受限；
 2. 操作者管不到的授权保持不变：角色原本就有、但不在操作者有效权限码中的（非超管自己没有的码；对超管是停用节点的授权，它们不出现在授权树中），
-   无论是否提交都保留；
+   无论是否提交都保留（非超管只能修改管得到的角色，对非超管这条只在并发改动时起作用）；
 3. 补齐每个节点的全部祖先（`PermissionRegistry::withAncestors()`），再 `syncPermissions()`；spatie 随之清除权限缓存，
    `/auth/codes`、`/menu/all` 立即按新授权计算。停用角色同样立即生效。
 
@@ -204,6 +210,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 | 没有对应的权限码；超出数据范围 | 403 | `UserPolicy` |
 | 删除 / 停用自己；在用户管理中重置自己的密码 | 403 | `UserPolicy::delete()`、`changeStatus()`、`resetPassword()` |
 | 非超管编辑、重置密码、启停、删除超管用户 | 403 | `UserPolicy` |
+| 非超管编辑、重置密码、启停、删除管不到的用户（他的某个角色，含停用的，管不到）；强制下线他的会话与 token | 403 | `UserPolicy`、Monitor 的 `SessionPolicy`、`PersonalAccessTokenPolicy`（`Services/Manageability`） |
 | 修改接口中提交 `status: disabled` 停用自己 | 422（`status`） | `ChangeUserStatus` |
 | 最后一个启用的超管：删除 / 停用 / 去掉超管角色 | 422（只有 `message` / `status` / `roles`） | `EnsureSuperAdminRemains`（`DeleteUser`、`ChangeUserStatus`、`SyncUserRoles` 调用） |
 | 非超管授予或收回 `super-admin`；分配管不到的角色（权限码或数据范围超出自身） | 422（`roles`） | `SyncUserRoles` |
@@ -212,8 +219,9 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 - 用户名统一存为小写（`CreateUser::only()`，表单也先转小写再校验唯一）；`created_by` 写入操作者；
 - 分配角色（`SyncUserRoles`，spatie 的 `syncRoles()`）：非超管只能分配、移除权限码全部在自己有效权限码之内、且数据范围可授予的角色；
   用户原本就有、但操作者管不到的角色（含 `super-admin`）无论是否提交都保留；超管不受限；
-- 最后一个启用的超管（`EnsureSuperAdminRemains`）：在写入的同一事务中先对 `super-admin` 角色那一行 `lockForUpdate()`，
-  把删除、停用、去掉超管角色串行化，再按数据库的当前状态数启用的超管；不在事务中调用时抛出 `LogicException`；
+- 最后一个启用的超管（`EnsureSuperAdminRemains`）：可能减少启用超管的事务（`DeleteUser`、`ChangeUserStatus` 停用、`UpdateUser` 提交了 `roles`
+  或停用）**第一条语句**是对 `super-admin` 角色那一行 `lockForUpdate()`（`lock()`），之后才读写用户行——锁顺序一致，避免死锁，
+  MySQL REPEATABLE READ 下快照也不会早于拿锁；计数用加锁读（`sharedLock()`）读最新提交的版本。不在事务中调用时抛出 `LogicException`；
 - 停用走 `DisableUser`（会话与 token 立即失效），启用走 `EnableUser`；重置密码（`ResetUserPassword::handle()`）、删除（`DeleteUser`）
   同样吊销对方的会话与 token。
 
@@ -280,7 +288,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
 - 同步 `php artisan core:sync-dicts`（由 `core:sync` 调用）：缺的类型与字典项新增为内置；同 `code` / `value` 的自定义数据收编；
   **结构性字段只有标识**（类型的 `code`、字典项的 `value`），名称、备注、`label`、`color`、`sort`、`status` 以库为准；
   从声明中移除的内置类型（连同其内置项）、内置项转为自定义，不删除。幂等，一个事务，结束时清除缓存。
-- 读取：`Services/Dictionary`（整体缓存 `core:dicts`，经 `Cache::memo()`；字典写入后由 `Observers/DictionaryObserver` 在事务提交后清除）。
+- 读取：`Services/Dictionary`（整体缓存，带版本号的键 `core:dicts:<版本>`（`App\Support\Cache\VersionedCache`），经 `Cache::memo()`；字典写入后由 `Observers/DictionaryObserver` 在事务提交后换新版本——并发读取写回的旧值只会落在旧版本的键下）。
 - 校验：
 
   ```php
@@ -325,7 +333,7 @@ guard 统一为 `web`（`User::GUARD`）：`User::guardName()` 固定返回它�
   `rules` 追加在类型规则之后；`dict`（只用于 `string`、`int`）引用一个字典类型：校验自动追加 `InDict`，管理接口输出 `dict`，前端据此渲染下拉
   （引用的字典不存在时任何值都校验失败）。可选值一律用字典表达，没有静态的选项列表。
 - 读取：`resolve(Settings::class)->integer('device.heartbeat_interval')`（或注入 `Settings`）。库中有管理员改过的值（类型一致）就用它，否则用默认值；
-  未声明的键抛出 `InvalidArgumentException`。整体缓存 `core:settings`（经 `Cache::memo()`），写入后由 `Observers/SettingObserver` 在事务提交后清除。
+  未声明的键抛出 `InvalidArgumentException`。整体缓存（带版本号的键 `core:settings:<版本>`，经 `Cache::memo()`），写入后由 `Observers/SettingObserver` 在事务提交后换新版本。
 - `settings.value` 为 null 表示没有改过；修改接口提交 null（或空字符串）即恢复默认值。
 - 同步 `php artisan core:sync-settings`：缺的参数新增（`value` 为 null）；结构性字段 `type`、`group`、`name`、`remark`、`is_public` 以声明为准，`value` 不动
   （类型改了、旧值不再符合时置为 null）；从声明中移除的参数取消 `is_builtin` 与 `is_public`，保留值，不删除（废弃的参数留在库中无害，不提供清理命令）。

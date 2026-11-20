@@ -3,7 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\{DataScopeRegistry, PermissionRegistry};
+use App\Core\System\Services\Manageability;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -12,18 +12,18 @@ use Illuminate\Validation\ValidationException;
  *
  * 防提权（非超管）：
  * 1. 授予或收回 super-admin → 422（roles）；
- * 2. 只能分配、移除“管得到”的角色：角色的权限码全部在操作者的有效权限码之内，且角色的数据范围在操作者可授予的范围内
- *    （DataScopeRegistry::grantableKeysFor()）。提交中新增的角色管不到 → 422（roles）；
+ * 2. 只能分配、移除“管得到”的角色（Manageability::canManageRole()：角色已授予的全部权限码都在操作者的有效权限码之内，
+ *    且角色的数据范围在操作者可授予的范围内）。提交中新增的角色管不到 → 422（roles）；
  * 3. 用户原本就有、但操作者管不到的角色（含 super-admin），无论是否提交都保留不动（与 SyncRolePermissions 的保留规则同一思路）。
  * 超管不受以上限制。
  *
  * 最后一个启用的超管不能去掉 super-admin 角色 → 422（roles，EnsureSuperAdminRemains，加锁防并发）。
+ * 修改用户时，调用方（UpdateUser）已在事务开头锁住 super-admin 角色行（锁顺序见 EnsureSuperAdminRemains）。
  */
 class SyncUserRoles
 {
     public function __construct(
-        private readonly PermissionRegistry $permissions,
-        private readonly DataScopeRegistry $scopes,
+        private readonly Manageability $manageability,
         private readonly EnsureSuperAdminRemains $ensureSuperAdminRemains,
     ) {}
 
@@ -39,10 +39,12 @@ class SyncUserRoles
         $original = $user->exists ? array_values(array_filter($user->roles()->pluck('name')->all(), is_string(...))) : [];
         $names = array_values(array_unique($names));
 
+        // 共享锁：与 DeleteRole 的行锁互斥（删除角色前的“已分配”检查不会被并发的分配绕过）
         $roles = Role::query()
             ->with('permissions')
             ->where('guard_name', User::GUARD)
             ->whereIn('name', [...$names, ...$original])
+            ->sharedLock()
             ->get()
             ->keyBy('name');
 
@@ -78,12 +80,8 @@ class SyncUserRoles
             ]);
         }
 
-        $codes = $this->permissions->codesFor($actor);
-        $scopes = $this->scopes->grantableKeysFor($actor);
         $unmanageable = $roles
-            ->filter(fn (Role $role): bool => $role->isSuperAdmin()
-                || array_diff($this->codesOf($role), $codes) !== []
-                || ! in_array($role->data_scope, $scopes, true))
+            ->reject(fn (Role $role): bool => $this->manageability->canManageRole($actor, $role))
             ->keys()
             ->all();
 
@@ -96,15 +94,5 @@ class SyncUserRoles
         }
 
         return array_values(array_unique([...$names, ...array_intersect($original, $unmanageable)]));
-    }
-
-    /**
-     * 角色已授予的权限码。
-     *
-     * @return list<string>
-     */
-    private function codesOf(Role $role): array
-    {
-        return array_values(array_filter($role->permissions->pluck('name')->all(), is_string(...)));
     }
 }

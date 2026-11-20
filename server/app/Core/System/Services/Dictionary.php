@@ -4,14 +4,14 @@ namespace App\Core\System\Services;
 
 use App\Core\System\Enums\Status;
 use App\Core\System\Models\DictType;
+use App\Support\Cache\VersionedCache;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * 字典的读取（设计文档 §6.7）：选项接口（/options/dicts）与 InDict 校验共用。
  *
  * - 只含**启用类型下的启用项**，按 sort、id 排序；不存在或已停用的类型视为没有字典项；
- * - 全部字典整体缓存（rememberForever，键 CACHE_KEY），经 Cache::memo() 读取：同一请求（队列任务）内只访问一次缓存存储；
+ * - 全部字典整体缓存（带版本号的键 `CACHE_KEY:<版本>`，VersionedCache），经 Cache::memo() 读取：同一请求（队列任务）内只访问一次缓存存储；
  * - 字典类型、字典项写入后（事务提交后）由 DictionaryObserver 调用 flush()，同步命令结束时也调用。
  *
  * 不保存任何状态：每次调用都取 Cache::memo()（它是 scoped 绑定，每个请求重置），常驻内存安全（§10.3）。
@@ -62,11 +62,11 @@ class Dictionary
     }
 
     /**
-     * 清除缓存（本请求的 memo 与缓存存储）。
+     * 清除缓存：换一个新版本（本请求的 memo 一并更新），之后的读取从库中重新加载。
      */
     public function flush(): void
     {
-        Cache::memo()->forget(self::CACHE_KEY);
+        self::cache()->flush();
     }
 
     /**
@@ -77,7 +77,7 @@ class Dictionary
     private function all(): array
     {
         /** @var array<string, list<array{value: string, label: string, color: ?string}>> */
-        return Cache::memo()->rememberForever(self::CACHE_KEY, $this->load(...));
+        return self::cache()->remember($this->load(...));
     }
 
     /**
@@ -103,5 +103,13 @@ class Dictionary
         }
 
         return $options;
+    }
+
+    /**
+     * 带版本号的缓存（键 CACHE_KEY）：flush() 换新版本，避免未命中回填的竞态把旧值永久写回（设计文档 §6.7）。
+     */
+    public static function cache(): VersionedCache
+    {
+        return new VersionedCache(self::CACHE_KEY);
     }
 }

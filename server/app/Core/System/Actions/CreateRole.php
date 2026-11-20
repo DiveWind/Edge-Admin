@@ -3,7 +3,7 @@
 namespace App\Core\System\Actions;
 
 use App\Core\System\Models\{Role, User};
-use App\Core\System\Services\DataScopeRegistry;
+use App\Core\System\Services\Manageability;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -61,14 +61,14 @@ class CreateRole
     }
 
     /**
-     * 数据范围防提权（§8.5）：提交（改动）了 data_scope 时，它必须在操作者可授予的范围内（DataScopeRegistry::grantableKeysFor()），
+     * 数据范围防提权（§8.5）：提交（改动）了 data_scope 时，它必须在操作者可授予的范围内（Manageability::canGrantDataScope()，即 DataScopeRegistry::grantableKeysFor()），
      * 否则 → 422（data_scope）。未提交或保持原值时不检查，与权限码“管不到的保持不变”同一思路。
      *
      * @throws ValidationException
      */
     public static function ensureGrantableDataScope(Role $role, User $actor): void
     {
-        if (! $role->isDirty('data_scope') || resolve(DataScopeRegistry::class)->canGrant($actor, $role->data_scope)) {
+        if (! $role->isDirty('data_scope') || resolve(Manageability::class)->canGrantDataScope($actor, $role->data_scope)) {
             return;
         }
 

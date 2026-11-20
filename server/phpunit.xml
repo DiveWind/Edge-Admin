@@ -28,6 +28,8 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- 只用于测试的固定密钥（CI 中没有 .env）：不要用在任何其他环境，生产密钥由 php artisan key:generate 生成 -->
+        <env name="APP_KEY" value="base64:dGVzdGluZy1vbmx5LWtleS1ub3QtZm9yLXByb2QtMDA="/>
         <!-- 断言以英文原文与 UTC 为准，不受 .env 影响（中文提示与其他时区在用例中显式设置） -->
         <env name="APP_LOCALE" value="en"/>
         <env name="APP_TIMEZONE" value="UTC"/>

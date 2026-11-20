@@ -142,6 +142,15 @@ describe('logs', function (): void {
         expect($response->getContent())->not->toContain('hunter2');
     });
 
+    it('masks the failure message', function (): void {
+        $task = ScheduledTask::factory()->create();
+        ScheduledTaskLog::factory()->for($task, 'monitoredScheduledTask')->failed('SQLSTATE[HY000] [1045] password=hunter2 rejected')->create();
+
+        $this->actingAs(userWithPermissions('monitor.schedule'))
+            ->getJson("/api/admin/monitor/schedules/{$task->id}/logs")
+            ->assertJsonPath('data.items.0.failure_message', 'SQLSTATE[HY000] [1045] password=****** rejected');
+    });
+
     it('filters by the types and the time range', function (): void {
         $task = ScheduledTask::factory()->create();
         $failed = ScheduledTaskLog::factory()->for($task, 'monitoredScheduledTask')->failed()->create(['created_at' => '2026-11-19 08:00:00']);

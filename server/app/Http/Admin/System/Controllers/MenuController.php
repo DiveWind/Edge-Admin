@@ -3,10 +3,11 @@
 namespace App\Http\Admin\System\Controllers;
 
 use App\Core\System\Actions\{CreatePermission, DeletePermission, UpdatePermission};
-use App\Core\System\Models\Permission;
+use App\Core\System\Models\{Permission, User};
 use App\Core\System\Queries\PermissionTree;
 use App\Http\Admin\System\Requests\MenuRequest;
 use App\Http\Admin\System\Resources\MenuResource;
+use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
@@ -46,12 +47,12 @@ class MenuController
     }
 
     /**
-     * 修改：parent_id、status 未提交时不变；内置节点的结构性字段不可修改（422）。
+     * 修改：parent_id、status 未提交时不变；内置节点的结构性字段不可修改（422）；非超管不能让不生效的节点重新生效（422）。
      */
     #[Authorize('update', 'menu')]
-    public function update(MenuRequest $request, Permission $menu, UpdatePermission $action): MenuResource
+    public function update(MenuRequest $request, Permission $menu, UpdatePermission $action, #[CurrentUser] User $actor): MenuResource
     {
-        return new MenuResource($action->handle($menu, $request->menuAttributes()));
+        return new MenuResource($action->handle($menu, $request->menuAttributes(), $actor));
     }
 
     /**

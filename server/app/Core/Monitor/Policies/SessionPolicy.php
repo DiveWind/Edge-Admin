@@ -4,6 +4,7 @@ namespace App\Core\Monitor\Policies;
 
 use App\Core\Monitor\Models\Session;
 use App\Core\System\Models\User;
+use App\Core\System\Services\Manageability;
 use Illuminate\Auth\Access\Response;
 
 /**
@@ -11,10 +12,12 @@ use Illuminate\Auth\Access\Response;
  *
  * 菜单节点 `monitor.online` 是查看 / 列表权限，按钮 `monitor.online.logout` 是强制下线；没有新增、修改。
  * 强制下线（delete）依次检查：权限码 → 不能是本次请求自己正在使用的会话（应使用退出登录）→ 超管用户只有超管能下线
- * （沿用用户管理的超管保护）→ 所属用户在数据范围内。自己的其他会话与 token 可以下线。规则与调用方无关。
+ * （沿用用户管理的超管保护）→ 所属用户在数据范围内 → 非超管只能下线“管得到”的用户的（§8.5，Manageability）。自己的其他会话与 token 可以下线。规则与调用方无关。
  */
 class SessionPolicy
 {
+    public function __construct(private readonly Manageability $manageability) {}
+
     /**
      * Determine whether the user can view any models. 列表另按所属用户的数据范围过滤。
      */
@@ -70,7 +73,14 @@ class SessionPolicy
             return Response::deny(__('Only super admins can manage super admin users.'));
         }
 
-        return $this->withinDataScope($actor, $session);
+        if ($this->withinDataScope($actor, $session)->denied()) {
+            return Response::deny();
+        }
+
+        // 自己的其他会话与 token 总能下线（§8.6）；他人的要求“管得到”
+        return $owner instanceof User && ($owner->is($actor) || $this->manageability->canManageUser($actor, $owner))
+            ? Response::allow()
+            : Response::deny(__('You cannot manage users with permissions or data scopes beyond your own.'));
     }
 
     /**

@@ -35,8 +35,15 @@ it('returns 422 on the unique field when a concurrent request saved it first', f
 it('reports the path when updating a node to a taken path', function (): void {
     $node = Permission::factory()->create();
 
-    expect(fn () => resolve(UpdatePermission::class)->handle($node, ['path' => '/taken']))
+    expect(fn () => resolve(UpdatePermission::class)->handle($node, ['path' => '/taken'], superAdminActor()))
         ->toThrow(function (ValidationException $e): void {
             expect(array_keys($e->errors()))->toBe(['path']);
+        });
+});
+
+it('returns 422 when the parent node no longer exists, instead of hitting the foreign key', function (): void {
+    expect(fn () => resolve(CreatePermission::class)->handle(['type' => 'catalog', 'name' => 'orphan', 'path' => '/orphan', 'title' => 'orphan', 'parent_id' => 999_999]))
+        ->toThrow(function (ValidationException $e): void {
+            expect(array_keys($e->errors()))->toBe(['parent_id']);
         });
 });

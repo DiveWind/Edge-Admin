@@ -92,3 +92,16 @@ it('caches the stored values until a setting is written', function (): void {
     expect($settings->integer('demo.limit'))->toBe(5)
         ->and(Setting::query()->where('key', 'demo.limit')->value('value'))->toBeNull();
 });
+
+it('does not keep a stale value that a concurrent reader writes back after the change', function (): void {
+    storeSetting('demo.limit', 10);
+    $stale = resolve(Settings::class)->integer('demo.limit');
+    $version = Settings::cache()->version();
+
+    // 另一个请求：未命中、已读到旧值；此时管理员修改并提交（afterCommit 中 flush），它之后才把旧值写回缓存
+    resolve(UpdateSettings::class)->handle(['demo.limit' => 20]);
+    cache()->put(Settings::CACHE_KEY.":{$version}", ['demo.limit' => $stale], 60);
+    app()->forgetScopedInstances();
+
+    expect(resolve(Settings::class)->integer('demo.limit'))->toBe(20);
+});
